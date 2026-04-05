@@ -8,6 +8,8 @@ export interface UseAudioReturn {
   playAudio: (data: ArrayBuffer, isFloat32?: boolean) => void;
   resumeContext: () => void;
   inputLevel: number;
+  /** Mute or unmute RX audio (use during TX to prevent acoustic feedback). */
+  muteRx: (muted: boolean) => void;
 }
 
 // Remote mode: Int16 signed PCM, 960 samples (6 GSM frames × 160) per chunk = 1920 bytes
@@ -48,7 +50,7 @@ const MAX_QUEUE_AHEAD_SEC = 1.5;
 // the browser already normalises the signal. Keep at 1 (no extra boost)
 // unless the mic is known to be weak after AGC. Increase only if the
 // post-gain peak reported in the console is below 0.05.
-const MIC_BOOST_GAIN = 1;
+const MIC_BOOST_GAIN = 2;
 
 export function useAudio(): UseAudioReturn {
   const ctxRef = useRef<AudioContext | null>(null);
@@ -315,6 +317,21 @@ export function useAudio(): UseAudioReturn {
     }
   }, [getOrCreateCtx]);
 
+  /**
+   * Mute or unmute the RX (speaker) playback gain.
+   * Call muteRx(true) when PTT starts to prevent acoustic feedback:
+   * the mic would otherwise pick up the speaker output and create a loop.
+   * Call muteRx(false) when PTT ends to restore normal RX volume.
+   */
+  const muteRx = useCallback((muted: boolean) => {
+    if (!gainNodeRef.current) return;
+    // Smooth ramp (10 ms) to avoid clicks on sudden mute/unmute
+    const ctx = gainNodeRef.current.context;
+    const now = ctx.currentTime;
+    gainNodeRef.current.gain.cancelScheduledValues(now);
+    gainNodeRef.current.gain.setTargetAtTime(muted ? 0 : 3, now, 0.01);
+  }, []);
+
   useEffect(() => {
     return () => {
       stopRecording();
@@ -330,5 +347,6 @@ export function useAudio(): UseAudioReturn {
     playAudio,
     resumeContext,
     inputLevel,
+    muteRx,
   };
 }

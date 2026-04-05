@@ -41,6 +41,8 @@ export default function HomePage() {
   const pttStart = useCallback(async () => {
     if (pttActive || !eqso.currentRoom) return;
     console.debug("[ptt] start — room:", eqso.currentRoom, "server:", eqso.selectedServer.mode);
+    // Mute RX before opening mic: prevents acoustic echo (speaker → mic → TX loop)
+    audio.muteRx(true);
     eqso.pttStart();
     setPttActive(true);
 
@@ -57,6 +59,8 @@ export default function HomePage() {
     audio.stopRecording();
     eqso.pttEnd();
     setPttActive(false);
+    // Restore RX audio after releasing PTT
+    audio.muteRx(false);
   }, [pttActive, audio, eqso]);
 
   useEffect(() => {
