@@ -33,6 +33,8 @@ export default function HomePage() {
 
   const handleJoin = () => {
     if (!callsign.trim()) return;
+    // User gesture → unlock AudioContext so playback works immediately
+    audio.resumeContext();
     eqso.join(callsign.trim(), selectedRoom, statusMessage, password);
   };
 
