@@ -328,6 +328,7 @@ function handleRemoteMode(
         case "ptt_end":
           pttGranted = false;
           pcmAccum = new Int16Array(0); // discard leftover
+          proxy.sendPttEnd(); // send [0x0d] to remote eQSO server to release the channel
           sendJson(ws, { type: "ptt_released" });
           break;
         case "ping":
@@ -337,6 +338,9 @@ function handleRemoteMode(
     },
 
     onClose: () => {
+      if (pttGranted) {
+        proxy.sendPttEnd(); // release channel before disconnecting
+      }
       pttGranted = false;
       pcmAccum = new Int16Array(0);
       proxy.disconnect();
