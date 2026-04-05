@@ -3,13 +3,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export interface UseAudioReturn {
   isRecording: boolean;
   isMicAllowed: boolean | null;
-  startRecording: (onChunk: (data: ArrayBuffer) => void) => Promise<void>;
+  startRecording: (onChunk: (data: ArrayBuffer) => void, mode?: "local" | "remote") => Promise<void>;
   stopRecording: () => void;
-  playAudio: (data: ArrayBuffer) => void;
+  playAudio: (data: ArrayBuffer, isFloat32?: boolean) => void;
   inputLevel: number;
 }
 
-const AUDIO_CHUNK_BYTES = 160;
+// Local mode: Uint8 unsigned PCM, 160 bytes per chunk
+const LOCAL_CHUNK_BYTES = 160;
+// Remote mode: Int16 signed PCM, 960 samples (6 GSM frames × 160) per chunk = 1920 bytes
+const REMOTE_CHUNK_SAMPLES = 960;
 
 export function useAudio(): UseAudioReturn {
   const ctxRef = useRef<AudioContext | null>(null);
@@ -18,7 +21,8 @@ export function useAudio(): UseAudioReturn {
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const levelTimerRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
-  const accumRef = useRef<Uint8Array>(new Uint8Array(0));
+  const accumLocalRef = useRef<Uint8Array>(new Uint8Array(0));
+  const accumRemoteRef = useRef<Int16Array>(new Int16Array(0));
 
   const [isRecording, setIsRecording] = useState(false);
   const [isMicAllowed, setIsMicAllowed] = useState<boolean | null>(null);
@@ -34,15 +38,25 @@ export function useAudio(): UseAudioReturn {
     return ctxRef.current;
   }, []);
 
-  const startRecording = useCallback(async (onChunk: (data: ArrayBuffer) => void) => {
+  const startRecording = useCallback(async (
+    onChunk: (data: ArrayBuffer) => void,
+    mode: "local" | "remote" = "local"
+  ) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { sampleRate: 8000, channelCount: 1, echoCancellation: true, noiseSuppression: true },
+        audio: {
+          sampleRate: 8000,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
         video: false,
       });
       setIsMicAllowed(true);
       streamRef.current = stream;
-      accumRef.current = new Uint8Array(0);
+      accumLocalRef.current = new Uint8Array(0);
+      accumRemoteRef.current = new Int16Array(0);
 
       const ctx = getOrCreateCtx();
       const source = ctx.createMediaStreamSource(stream);
@@ -58,24 +72,42 @@ export function useAudio(): UseAudioReturn {
       processorRef.current = processor;
 
       processor.onaudioprocess = (ev) => {
-        const input = ev.inputBuffer.getChannelData(0);
+        const input = ev.inputBuffer.getChannelData(0); // Float32, length=BUFFER_SIZE
 
-        // Convert Float32 → Uint8 (unsigned 8-bit linear PCM, range 0–255)
-        const pcm8 = new Uint8Array(input.length);
-        for (let i = 0; i < input.length; i++) {
-          const s = Math.max(-1, Math.min(1, input[i]));
-          pcm8[i] = Math.round((s + 1) * 127.5);
-        }
+        if (mode === "local") {
+          // Convert Float32 → Uint8 (unsigned 8-bit, range 0–255) for local relay
+          const pcm8 = new Uint8Array(input.length);
+          for (let i = 0; i < input.length; i++) {
+            const s = Math.max(-1, Math.min(1, input[i]));
+            pcm8[i] = Math.round((s + 1) * 127.5);
+          }
+          const merged = new Uint8Array(accumLocalRef.current.length + pcm8.length);
+          merged.set(accumLocalRef.current);
+          merged.set(pcm8, accumLocalRef.current.length);
+          accumLocalRef.current = merged;
 
-        // Accumulate and emit 160-byte chunks
-        const merged = new Uint8Array(accumRef.current.length + pcm8.length);
-        merged.set(accumRef.current);
-        merged.set(pcm8, accumRef.current.length);
-        accumRef.current = merged;
+          while (accumLocalRef.current.length >= LOCAL_CHUNK_BYTES) {
+            onChunk(accumLocalRef.current.slice(0, LOCAL_CHUNK_BYTES).buffer);
+            accumLocalRef.current = accumLocalRef.current.slice(LOCAL_CHUNK_BYTES);
+          }
+        } else {
+          // Convert Float32 → Int16 for GSM encoding on server
+          const pcm16 = new Int16Array(input.length);
+          for (let i = 0; i < input.length; i++) {
+            const s = Math.max(-1, Math.min(1, input[i]));
+            pcm16[i] = s < 0 ? Math.round(s * 32768) : Math.round(s * 32767);
+          }
+          const merged = new Int16Array(accumRemoteRef.current.length + pcm16.length);
+          merged.set(accumRemoteRef.current);
+          merged.set(pcm16, accumRemoteRef.current.length);
+          accumRemoteRef.current = merged;
 
-        while (accumRef.current.length >= AUDIO_CHUNK_BYTES) {
-          onChunk(accumRef.current.slice(0, AUDIO_CHUNK_BYTES).buffer);
-          accumRef.current = accumRef.current.slice(AUDIO_CHUNK_BYTES);
+          while (accumRemoteRef.current.length >= REMOTE_CHUNK_SAMPLES) {
+            const chunk = accumRemoteRef.current.slice(0, REMOTE_CHUNK_SAMPLES);
+            accumRemoteRef.current = accumRemoteRef.current.slice(REMOTE_CHUNK_SAMPLES);
+            // chunk is Int16Array (960 samples = 1920 bytes)
+            onChunk(chunk.buffer);
+          }
         }
       };
 
@@ -103,40 +135,53 @@ export function useAudio(): UseAudioReturn {
       cancelAnimationFrame(levelTimerRef.current);
       levelTimerRef.current = null;
     }
-
     processorRef.current?.disconnect();
     processorRef.current = null;
-
     sourceRef.current?.disconnect();
     sourceRef.current = null;
-
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
-
-    accumRef.current = new Uint8Array(0);
+    accumLocalRef.current = new Uint8Array(0);
+    accumRemoteRef.current = new Int16Array(0);
     setIsRecording(false);
     setInputLevel(0);
   }, []);
 
-  const playAudio = useCallback((data: ArrayBuffer) => {
+  /**
+   * Play received audio.
+   * @param data    Raw bytes (without the opcode header byte).
+   * @param isFloat32  true = Float32 PCM (from remote GSM decode); false = Uint8 unsigned PCM (local).
+   */
+  const playAudio = useCallback((data: ArrayBuffer, isFloat32 = false) => {
     try {
       const ctx = getOrCreateCtx();
-      const pcm8 = new Uint8Array(data);
+      let float32: Float32Array;
 
-      // Decode unsigned 8-bit PCM → Float32
-      const float32 = new Float32Array(pcm8.length);
-      for (let i = 0; i < pcm8.length; i++) {
-        float32[i] = (pcm8[i] / 127.5) - 1.0;
+      if (isFloat32) {
+        // Data is already Float32 PCM from the server GSM decoder
+        const raw = new Float32Array(data);
+        float32 = new Float32Array(raw.length);
+        float32.set(raw);
+      } else {
+        // Unsigned 8-bit PCM → Float32
+        const pcm8 = new Uint8Array(data);
+        float32 = new Float32Array(pcm8.length);
+        for (let i = 0; i < pcm8.length; i++) {
+          float32[i] = (pcm8[i] / 127.5) - 1.0;
+        }
       }
 
+      if (float32.length === 0) return;
+
       const buffer = ctx.createBuffer(1, float32.length, 8000);
-      buffer.copyToChannel(float32, 0);
+      buffer.getChannelData(0).set(float32);
 
       const source = ctx.createBufferSource();
       source.buffer = buffer;
       source.connect(ctx.destination);
       source.start();
     } catch {
+      // Ignore playback errors
     }
   }, [getOrCreateCtx]);
 

@@ -5,8 +5,15 @@ import { ConnectPanel } from "@/components/ConnectPanel";
 import { RoomPanel } from "@/components/RoomPanel";
 
 export default function HomePage() {
-  const eqso = useEqsoClient();
+  const audioRef = useRef<ReturnType<typeof useAudio> | null>(null);
   const audio = useAudio();
+  audioRef.current = audio;
+
+  const eqso = useEqsoClient(
+    useCallback((data: ArrayBuffer, isFloat32: boolean) => {
+      audioRef.current?.playAudio(data, isFloat32);
+    }, [])
+  );
   const [callsign, setCallsign] = useState("");
   const [selectedRoom, setSelectedRoom] = useState("GENERAL");
   const [statusMessage, setStatusMessage] = useState("CB27 link via internet. ");
@@ -34,9 +41,10 @@ export default function HomePage() {
     eqso.pttStart();
     setPttActive(true);
 
+    const mode = eqso.selectedServer.mode === "remote" ? "remote" : "local";
     await audio.startRecording((chunk) => {
       pttChunkRef.current(chunk);
-    });
+    }, mode);
   }, [pttActive, eqso, audio]);
 
   const pttEnd = useCallback(() => {

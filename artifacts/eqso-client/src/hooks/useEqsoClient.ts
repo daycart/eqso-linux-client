@@ -70,11 +70,16 @@ export interface EqsoState {
 export interface EqsoActions {
   connect: (server: EqsoServer, customHost?: string, customPort?: number) => void;
   disconnect: () => void;
-  join: (name: string, room: string, message?: string) => void;
+  join: (name: string, room: string, message?: string, password?: string) => void;
   pttStart: () => void;
   pttEnd: () => void;
   sendAudio: (data: ArrayBuffer) => void;
 }
+
+// Binary opcodes (must match ws-bridge.ts)
+const WS_AUDIO_LOCAL  = 0x01; // local relay: Uint8 unsigned PCM
+const WS_AUDIO_REMOTE = 0x11; // remote RX:   Float32 PCM decoded from GSM
+const WS_PCM_TX       = 0x05; // remote TX:   Int16 signed PCM → GSM encode on server
 
 function getWsUrl(): string {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -83,7 +88,11 @@ function getWsUrl(): string {
   return `${proto}//${host}${base}/ws`;
 }
 
-export function useEqsoClient(): EqsoState & EqsoActions {
+export function useEqsoClient(
+  onAudio?: (data: ArrayBuffer, isFloat32: boolean) => void
+): EqsoState & EqsoActions {
+  const onAudioRef = useRef(onAudio);
+  useEffect(() => { onAudioRef.current = onAudio; }, [onAudio]);
   const wsRef = useRef<WebSocket | null>(null);
   const pendingJoinRef = useRef<{ name: string; room: string } | null>(null);
 
@@ -97,6 +106,7 @@ export function useEqsoClient(): EqsoState & EqsoActions {
   const [pttGranted, setPttGranted] = useState(false);
   const [channelBusy, setChannelBusy] = useState(false);
   const [selectedServer, setSelectedServer] = useState<EqsoServer>(KNOWN_SERVERS[0]);
+  const selectedServerRef = useRef<EqsoServer>(KNOWN_SERVERS[0]);
 
   const handleTextMessage = useCallback((msg: Record<string, unknown>) => {
     switch (msg.type) {
@@ -181,7 +191,19 @@ export function useEqsoClient(): EqsoState & EqsoActions {
     if (view.length < 1) return;
     const cmd = view[0];
 
-    if (cmd === 0x01) {
+    // Remote audio: Float32 PCM decoded server-side from GSM
+    if (cmd === WS_AUDIO_REMOTE) {
+      if (view.length > 1) {
+        onAudioRef.current?.(data.slice(1), true);
+      }
+      return;
+    }
+
+    // Local audio: Uint8 unsigned PCM relay
+    if (cmd === WS_AUDIO_LOCAL) {
+      if (view.length > 1) {
+        onAudioRef.current?.(data.slice(1), false);
+      }
       return;
     }
 
@@ -240,6 +262,7 @@ export function useEqsoClient(): EqsoState & EqsoActions {
     }
 
     setSelectedServer(server);
+    selectedServerRef.current = server;
     setStatus("connecting");
     setError(null);
     setCurrentRoom(null);
@@ -324,10 +347,14 @@ export function useEqsoClient(): EqsoState & EqsoActions {
   const sendAudio = useCallback((data: ArrayBuffer) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN || !pttGranted) return;
-    const header = new Uint8Array([0x01]);
+
+    const isRemote = selectedServerRef.current.mode === "remote";
+    // Remote: [0x05][Int16 PCM] — server will GSM-encode and relay
+    // Local:  [0x01][Uint8 PCM] — server relays as-is
+    const opcode = isRemote ? WS_PCM_TX : WS_AUDIO_LOCAL;
     const payload = new Uint8Array(data);
     const pkt = new Uint8Array(1 + payload.length);
-    pkt.set(header, 0);
+    pkt[0] = opcode;
     pkt.set(payload, 1);
     ws.send(pkt.buffer);
   }, [pttGranted]);

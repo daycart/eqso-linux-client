@@ -157,13 +157,7 @@ export function RoomPanel({
             <p className="text-gray-500 text-sm mt-1 font-mono">{currentName}</p>
           </div>
 
-          {isRemote && (
-            <div className="mb-6 bg-gray-800/80 border border-gray-700 text-gray-400 text-sm rounded-lg px-4 py-3 text-center max-w-sm">
-              Solo escucha — la transmision de audio a servidores remotos estara disponible en una proxima version
-            </div>
-          )}
-
-          {isMicAllowed === false && !isRemote && (
+          {isMicAllowed === false && (
             <div className="mb-6 bg-red-950/50 border border-red-800 text-red-300 text-sm rounded-lg px-4 py-3 text-center max-w-sm">
               Micrófono denegado. Activa los permisos del micrófono en tu navegador para poder transmitir.
             </div>
@@ -176,7 +170,7 @@ export function RoomPanel({
                 onMouseUp={onPttEnd}
                 onTouchStart={(e) => { e.preventDefault(); onPttStart(); }}
                 onTouchEnd={(e) => { e.preventDefault(); onPttEnd(); }}
-                disabled={isRemote || (channelBusy && !pttActive)}
+                disabled={channelBusy && !pttActive}
                 className={`w-40 h-40 rounded-full flex flex-col items-center justify-center gap-2 transition-all duration-150 select-none touch-none
                   ${pttActive && pttGranted
                     ? "bg-red-600 scale-95 shadow-lg shadow-red-900/50 border-4 border-red-400"

@@ -15,6 +15,14 @@ import {
   AUDIO_PAYLOAD_SIZE,
 } from "./protocol";
 import { EqsoProxy, ProxyEvent } from "./eqso-proxy";
+import { gsmEncodePacket, gsmDecodePacket, GSM_FRAME_SAMPLES, FRAMES_PER_PACKET } from "./gsm610";
+
+// Binary opcodes for browser ↔ server WebSocket protocol
+const WS_AUDIO_LOCAL  = 0x01; // local relay: Uint8 unsigned PCM
+const WS_AUDIO_REMOTE = 0x11; // remote RX:   Float32 PCM (decoded from GSM)
+const WS_PCM_TX       = 0x05; // remote TX:   Int16 signed PCM (→ encode to GSM)
+
+const PCM_CHUNK_SAMPLES = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET; // 960 samples per GSM packet
 
 const SERVER_VERSION = "eQSO Linux Server v1.0";
 const KEEPALIVE_MS = 30_000;
@@ -190,6 +198,9 @@ function handleRemoteMode(
   let currentName = "";
   let currentRoom = "";
 
+  // PCM accumulation buffer for TX: browser sends Int16 PCM chunks
+  let pcmAccum = new Int16Array(0);
+
   proxy.on("event", (ev: ProxyEvent) => {
     switch (ev.type) {
       case "connected":
@@ -227,9 +238,28 @@ function handleRemoteMode(
       case "ptt_released":
         sendJson(ws, { type: "ptt_released_remote", ...(ev.data as object) });
         break;
-      case "audio":
-        sendBin(ws, ev.data as Buffer);
+      case "audio": {
+        // Incoming GSM packet from remote eQSO server: [0x01][198 bytes GSM]
+        const pkt = ev.data as Buffer;
+        if (pkt.length < 1 + AUDIO_PAYLOAD_SIZE) break;
+        try {
+          const gsmBytes = new Uint8Array(pkt.buffer, pkt.byteOffset + 1, AUDIO_PAYLOAD_SIZE);
+          const pcm = gsmDecodePacket(gsmBytes); // Int16Array, 960 samples
+          // Convert Int16 → Float32 for browser playback
+          const float32 = new Float32Array(pcm.length);
+          for (let i = 0; i < pcm.length; i++) {
+            float32[i] = pcm[i] / 32768;
+          }
+          // Send [0x11][Float32 bytes] to browser
+          const header = Buffer.alloc(1);
+          header[0] = WS_AUDIO_REMOTE;
+          const payload = Buffer.from(float32.buffer);
+          sendBin(ws, Buffer.concat([header, payload]));
+        } catch (err) {
+          logger.warn({ err }, "GSM decode error");
+        }
         break;
+      }
       case "keepalive":
         sendJson(ws, { type: "keepalive" });
         break;
@@ -240,11 +270,38 @@ function handleRemoteMode(
 
   return {
     onMessage: (msg, rawBin) => {
-      if (rawBin && rawBin.length > 0 && rawBin[0] === 0x01) {
-        // TX audio to remote server is disabled pending audio format negotiation.
-        // Sending raw PCM to the remote server causes ECONNRESET.
-        // Once a real audio packet is captured from the server (see eqso-proxy INFO log),
-        // the correct payload size and encoding can be confirmed.
+      // Handle TX audio: browser sends [0x05][Int16 PCM bytes]
+      if (rawBin && rawBin.length > 1 && rawBin[0] === WS_PCM_TX && pttGranted) {
+        // Extract Int16 samples
+        const int16Bytes = rawBin.slice(1);
+        const newSamples = new Int16Array(
+          int16Bytes.buffer,
+          int16Bytes.byteOffset,
+          Math.floor(int16Bytes.length / 2)
+        );
+        // Merge into accumulation buffer
+        const merged = new Int16Array(pcmAccum.length + newSamples.length);
+        merged.set(pcmAccum);
+        merged.set(newSamples, pcmAccum.length);
+        pcmAccum = merged;
+
+        // Emit complete GSM packets (960 samples each)
+        while (pcmAccum.length >= PCM_CHUNK_SAMPLES) {
+          const chunk = pcmAccum.slice(0, PCM_CHUNK_SAMPLES);
+          pcmAccum = pcmAccum.slice(PCM_CHUNK_SAMPLES);
+          try {
+            const gsm = gsmEncodePacket(chunk);
+            proxy.sendAudio(Buffer.from(gsm));
+            logger.debug({ bytes: gsm.length }, "Remote TX: sent GSM packet");
+          } catch (err) {
+            logger.warn({ err }, "GSM encode error");
+          }
+        }
+        return;
+      }
+
+      // Ignore old-style [0x01] binary from browser (local PCM, not used in remote mode)
+      if (rawBin && rawBin.length > 0 && rawBin[0] === WS_AUDIO_LOCAL) {
         return;
       }
 
@@ -264,13 +321,12 @@ function handleRemoteMode(
         }
         case "ptt_start":
           pttGranted = true;
-          // No explicit PTT start signal — remote server detects PTT from incoming 0x01 audio
+          pcmAccum = new Int16Array(0); // reset accumulator
           sendJson(ws, { type: "ptt_granted" });
           break;
         case "ptt_end":
           pttGranted = false;
-          // Do NOT send 0x0d to remote server — it doesn't understand that command
-          // Server detects PTT release when audio packets stop arriving
+          pcmAccum = new Int16Array(0); // discard leftover
           sendJson(ws, { type: "ptt_released" });
           break;
         case "ping":
@@ -281,6 +337,7 @@ function handleRemoteMode(
 
     onClose: () => {
       pttGranted = false;
+      pcmAccum = new Int16Array(0);
       proxy.disconnect();
     },
   };
@@ -313,7 +370,9 @@ export function startWsBridge(httpServer: HttpServer): WebSocketServer {
 
     ws.on("message", (raw) => {
       try {
-        const isBin = raw instanceof Buffer && raw.length > 0 && raw[0] === 0x01;
+        // Binary frames: local audio (0x01) or remote PCM TX (0x05)
+        const isBin = raw instanceof Buffer && raw.length > 0 &&
+          (raw[0] === WS_AUDIO_LOCAL || raw[0] === WS_PCM_TX);
 
         if (isBin) {
           handler?.onMessage({} as WsMessage, raw as Buffer);
