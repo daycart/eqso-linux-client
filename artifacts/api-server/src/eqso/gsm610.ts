@@ -216,41 +216,95 @@ function gsm_LPC_Analysis(s: Int16Array): Int16Array {
 
 // ─── Short-term analysis filter ───────────────────────────────────────────────
 
-// Dequantize LARc → r coefficients (for analysis filter)
-function LARc_to_r(LARc: Int16Array): Int16Array {
-  const r = new Int16Array(8);
+// Dequantize LARc → LARp (Step 1 — libgsm DECODER STEP macro).
+// A/B constants from gsm_decode.c; outputs an intermediate "log area" value.
+function LARc_to_LARp(LARc: Int16Array): Int16Array {
+  const LARp = new Int16Array(8);
   const steps: [number, number][] = [
-    [13107, 0], [13107, 0], [13107, -1536], [13107, 1792],
-    [19223, -66], [17476, 1344], [31454, 256], [29708, 856],
+    [13107,     0], [13107,     0], [13107, -1536], [13107, 1792],
+    [19223,   -66], [17476,  1344], [31454,   256], [29708,  856],
   ];
   for (let i = 0; i < 8; i++) {
     const [A, B] = steps[i];
-    let temp = GSM_MULT(A, LARc[i]);
-    temp = GSM_ADD(temp, B);
-    r[i] = CLIP(temp, -32767, 32767);
+    LARp[i] = CLIP(GSM_ADD(GSM_MULT(A, LARc[i]), B), -32767, 32767);
   }
-  return r;
+  return LARp;
 }
 
-const v = new Int16Array(9); // state for analysis filter (persistent per encoder)
-
-function gsm_short_term_analysis(s: Int16Array, LARc: Int16Array, d: Int16Array): void {
-  const r = LARc_to_r(LARc);
-
-  // Apply filter in 4 sub-segments with interpolated LAR
-  // For simplicity, apply same LARc to all 160 samples
-  const u = new Int16Array(8);
-
-  for (let k = 0; k < 160; k++) {
-    let di = s[k];
-    for (let i = 7; i >= 1; i--) {
-      di = GSM_ADD(di, -GSM_MULT(r[i], u[i]));
-      u[i] = GSM_ADD(u[i], GSM_MULT(r[i], di));
-    }
-    di = GSM_ADD(di, -GSM_MULT(r[0], u[0]));
-    u[0] = GSM_ADD(u[0], GSM_MULT(r[0], di));
-    d[k] = di;
+// Convert LARp → reflection coefficients rrp (Step 2 — libgsm LARp_to_rp).
+// Piecewise-linear approximation of  rrp = LARp / (1 + |LARp|).
+// Operates in-place on the supplied Int16Array.
+function LARp_to_rp(LARp: Int16Array): void {
+  for (let i = 0; i < 8; i++) {
+    let temp = LARp[i];
+    const neg = temp < 0;
+    if (neg) temp = temp === -32768 ? 32767 : -temp;
+    let rp: number;
+    if (temp < 11059)      rp = temp << 1;
+    else if (temp < 20070) rp = GSM_ADD(temp, 11059);
+    else                   rp = GSM_ADD(SASR(temp, 2), 26112);
+    LARp[i] = neg ? -rp : rp;
   }
+}
+
+// Full two-step conversion: LARc (quantized) → LARp → rrp
+function LARc_to_r(LARc: Int16Array): Int16Array {
+  const rrp = LARc_to_LARp(LARc);
+  LARp_to_rp(rrp);
+  return rrp;
+}
+
+// Apply one sub-frame of the PARCOR analysis lattice to 'count' samples of 's'
+// starting at sOffset, writing residual into 'd' starting at dOffset.
+// u[] is the per-encoder lattice state (8 words), modified in-place.
+function parcorAnalysis(
+  rrp: Int16Array, u: Int16Array,
+  s: Int16Array, d: Int16Array,
+  sOffset: number, dOffset: number, count: number,
+): void {
+  for (let k = 0; k < count; k++) {
+    let di = s[sOffset + k];
+    for (let i = 7; i >= 0; i--) {
+      di = GSM_ADD(di, -GSM_MULT_R(rrp[i], u[i]));
+      u[i] = GSM_ADD(u[i], GSM_MULT_R(rrp[i], di));
+    }
+    d[dOffset + k] = di;
+  }
+}
+
+// Short-term analysis filter with 4-sub-frame LARp interpolation
+// (matching libgsm Gsm_Short_Term_Analysis_Filter in short.c).
+// prevLARp: LARp coefficients from the previous frame (modified in-place for next call).
+// u: 8-word lattice state (per-encoder, modified in-place).
+function gsm_short_term_analysis(
+  s: Int16Array, LARc: Int16Array, d: Int16Array,
+  prevLARp: Int16Array, u: Int16Array,
+): void {
+  const currLARp = LARc_to_LARp(LARc);
+
+  // 4 sub-frames × 40 samples, interpolation schedule from libgsm short.c:
+  //   sub 0: (3*prev + curr) >> 2
+  //   sub 1: (prev + curr)   >> 1
+  //   sub 2: (prev + 3*curr) >> 2
+  //   sub 3: curr
+  // wp/4 + wc/4 = 1; encoded as (wp<<13)/32768 via MULT_R.
+  const weights: [number, number][] = [
+    [3, 1], [2, 2], [1, 3], [0, 4],
+  ];
+  for (let sub = 0; sub < 4; sub++) {
+    const [wp, wc] = weights[sub];
+    const rrp = new Int16Array(8);
+    for (let i = 0; i < 8; i++) {
+      const pTerm = wp === 0 ? 0 : GSM_MULT_R(prevLARp[i], wp << 13);
+      const cTerm = wc === 4 ? currLARp[i] : GSM_MULT_R(currLARp[i], wc << 13);
+      rrp[i] = GSM_ADD(pTerm, cTerm);
+    }
+    LARp_to_rp(rrp);
+    parcorAnalysis(rrp, u, s, d, sub * 40, sub * 40, 40);
+  }
+
+  // Save current LARp for next frame
+  for (let i = 0; i < 8; i++) prevLARp[i] = currLARp[i];
 }
 
 // ─── Long-term predictor ──────────────────────────────────────────────────────
@@ -420,33 +474,40 @@ function packBits(
 
 /** State carried across frames for the encoder */
 class GsmEncoder {
-  private dpState = new Int16Array(120); // LTP history
+  // LTP delay history: last 120 samples of LPC residual from the previous frame.
+  // dpState[0] = oldest, dpState[119] = most recent.
+  private dpState  = new Int16Array(120);
+  // Short-term analysis filter lattice state (8 reflection stages)
+  private stU      = new Int16Array(8);
+  // LARp from previous frame (for interpolation in analysis filter)
+  private prevLARp = new Int16Array(8);
 
   encodeFrame(s: Int16Array): Uint8Array {
     if (s.length !== 160) throw new Error('GSM frame requires 160 samples');
 
-    // 1. LPC analysis
+    // 1. LPC analysis — produces 8 quantised LAR coefficients
     const LARc = gsm_LPC_Analysis(s);
 
-    // 2. Short-term analysis (produces residual d)
+    // 2. Short-term analysis filter (4-sub-frame LARp interpolation + PARCOR).
+    //    Produces the LPC residual d[0..159].
     const d = new Int16Array(160);
-    gsm_short_term_analysis(s, LARc, d);
+    gsm_short_term_analysis(s, LARc, d, this.prevLARp, this.stU);
 
-    // 3. LTP + RPE per segment
+    // 3. LTP + RPE per 40-sample segment.
+    //    dpLocal is a snapshot of the previous-frame residual history.
     const dpLocal = new Int16Array(this.dpState);
     const segs: Array<{ nc: number; bc: number; mc: number; xmax: number; x: number[] }> = [];
 
     for (let seg = 0; seg < 4; seg++) {
       const { bc, nc, e } = gsm_long_term(d, dpLocal, seg);
       const rpe = gsm_RPE_encode(e);
-
-      // Update dp state
-      const off = seg * 40;
-      for (let k = 0; k < 40; k++) {
-        this.dpState[(off + k) % 120] = d[off + k];
-      }
-
       segs.push({ nc, bc, mc: rpe.mc, xmax: rpe.xmax, x: rpe.x });
+    }
+
+    // 4. Update dpState: shift so the LAST 120 samples of d (samples 40..159)
+    //    become the new history (newest samples at the high end of the buffer).
+    for (let k = 0; k < 120; k++) {
+      this.dpState[k] = d[k + 40];
     }
 
     return packBits(LARc, segs);
