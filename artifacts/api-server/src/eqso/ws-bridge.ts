@@ -272,13 +272,14 @@ function handleRemoteMode(
     onMessage: (msg, rawBin) => {
       // Handle TX audio: browser sends [0x05][Int16 PCM bytes]
       if (rawBin && rawBin.length > 1 && rawBin[0] === WS_PCM_TX && pttGranted) {
-        // Extract Int16 samples
-        const int16Bytes = rawBin.slice(1);
-        const newSamples = new Int16Array(
-          int16Bytes.buffer,
-          int16Bytes.byteOffset,
-          Math.floor(int16Bytes.length / 2)
-        );
+        // Copy payload into a fresh ArrayBuffer (rawBin.slice has unaligned byteOffset)
+        const payloadLen = rawBin.length - 1;
+        const sampleCount = Math.floor(payloadLen / 2);
+        const newSamples = new Int16Array(sampleCount);
+        const view = new DataView(rawBin.buffer, rawBin.byteOffset + 1, payloadLen);
+        for (let i = 0; i < sampleCount; i++) {
+          newSamples[i] = view.getInt16(i * 2, true); // little-endian
+        }
         // Merge into accumulation buffer
         const merged = new Int16Array(pcmAccum.length + newSamples.length);
         merged.set(pcmAccum);
