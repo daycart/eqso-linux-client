@@ -205,10 +205,17 @@ export function useAudio(): UseAudioReturn {
   const playAudio = useCallback((data: ArrayBuffer, isFloat32 = false) => {
     try {
       const ctx = getOrCreateCtx();
+      // Resume context on every call — browsers may re-suspend it
+      if (ctx.state !== "running") {
+        ctx.resume().catch(() => {});
+      }
+
       let float32: Float32Array;
 
       if (isFloat32) {
-        float32 = new Float32Array(data);
+        // data may be unaligned — copy into fresh ArrayBuffer first
+        const copy = data.slice(0);
+        float32 = new Float32Array(copy);
       } else {
         const pcm8 = new Uint8Array(data);
         float32 = new Float32Array(pcm8.length);
@@ -217,7 +224,10 @@ export function useAudio(): UseAudioReturn {
         }
       }
 
-      if (float32.length === 0) return;
+      if (float32.length === 0) {
+        console.warn("[audio] playAudio: empty buffer");
+        return;
+      }
 
       // Audio data is at 8000 Hz; the AudioContext may be at a higher native
       // rate — the browser automatically resamples when the buffer sampleRate
@@ -229,8 +239,10 @@ export function useAudio(): UseAudioReturn {
       source.buffer = buffer;
       source.connect(ctx.destination);
       source.start();
-    } catch {
-      // Ignore playback errors silently
+
+      console.debug(`[audio] playAudio: ${float32.length} samples, ctx=${ctx.state}`);
+    } catch (err) {
+      console.error("[audio] playAudio error:", err);
     }
   }, [getOrCreateCtx]);
 

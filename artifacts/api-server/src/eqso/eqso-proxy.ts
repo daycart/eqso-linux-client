@@ -181,26 +181,28 @@ class EqsoPacketParser {
       return pkt;
     }
 
-    // count > 1: member list
-    // Header: [0x16][count][0x00][0x00] (4 bytes)
-    // Each entry: [5 flag bytes][nameLen][name][msgLen][msg]  (no per-entry terminator)
-    // Final: [0x00] (single packet terminator)
-    if (this.acc.length < 4) return null;
-    let off = 4;
+    // count > 1: multiple action events bundled together.
+    // Same per-entry format as count=1:
+    //   Header:  [0x16][count][0x00 0x00 0x00]  (5 bytes total)
+    //   Entry i: [action:1][0x00 0x00 0x00:3][nameLen:1][name:N bytes]
+    //            (+[msgLen:1][msg:M][term:1] when action=0x00 join)
+    if (this.acc.length < 5) return null;
+    let off = 5; // skip [0x16][count][0x00 0x00 0x00]
     for (let i = 0; i < count; i++) {
-      // need 5 flags + nameLen byte
-      if (this.acc.length < off + 6) return null;
-      off += 5; // skip 5 flag bytes
+      if (this.acc.length < off + 5) return null;
+      const action = this.acc[off];
+      off += 4; // action(1) + padding(3)
       const nameLen = this.acc[off++];
-      if (this.acc.length < off + nameLen + 1) return null; // need name + msgLen byte
+      if (this.acc.length < off + nameLen) return null;
       off += nameLen;
-      const msgLen = this.acc[off++];
-      if (this.acc.length < off + msgLen) return null;
-      off += msgLen;
+      if (action === 0x00) {
+        // join entry: also has [msgLen][msg][terminator]
+        if (this.acc.length < off + 1) return null;
+        const msgLen = this.acc[off++];
+        if (this.acc.length < off + msgLen + 1) return null;
+        off += msgLen + 1; // msg + terminator
+      }
     }
-    // Single terminator byte at the end
-    if (this.acc.length < off + 1) return null;
-    off++;
     const pkt = this.acc.slice(0, off);
     this.acc = this.acc.slice(off);
     return pkt;
@@ -436,28 +438,47 @@ export class EqsoProxy extends EventEmitter {
       return;
     }
 
-    // Multi-entry: member list (after join)
-    const members: Array<{ name: string; message: string }> = [];
-    let off = 4; // cmd(1) + count(1) + 2 bytes header = 4
-
+    // Multi-entry: multiple action events bundled (same per-entry format as count=1)
+    // Header: [0x16][count][0x00 0x00 0x00] (5 bytes)
+    // Entry:  [action:1][0x00 0x00 0x00:3][nameLen:1][name:N]
+    let off = 5;
     for (let i = 0; i < count; i++) {
-      // each entry: 5 bytes flags, nameLen, name, msgLen, msg
-      if (off + 5 >= pkt.length) break;
-      off += 5; // skip flags
-      if (off >= pkt.length) break;
+      if (off + 5 > pkt.length) break;
+      const action = pkt[off];
+      off += 4; // action(1) + padding(3)
       const nameLen = pkt[off++];
       if (off + nameLen > pkt.length) break;
       const name = pkt.slice(off, off + nameLen).toString("ascii");
       off += nameLen;
-      if (off >= pkt.length) break;
-      const msgLen = pkt[off++];
-      const msg = off + msgLen <= pkt.length
-        ? pkt.slice(off, off + msgLen).toString("ascii")
-        : "";
-      off += msgLen;
-      members.push({ name, message: msg });
+
+      switch (action) {
+        case 0x00: {
+          if (off >= pkt.length) break;
+          const msgLen = pkt[off++];
+          const msg = off + msgLen <= pkt.length
+            ? pkt.slice(off, off + msgLen).toString("ascii") : "";
+          off += msgLen;
+          if (off < pkt.length) off++; // terminator
+          logger.info({ name, msg }, "eQSO proxy: user joined (multi)");
+          this.emit("event", { type: "user_joined", data: { name, message: msg } } as ProxyEvent);
+          break;
+        }
+        case 0x01:
+          logger.info({ name }, "eQSO proxy: user left (multi)");
+          this.emit("event", { type: "user_left", data: { name } } as ProxyEvent);
+          break;
+        case 0x02:
+          logger.info({ name }, "eQSO proxy: PTT started (multi)");
+          this.emit("event", { type: "ptt_started", data: { name } } as ProxyEvent);
+          break;
+        case 0x03:
+          logger.info({ name }, "eQSO proxy: PTT released (multi)");
+          this.emit("event", { type: "ptt_released", data: { name } } as ProxyEvent);
+          break;
+        default:
+          logger.debug({ action, name }, "eQSO proxy: unknown action (multi)");
+          break;
+      }
     }
-    logger.info({ count: members.length, members }, "eQSO proxy: member list received");
-    this.emit("event", { type: "members", data: members } as ProxyEvent);
   }
 }

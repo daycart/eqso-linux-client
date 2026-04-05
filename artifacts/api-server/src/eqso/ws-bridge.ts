@@ -245,6 +245,12 @@ function handleRemoteMode(
         try {
           const gsmBytes = new Uint8Array(pkt.buffer, pkt.byteOffset + 1, AUDIO_PAYLOAD_SIZE);
           const pcm = gsmDecodePacket(gsmBytes); // Int16Array, 960 samples
+          // Compute peak amplitude for diagnostics
+          let peak = 0;
+          for (let i = 0; i < pcm.length; i++) {
+            const a = Math.abs(pcm[i]);
+            if (a > peak) peak = a;
+          }
           // Convert Int16 → Float32 for browser playback
           const float32 = new Float32Array(pcm.length);
           for (let i = 0; i < pcm.length; i++) {
@@ -255,6 +261,7 @@ function handleRemoteMode(
           header[0] = WS_AUDIO_REMOTE;
           const payload = Buffer.from(float32.buffer);
           sendBin(ws, Buffer.concat([header, payload]));
+          logger.debug({ samples: pcm.length, peak }, "Remote RX: sent Float32 to browser");
         } catch (err) {
           logger.warn({ err }, "GSM decode error");
         }
