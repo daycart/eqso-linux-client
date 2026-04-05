@@ -23,7 +23,7 @@ export const KNOWN_SERVERS: EqsoServer[] = [
     label: "Servidor Local",
     description: "Servidor eQSO propio (Linux)",
     mode: "local",
-    defaultRooms: ["GENERAL", "CB27", "ASORAPA", "PRUEBA"],
+    defaultRooms: ["GENERAL", "CB", "ASORAPA", "PRUEBAS"],
   },
   {
     id: "asorapa",

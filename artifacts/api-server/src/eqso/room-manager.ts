@@ -23,7 +23,7 @@ export class RoomManager extends EventEmitter {
   private roomLocks = new Map<string, string>();
 
   getDefaultRooms(): string[] {
-    return ["GENERAL", "CB27", "ASORAPA", "PRUEBA"];
+    return ["GENERAL", "CB", "ASORAPA", "PRUEBAS"];
   }
 
   getRooms(): string[] {
