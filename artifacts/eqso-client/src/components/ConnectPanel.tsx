@@ -8,10 +8,12 @@ interface ConnectPanelProps {
   callsign: string;
   selectedRoom: string;
   statusMessage: string;
+  password: string;
   selectedServer: EqsoServer;
   onCallsignChange: (v: string) => void;
   onRoomChange: (v: string) => void;
   onStatusMessageChange: (v: string) => void;
+  onPasswordChange: (v: string) => void;
   onConnect: (server: EqsoServer, customHost?: string, customPort?: number) => void;
   onJoin: () => void;
 }
@@ -23,9 +25,11 @@ export function ConnectPanel({
   callsign,
   selectedRoom,
   statusMessage,
+  password,
   onCallsignChange,
   onRoomChange,
   onStatusMessageChange,
+  onPasswordChange,
   onConnect,
   onJoin,
 }: ConnectPanelProps) {
@@ -204,6 +208,22 @@ export function ConnectPanel({
               onChange={(e) => onStatusMessageChange(e.target.value)}
               placeholder="CB27 link via internet..."
               maxLength={100}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white placeholder-gray-600 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 text-sm"
+            />
+          </div>
+
+          {/* PASSWORD */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
+              Contraseña del servidor{" "}
+              <span className="text-gray-600 font-normal normal-case">(si se requiere)</span>
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => onPasswordChange(e.target.value)}
+              placeholder="Dejar en blanco si no hay contrasena"
+              autoComplete="current-password"
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white placeholder-gray-600 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 text-sm"
             />
           </div>

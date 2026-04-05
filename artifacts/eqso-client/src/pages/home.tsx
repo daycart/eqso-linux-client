@@ -10,6 +10,7 @@ export default function HomePage() {
   const [callsign, setCallsign] = useState("");
   const [selectedRoom, setSelectedRoom] = useState("GENERAL");
   const [statusMessage, setStatusMessage] = useState("CB27 link via internet. ");
+  const [password, setPassword] = useState("");
   const [pttActive, setPttActive] = useState(false);
   const pttChunkRef = useRef<(data: ArrayBuffer) => void>(() => {});
 
@@ -25,7 +26,7 @@ export default function HomePage() {
 
   const handleJoin = () => {
     if (!callsign.trim()) return;
-    eqso.join(callsign.trim(), selectedRoom, statusMessage);
+    eqso.join(callsign.trim(), selectedRoom, statusMessage, password);
   };
 
   const pttStart = useCallback(async () => {
@@ -119,10 +120,12 @@ export default function HomePage() {
             callsign={callsign}
             selectedRoom={selectedRoom}
             statusMessage={statusMessage}
+            password={password}
             selectedServer={eqso.selectedServer}
             onCallsignChange={setCallsign}
             onRoomChange={setSelectedRoom}
             onStatusMessageChange={setStatusMessage}
+            onPasswordChange={setPassword}
             onConnect={handleConnect}
             onJoin={handleJoin}
           />

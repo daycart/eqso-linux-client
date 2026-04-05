@@ -302,11 +302,11 @@ export function useEqsoClient(): EqsoState & EqsoActions {
     pendingJoinRef.current = null;
   }, []);
 
-  const join = useCallback((name: string, room: string, message = "") => {
+  const join = useCallback((name: string, room: string, message = "", password = "") => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     pendingJoinRef.current = { name, room };
-    ws.send(JSON.stringify({ type: "join", name: name.toUpperCase(), room: room.toUpperCase(), message }));
+    ws.send(JSON.stringify({ type: "join", name: name.toUpperCase(), room: room.toUpperCase(), message, password }));
   }, []);
 
   const pttStart = useCallback(() => {

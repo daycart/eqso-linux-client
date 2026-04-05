@@ -90,6 +90,15 @@ function handleLocalMode(
           const name = (msg.name ?? "").trim().toUpperCase();
           const room = (msg.room ?? "GENERAL").trim().toUpperCase();
           const message = (msg.message ?? "").trim();
+          const password = (msg.password ?? "").trim();
+
+          const serverPassword = process.env.EQSO_PASSWORD ?? "";
+          if (serverPassword && password !== serverPassword) {
+            sendJson(ws, { type: "error", message: "Acceso denegado: contraseña incorrecta" });
+            logger.warn({ id, name }, "WS client rejected: wrong password");
+            ws.close();
+            return;
+          }
 
           if (!name || name.length > 20) {
             sendJson(ws, { type: "error", message: "Indicativo inválido (máx 20 chars)" });

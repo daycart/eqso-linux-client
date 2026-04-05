@@ -188,10 +188,18 @@ function handleJoin(
   name: string,
   room: string,
   message: string,
-  _password: string
+  password: string
 ): void {
   const existing = roomManager.getClient(state.id);
   const oldRoom = existing?.room ?? "";
+
+  const serverPassword = process.env.EQSO_PASSWORD ?? "";
+  if (serverPassword && password !== serverPassword) {
+    safeWrite(state, buildErrorMessage("Acceso denegado: contraseña incorrecta"));
+    logger.warn({ id: state.id, name }, "TCP client rejected: wrong password");
+    state.socket.destroy();
+    return;
+  }
 
   if (!name || name.length > 20) {
     safeWrite(state, buildErrorMessage("Invalid callsign (max 20 chars)"));
