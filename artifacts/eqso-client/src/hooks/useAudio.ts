@@ -44,7 +44,11 @@ const MAX_QUEUE_AHEAD_SEC = 1.5;
 // Gain applied to mic input before encoding. Mic sensitivity is typically very
 // low (~0.004 peak Float32), so we boost by this factor before GSM encoding.
 // GSM codec needs at least -25 dBFS (~0.06 peak) for intelligible speech.
-const MIC_BOOST_GAIN = 10;
+// Software gain on top of mic input. With autoGainControl enabled (below)
+// the browser already normalises the signal. Keep at 1 (no extra boost)
+// unless the mic is known to be weak after AGC. Increase only if the
+// post-gain peak reported in the console is below 0.05.
+const MIC_BOOST_GAIN = 1;
 
 export function useAudio(): UseAudioReturn {
   const ctxRef = useRef<AudioContext | null>(null);
