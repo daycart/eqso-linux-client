@@ -58,9 +58,7 @@ export default function HomePage() {
 
   useEffect(() => {
     pttChunkRef.current = (data: ArrayBuffer) => {
-      if (eqso.pttGranted) {
-        eqso.sendAudio(data);
-      }
+      eqso.sendAudio(data);
     };
   }, [eqso]);
 

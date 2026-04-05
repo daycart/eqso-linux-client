@@ -278,7 +278,11 @@ function handleRemoteMode(
   return {
     onMessage: (msg, rawBin) => {
       // Handle TX audio: browser sends [0x05][Int16 PCM bytes]
-      if (rawBin && rawBin.length > 1 && rawBin[0] === WS_PCM_TX && pttGranted) {
+      if (rawBin && rawBin.length > 1 && rawBin[0] === WS_PCM_TX) {
+        if (!pttGranted) {
+          logger.debug({ bytes: rawBin.length }, "Remote TX: dropped audio — pttGranted=false");
+          return;
+        }
         // Copy payload into a fresh ArrayBuffer (rawBin.slice has unaligned byteOffset)
         const payloadLen = rawBin.length - 1;
         const sampleCount = Math.floor(payloadLen / 2);
@@ -300,7 +304,7 @@ function handleRemoteMode(
           try {
             const gsm = gsmEncodePacket(chunk);
             proxy.sendAudio(Buffer.from(gsm));
-            logger.debug({ bytes: gsm.length }, "Remote TX: sent GSM packet");
+            logger.info({ bytes: gsm.length }, "Remote TX: sent GSM packet");
           } catch (err) {
             logger.warn({ err }, "GSM encode error");
           }
@@ -330,12 +334,16 @@ function handleRemoteMode(
         case "ptt_start":
           pttGranted = true;
           pcmAccum = new Int16Array(0); // reset accumulator
+          // Announce PTT to the eQSO server: [0x05][name bytes]
+          if (currentName) proxy.sendPttStartSignal(currentName);
           sendJson(ws, { type: "ptt_granted" });
+          logger.info({ name: currentName, room: currentRoom }, "Remote TX: PTT start sent to eQSO server");
           break;
         case "ptt_end":
           pttGranted = false;
           pcmAccum = new Int16Array(0); // discard leftover
           proxy.sendPttEnd(); // send [0x0d] to remote eQSO server to release the channel
+          logger.info({ name: currentName }, "Remote TX: PTT end sent to eQSO server");
           sendJson(ws, { type: "ptt_released" });
           break;
         case "ping":

@@ -104,6 +104,7 @@ export function useEqsoClient(
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [activeSpeaker, setActiveSpeaker] = useState<string | null>(null);
   const [pttGranted, setPttGranted] = useState(false);
+  const pttGrantedRef = useRef(false);
   const [channelBusy, setChannelBusy] = useState(false);
   const [selectedServer, setSelectedServer] = useState<EqsoServer>(KNOWN_SERVERS[0]);
   const selectedServerRef = useRef<EqsoServer>(KNOWN_SERVERS[0]);
@@ -149,6 +150,7 @@ export function useEqsoClient(
         break;
 
       case "ptt_released":
+        pttGrantedRef.current = false;
         setPttGranted(false);
         break;
 
@@ -158,11 +160,13 @@ export function useEqsoClient(
         break;
 
       case "ptt_granted":
+        pttGrantedRef.current = true;
         setPttGranted(true);
         setChannelBusy(false);
         break;
 
       case "ptt_denied":
+        pttGrantedRef.current = false;
         setPttGranted(false);
         setChannelBusy(true);
         setTimeout(() => setChannelBusy(false), 2000);
@@ -270,6 +274,7 @@ export function useEqsoClient(
     setCurrentName(null);
     setMembers([]);
     setActiveSpeaker(null);
+    pttGrantedRef.current = false;
     setPttGranted(false);
 
     const ws = new WebSocket(getWsUrl());
@@ -306,6 +311,7 @@ export function useEqsoClient(
       setCurrentName(null);
       setMembers([]);
       setActiveSpeaker(null);
+      pttGrantedRef.current = false;
       setPttGranted(false);
     };
 
@@ -322,6 +328,7 @@ export function useEqsoClient(
     setCurrentRoom(null);
     setCurrentName(null);
     setMembers([]);
+    pttGrantedRef.current = false;
     setPttGranted(false);
     pendingJoinRef.current = null;
   }, []);
@@ -347,7 +354,7 @@ export function useEqsoClient(
 
   const sendAudio = useCallback((data: ArrayBuffer) => {
     const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN || !pttGranted) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN || !pttGrantedRef.current) return;
 
     const isRemote = selectedServerRef.current.mode === "remote";
     // Remote: [0x05][Int16 PCM] — server will GSM-encode and relay
@@ -358,7 +365,7 @@ export function useEqsoClient(
     pkt[0] = opcode;
     pkt.set(payload, 1);
     ws.send(pkt.buffer);
-  }, [pttGranted]);
+  }, []);
 
   useEffect(() => {
     return () => { wsRef.current?.close(); };

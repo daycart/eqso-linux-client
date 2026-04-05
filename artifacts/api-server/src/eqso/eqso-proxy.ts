@@ -277,11 +277,15 @@ export class EqsoProxy extends EventEmitter {
     this.socketWrite(pkt);
   }
 
-  sendPttStart(audioData?: Buffer): void {
-    const payload = audioData
-      ? audioData.slice(0, AUDIO_PAYLOAD_SIZE)
-      : Buffer.alloc(AUDIO_PAYLOAD_SIZE);
-    const pkt = Buffer.concat([Buffer.from([0x01]), payload]);
+  /**
+   * Send PTT-start announcement to the eQSO server.
+   * Protocol: [0x05][name bytes] — no length prefix, just raw ASCII name.
+   * The server echoes a 0x16 PTT-started notification to all other clients.
+   */
+  sendPttStartSignal(name: string): void {
+    const nb = Buffer.from(name.slice(0, 20), "ascii");
+    const pkt = Buffer.concat([Buffer.from([0x05]), nb]);
+    logger.info({ name, hex: pkt.toString("hex") }, "eQSO proxy: sending PTT start signal");
     this.socketWrite(pkt);
   }
 
