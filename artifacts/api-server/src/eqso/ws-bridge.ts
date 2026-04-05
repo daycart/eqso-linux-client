@@ -187,6 +187,8 @@ function handleRemoteMode(
 } {
   const proxy = new EqsoProxy(host, port);
   let pttGranted = false;
+  let currentName = "";
+  let currentRoom = "";
 
   proxy.on("event", (ev: ProxyEvent) => {
     switch (ev.type) {
@@ -208,8 +210,8 @@ function handleRemoteMode(
       case "members":
         sendJson(ws, {
           type: "joined",
-          room: "__current__",
-          name: "__pending__",
+          room: currentRoom,
+          name: currentName,
           members: ev.data,
         });
         break;
@@ -251,6 +253,8 @@ function handleRemoteMode(
           const room = (msg.room ?? "GENERAL").trim().toUpperCase();
           const message = (msg.message ?? "").trim();
           const password = (msg.password ?? "").trim();
+          currentName = name;
+          currentRoom = room;
           logger.info({ id, name, room, host, port }, "Remote proxy: join requested");
           proxy.sendJoin(name, room, message, password);
           sendJson(ws, { type: "joined", room, name, members: [] });
@@ -259,12 +263,13 @@ function handleRemoteMode(
         }
         case "ptt_start":
           pttGranted = true;
-          proxy.sendPttStart();
+          // No explicit PTT start signal — remote server detects PTT from incoming 0x01 audio
           sendJson(ws, { type: "ptt_granted" });
           break;
         case "ptt_end":
           pttGranted = false;
-          proxy.sendPttEnd();
+          // Do NOT send 0x0d to remote server — it doesn't understand that command
+          // Server detects PTT release when audio packets stop arriving
           sendJson(ws, { type: "ptt_released" });
           break;
         case "ping":

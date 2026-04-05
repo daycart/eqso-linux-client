@@ -39,7 +39,7 @@ export function RoomPanel({
 }: RoomPanelProps) {
   const allMembers: RoomMember[] = [
     { name: currentName, message: "Tú" },
-    ...members,
+    ...members.filter((m) => m.name !== currentName),
   ];
 
   return (
