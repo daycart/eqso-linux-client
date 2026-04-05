@@ -143,6 +143,7 @@ export default function HomePage() {
             inputLevel={audio.inputLevel}
             rooms={eqso.rooms}
             selectedRoom={selectedRoom}
+            isRemote={eqso.selectedServer.mode === "remote"}
             onRoomChange={(room) => {
               setSelectedRoom(room);
               eqso.join(eqso.currentName!, room);

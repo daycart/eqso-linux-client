@@ -241,10 +241,10 @@ function handleRemoteMode(
   return {
     onMessage: (msg, rawBin) => {
       if (rawBin && rawBin.length > 0 && rawBin[0] === 0x01) {
-        if (pttGranted) {
-          logger.debug({ bytes: rawBin.length - 1 }, "Remote proxy: forwarding audio to server");
-          proxy.sendAudio(rawBin.slice(1));
-        }
+        // TX audio to remote server is disabled pending audio format negotiation.
+        // Sending raw PCM to the remote server causes ECONNRESET.
+        // Once a real audio packet is captured from the server (see eqso-proxy INFO log),
+        // the correct payload size and encoding can be confirmed.
         return;
       }
 

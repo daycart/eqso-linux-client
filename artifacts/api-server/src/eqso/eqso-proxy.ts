@@ -379,7 +379,7 @@ export class EqsoProxy extends EventEmitter {
       // AUDIO
       case 0x01: {
         const audioPkt = pkt; // full buffer including 0x01 opcode
-        logger.debug({ payloadBytes: audioPkt.length - 1 }, "eQSO proxy: audio packet from server");
+        logger.info({ payloadBytes: audioPkt.length - 1 }, "eQSO proxy: audio packet from server");
         this.emit("event", { type: "audio", data: audioPkt } as ProxyEvent);
         break;
       }
