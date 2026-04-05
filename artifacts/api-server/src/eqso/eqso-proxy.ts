@@ -62,16 +62,29 @@ class EqsoPacketParser {
         return pkt;
       }
 
-      // 0x08  PTT ack byte 1 — 1 byte
+      // 0x08 PTT release 1 — [0x08][nameLen][name]
       if (cmd === 0x08) {
-        this.acc = this.acc.slice(1);
+        if (this.acc.length < 2) return null;
+        const nameLen = this.acc[1];
+        const total = 2 + nameLen;
+        if (this.acc.length < total) return null;
+        this.acc = this.acc.slice(total);
         continue; // discard
       }
 
-      // 0x06 [0x00]  PTT ack byte 2 — 2 bytes
+      // 0x06 PTT release 2 — [0x06][nameLen][name]
       if (cmd === 0x06) {
         if (this.acc.length < 2) return null;
-        this.acc = this.acc.slice(2);
+        const nameLen = this.acc[1];
+        const total = 2 + nameLen;
+        if (this.acc.length < total) return null;
+        this.acc = this.acc.slice(total);
+        continue; // discard
+      }
+
+      // 0x09 unknown signal — 1 byte
+      if (cmd === 0x09) {
+        this.acc = this.acc.slice(1);
         continue; // discard
       }
 
@@ -138,52 +151,60 @@ class EqsoPacketParser {
    * Returns the packet Buffer if complete, null if need more data, false to discard.
    */
   private tryParseUserUpdate(): Buffer | null | false {
-    // Minimum: cmd(1) count(1) xx(3)
-    if (this.acc.length < 5) return null;
-
+    if (this.acc.length < 2) return null;
     const count = this.acc[1];
-    let off = 4; // skip cmd, count, 2 more bytes (offsets differ per packet)
 
     if (count === 0) {
-      // single action with count=0 — just consume 5 bytes (server info style)
-      const pkt = this.acc.slice(0, 5);
-      this.acc = this.acc.slice(5);
+      // Empty list — just the 4-byte header
+      if (this.acc.length < 4) return null;
+      const pkt = this.acc.slice(0, 4);
+      this.acc = this.acc.slice(4);
       return pkt;
     }
 
-    for (let i = 0; i < count; i++) {
-      // Each entry: [4 bytes status/flags] [nameLen name] [msgLen msg] [0x00]
-      if (off + 4 >= this.acc.length) return null;
-      // action byte is at offset 4 from the packet start for single-count, or within the loop
-      off += (i === 0 ? 4 : 4); // 4 bytes of flags per entry
-
-      if (off >= this.acc.length) return null;
-      const nameLen = this.acc[off++];
-      if (off + nameLen > this.acc.length) return null;
-      off += nameLen;
-
-      if (off >= this.acc.length) return null;
-      const action = this.acc[off - nameLen - 5 + 4]; // action byte within this entry
-
-      // action 0x01 (leave) and 0x02/0x03 (ptt) have no message
+    if (count === 1) {
+      // Single action event:
+      //   [0x16][0x01][0x00][0x00][0x00][action][0x00][0x00][0x00][nameLen][name...]
+      //   action 0x00 (join) adds: [msgLen][msg][0x00]
+      //   other actions (ptt/leave): no message, no terminator
+      if (this.acc.length < 10) return null;
+      const action = this.acc[5];
+      const nameLen = this.acc[9];
+      let off = 10 + nameLen;
+      if (this.acc.length < off) return null;
       if (action === 0x00) {
-        // join: has message
-        if (off >= this.acc.length) return null;
+        // join: msgLen + msg + terminator
+        if (this.acc.length < off + 1) return null;
         const msgLen = this.acc[off++];
-        if (off + msgLen > this.acc.length) return null;
         off += msgLen;
+        if (this.acc.length < off + 1) return null;
+        off++; // terminator
       }
-
-      // terminator 0x00
-      if (off >= this.acc.length) return null;
-      if (this.acc[off] !== 0x00) {
-        // not a proper terminator — something is off, skip the command byte
-        this.acc = this.acc.slice(1);
-        return false;
-      }
-      off++;
+      const pkt = this.acc.slice(0, off);
+      this.acc = this.acc.slice(off);
+      return pkt;
     }
 
+    // count > 1: member list
+    // Header: [0x16][count][0x00][0x00] (4 bytes)
+    // Each entry: [5 flag bytes][nameLen][name][msgLen][msg]  (no per-entry terminator)
+    // Final: [0x00] (single packet terminator)
+    if (this.acc.length < 4) return null;
+    let off = 4;
+    for (let i = 0; i < count; i++) {
+      // need 5 flags + nameLen byte
+      if (this.acc.length < off + 6) return null;
+      off += 5; // skip 5 flag bytes
+      const nameLen = this.acc[off++];
+      if (this.acc.length < off + nameLen + 1) return null; // need name + msgLen byte
+      off += nameLen;
+      const msgLen = this.acc[off++];
+      if (this.acc.length < off + msgLen) return null;
+      off += msgLen;
+    }
+    // Single terminator byte at the end
+    if (this.acc.length < off + 1) return null;
+    off++;
     const pkt = this.acc.slice(0, off);
     this.acc = this.acc.slice(off);
     return pkt;
@@ -219,8 +240,8 @@ export class EqsoProxy extends EventEmitter {
     });
 
     sock.on("data", (data: Buffer) => {
-      logger.debug(
-        { bytes: data.length, hex: data.slice(0, 20).toString("hex") },
+      logger.info(
+        { bytes: data.length, hex: data.toString("hex") },
         "eQSO proxy: received TCP data"
       );
       this.parser.feed(data);
@@ -288,7 +309,7 @@ export class EqsoProxy extends EventEmitter {
         logger.warn({ err }, "eQSO proxy: socket write error");
       }
     } else {
-      logger.warn(
+      logger.debug(
         { connected: this.connected, destroyed: this.socket?.destroyed },
         "eQSO proxy: tried to write but socket not ready"
       );
@@ -318,8 +339,9 @@ export class EqsoProxy extends EventEmitter {
         break;
       }
 
-      // KEEPALIVE
+      // KEEPALIVE — echo back to keep the session alive
       case 0x0c:
+        this.socketWrite(Buffer.from([0x0c]));
         this.emit("event", { type: "keepalive" } as ProxyEvent);
         break;
 
@@ -370,7 +392,7 @@ export class EqsoProxy extends EventEmitter {
   private handleUserUpdate(pkt: Buffer): void {
     if (pkt.length < 5) return;
     const count = pkt[1];
-    logger.debug({ count, hex: pkt.toString("hex") }, "eQSO proxy: user update packet");
+    logger.info({ count, hex: pkt.toString("hex") }, "eQSO proxy: user update packet");
 
     if (count === 0) return;
 
