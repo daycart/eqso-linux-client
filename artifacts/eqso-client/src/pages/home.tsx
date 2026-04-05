@@ -40,17 +40,20 @@ export default function HomePage() {
 
   const pttStart = useCallback(async () => {
     if (pttActive || !eqso.currentRoom) return;
+    console.debug("[ptt] start — room:", eqso.currentRoom, "server:", eqso.selectedServer.mode);
     eqso.pttStart();
     setPttActive(true);
 
     const mode = eqso.selectedServer.mode === "remote" ? "remote" : "local";
     await audio.startRecording((chunk) => {
+      console.debug("[ptt] audio chunk:", chunk.byteLength, "bytes");
       pttChunkRef.current(chunk);
     }, mode);
   }, [pttActive, eqso, audio]);
 
   const pttEnd = useCallback(() => {
     if (!pttActive) return;
+    console.debug("[ptt] end");
     audio.stopRecording();
     eqso.pttEnd();
     setPttActive(false);

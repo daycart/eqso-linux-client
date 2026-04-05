@@ -98,15 +98,18 @@ export function useAudio(): UseAudioReturn {
     mode: "local" | "remote" = "local"
   ) => {
     try {
+      console.debug(`[audio] startRecording: requesting mic (mode=${mode})`);
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
           echoCancellation: true,
-          noiseSuppression: true,
+          noiseSuppression: false,
           autoGainControl: true,
         },
         video: false,
       });
+      const tracks = stream.getAudioTracks();
+      console.debug(`[audio] mic granted: ${tracks.length} track(s)`, tracks.map(t => t.label));
       setIsMicAllowed(true);
       streamRef.current = stream;
       accumLocalRef.current = new Uint8Array(0);
@@ -131,9 +134,29 @@ export function useAudio(): UseAudioReturn {
       const processor = ctx.createScriptProcessor(BUFFER_SIZE, 1, 1);
       processorRef.current = processor;
 
+      let txCallbackCount = 0;
       processor.onaudioprocess = (ev) => {
         // inputBuffer is at nativeRate (e.g. 44100 or 48000 Hz)
         const rawInput = ev.inputBuffer.getChannelData(0);
+
+        // Chrome: write a tiny inaudible value to keep onaudioprocess firing.
+        // Without this, the callback may silently stop when output stays at zero.
+        const outBuf = ev.outputBuffer.getChannelData(0);
+        outBuf[0] = 1e-10;
+
+        // Log mic level every ~40 callbacks (~3 s) to diagnose silence issues
+        txCallbackCount++;
+        if (txCallbackCount % 40 === 1) {
+          let peak = 0;
+          let sumSq = 0;
+          for (let i = 0; i < rawInput.length; i++) {
+            const a = Math.abs(rawInput[i]);
+            if (a > peak) peak = a;
+            sumSq += rawInput[i] * rawInput[i];
+          }
+          const rms = Math.sqrt(sumSq / rawInput.length);
+          console.debug(`[audio] TX mic rms=${rms.toFixed(4)} peak=${peak.toFixed(4)} rate=${nativeRate}`);
+        }
 
         if (mode === "local") {
           // Downsample to 8000 Hz then convert to Uint8
@@ -188,7 +211,8 @@ export function useAudio(): UseAudioReturn {
       levelTimerRef.current = requestAnimationFrame(updateLevel);
 
       setIsRecording(true);
-    } catch {
+    } catch (err) {
+      console.error("[audio] mic error:", err);
       setIsMicAllowed(false);
       setIsRecording(false);
     }

@@ -354,7 +354,10 @@ export function useEqsoClient(
 
   const sendAudio = useCallback((data: ArrayBuffer) => {
     const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN || !pttGrantedRef.current) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN || !pttGrantedRef.current) {
+      console.debug("[eqso] sendAudio dropped — ws:", ws?.readyState, "pttGranted:", pttGrantedRef.current);
+      return;
+    }
 
     const isRemote = selectedServerRef.current.mode === "remote";
     // Remote: [0x05][Int16 PCM] — server will GSM-encode and relay
