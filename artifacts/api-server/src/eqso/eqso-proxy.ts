@@ -212,6 +212,11 @@ class EqsoPacketParser {
 // ---------------------------------------------------------------------------
 // EqsoProxy — connects to a remote eQSO TCP server and translates packets
 // ---------------------------------------------------------------------------
+// Silence frame interval — eQSO clients send 0x02 every ~150ms when idle.
+// The server uses these to detect that a client is "ready" (not transmitting).
+// Without them, the server may ignore PTT requests.
+const SILENCE_INTERVAL_MS = 150;
+
 export class EqsoProxy extends EventEmitter {
   private socket: net.Socket | null = null;
   private parser = new EqsoPacketParser();
@@ -219,11 +224,31 @@ export class EqsoProxy extends EventEmitter {
   private host: string;
   private port: number;
   private connected = false;
+  private silenceTimer: ReturnType<typeof setInterval> | null = null;
+  private transmitting = false;
 
   constructor(host: string, port: number) {
     super();
     this.host = host;
     this.port = port;
+  }
+
+  /** Start sending 0x02 silence frames (idle heartbeat). */
+  private startSilenceFrames(): void {
+    if (this.silenceTimer) return;
+    this.silenceTimer = setInterval(() => {
+      if (!this.transmitting) {
+        this.socketWrite(Buffer.from([0x02]));
+      }
+    }, SILENCE_INTERVAL_MS);
+  }
+
+  /** Stop the silence frame timer (called when we disconnect). */
+  private stopSilenceFrames(): void {
+    if (this.silenceTimer) {
+      clearInterval(this.silenceTimer);
+      this.silenceTimer = null;
+    }
   }
 
   connect(): void {
@@ -235,6 +260,7 @@ export class EqsoProxy extends EventEmitter {
       this.connected = true;
       sock.write(HANDSHAKE_CLIENT);
       logger.debug("eQSO proxy: sent handshake");
+      // Silence heartbeat starts after handshake confirms (see 0x0a handler)
     });
 
     sock.on("data", (data: Buffer) => {
@@ -248,12 +274,14 @@ export class EqsoProxy extends EventEmitter {
 
     sock.on("close", () => {
       this.connected = false;
+      this.stopSilenceFrames();
       this.emit("event", { type: "disconnected" } as ProxyEvent);
       logger.info({ host: this.host }, "eQSO proxy TCP closed");
     });
 
     sock.on("error", (err) => {
       this.connected = false;
+      this.stopSilenceFrames();
       this.emit("event", { type: "error", data: (err as Error).message } as ProxyEvent);
       logger.warn({ err, host: this.host }, "eQSO proxy TCP error");
     });
@@ -263,6 +291,7 @@ export class EqsoProxy extends EventEmitter {
   }
 
   disconnect(): void {
+    this.stopSilenceFrames();
     this.socket?.destroy();
     this.socket = null;
     this.connected = false;
@@ -286,10 +315,12 @@ export class EqsoProxy extends EventEmitter {
     const nb = Buffer.from(name.slice(0, 20), "ascii");
     const pkt = Buffer.concat([Buffer.from([0x05]), nb]);
     logger.info({ name, hex: pkt.toString("hex") }, "eQSO proxy: sending PTT start signal");
+    this.transmitting = true;
     this.socketWrite(pkt);
   }
 
   sendPttEnd(): void {
+    this.transmitting = false;
     this.socketWrite(Buffer.from([0x0d]));
   }
 
@@ -347,12 +378,14 @@ export class EqsoProxy extends EventEmitter {
         this.emit("event", { type: "keepalive" } as ProxyEvent);
         break;
 
-      // HANDSHAKE response
+      // HANDSHAKE response — start idle silence frames once confirmed
       case 0x0a:
         if (!this.handshakeDone) {
           this.handshakeDone = true;
           logger.info({ hex: pkt.toString("hex") }, "eQSO proxy: handshake from server");
           this.emit("event", { type: "connected" } as ProxyEvent);
+          // Start sending 0x02 silence heartbeats now that handshake is done
+          this.startSilenceFrames();
         }
         break;
 
