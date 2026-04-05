@@ -1,0 +1,322 @@
+lockdown-install.js:1 SES Removing unpermitted intrinsics
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+Code-Translator-Linux?checkoutSuccess=true:1 The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+00bo3mlkmjr8z.js:21 
+      /////////////////////
+   ///////////////////////////
+  ////////@@@@@@@//////////////
+  ////////@@@@@@@//////////////
+  ////////@@@@@@@//////////////        Curious and driven?
+  ///////////////@@@@@@@///////        Work with us!
+  ///////////////@@@@@@@///////
+  ///////////////@@@@@@@///////        https://join.replit.com/hack.with.us
+  ////////@@@@@@@//////////////
+  ////////@@@@@@@//////////////
+  ////////@@@@@@#//////////////
+   ///////////////////////////
+      /////////////////////
+      
+00bo3mlkmjr8z.js:21 Download the Apollo DevTools for a better development experience: https://chrome.google.com/webstore/detail/apollo-client-developer-t/jdkknkkbebbapilgoeccciglkfbmbnfm
+www.facebook.com/tr/?id=1153929076518158&ev=PageView&dl=https%3A%2F%2Freplit.com%2F%40davidaycart%2FCode-Translator-Linux&rl=https%3A%2F%2Fcheckout.stripe.com%2F&if=false&ts=1775376382387&sw=1920&sh=1200&v=2.9.281&r=stable&ec=0&o=4126&fbp=fb.1.1775373039067.47535755154987152&ler=other&cdl=API_unavailable&pmd[title]=Loading...%20-%20Replit&pmd[locale]=en&pmd[description]=Build%20and%20deploy%20software%20collaboratively%20with%20the%20power%20of%20AI%20without%20spending%20a%20second%20on%20setup.&pmd[keywords]=replit%2Cai%2Csoftware%2Cbuild%2Ccollaborate%2CIDE%2Cplatform%2Ccode%2Cdeploy%2Cprototype%2Conline%2Cagent&plt=3683&it=1775376380876&coo=false&expv2[0]=pl1&expv2[1]=el2&expv2[2]=bc1&expv2[3]=ra2&expv2[4]=rp2&expv2[5]=im0&expv2[6]=hf0&rqm=GET:1  Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+00bo3mlkmjr8z.js:21 [LaunchDarkly] LaunchDarkly client initialized
+ SES Removing unpermitted intrinsics
+lockdown-install.js:1 SES Removing unpermitted intrinsics
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'ambient-light-sensor'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'battery'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'execution-while-not-rendered'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'execution-while-out-of-viewport'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'layout-animations'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'legacy-image-formats'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'navigation-override'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'oversized-images'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'publickey-credentials'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'speaker-selection'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'unoptimized-images'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'unsized-media'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'web-share'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'pointer-lock'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Allow attribute will take precedence over 'allowfullscreen'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Allow attribute will take precedence over 'allowpaymentrequest'.
+C @ 0i8wy8tbht2ow.js:2
+lockdown-install.js:1 SES Removing unpermitted intrinsics
+Code-Translator-Linux:1 Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner.
+www.facebook.com/tr/?id=1153929076518158&ev=SubscribedButtonClick&dl=https%3A%2F%2Freplit.com%2F%40davidaycart%2FCode-Translator-Linux&rl=https%3A%2F%2Fcheckout.stripe.com%2F&if=false&ts=1775377125121&cd[buttonFeatures]=%7B%22classList%22%3A%22index-module__nt3RRa__newTabTextButton%20Button-module__nDccya__button%20Interactive2-module__BR3hWq__shades%20Interactive2-module__BR3hWq__root%20Interactive2-module__BR3hWq__transition%20Interactive2-module__BR3hWq__disabled%20_sdz_text%20_sdz_surface-bg%20_sdz_custom-hover%3Ashades-up-2%20_sdz_custom-pressed%3Ashades-up-3%20Interactive2-module__BR3hWq__borderRadius%20Interactive2-module__BR3hWq__focus%22%2C%22destination%22%3A%22%22%2C%22id%22%3A%22react-aria4555914953-%3Ar12%3A%22%2C%22imageUrl%22%3A%22%22%2C%22innerText%22%3A%22Tools%20%26%20files%22%2C%22numChildButtons%22%3A0%2C%22tag%22%3A%22button%22%2C%22type%22%3A%22button%22%2C%22name%22%3A%22%22%2C%22value%22%3A%22%22%7D&cd[buttonText]=Tools%20%26%20files&cd[formFeatures]=%5B%5D&cd[pageFeatures]=%7B%22title%22%3A%22Code%20Translator%20Linux%20-%20Replit%22%7D&sw=1920&sh=1200&v=2.9.281&r=stable&ec=1&o=4126&fbp=fb.1.1775373039067.47535755154987152&ler=other&cdl=API_unavailable&pmd[locale]=en&pmd[description]=Build%20and%20deploy%20software%20collaboratively%20with%20the%20power%20of%20AI%20without%20spending%20a%20second%20on%20setup.&pmd[keywords]=replit%2Cai%2Csoftware%2Cbuild%2Ccollaborate%2CIDE%2Cplatform%2Ccode%2Cdeploy%2Cprototype%2Conline%2Cagent&plt=3683&it=1775376380876&coo=false&es=automatic&tm=3&expv2[0]=pl1&expv2[1]=el3&expv2[2]=bc1&expv2[3]=ra2&expv2[4]=rp2&expv2[5]=im0&expv2[6]=hf0&rqm=GET:1  Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+Code-Translator-Linux:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+Code-Translator-Linux:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+Code-Translator-Linux:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+Code-Translator-Linux:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+Code-Translator-Linux:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+Code-Translator-Linux:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+www.facebook.com/tr/?id=1153929076518158&ev=SubscribedButtonClick&dl=https%3A%2F%2Freplit.com%2F%40davidaycart%2FCode-Translator-Linux&rl=https%3A%2F%2Fcheckout.stripe.com%2F&if=false&ts=1775379729436&cd[buttonFeatures]=%7B%22classList%22%3A%22SendAgentMessageButtonGroup-module__3k60sG__buttonGroupLeft%20Button-module__nDccya__button%20Interactive2-module__BR3hWq__shades%20Interactive2-module__BR3hWq__root%20Interactive2-module__BR3hWq__transition%20Interactive2-module__BR3hWq__disabled%20_sdz_text%20_sdz_surface-2%20_sdz_switch-theme%20_sdz_theme-blurple%20_sdz_surface-bg%20_sdz_custom-hover%3Ashades-up%20_sdz_custom-pressed%3Ashades-up-2%20Interactive2-module__BR3hWq__borderRadius%20Interactive2-module__BR3hWq__focus%22%2C%22destination%22%3A%22%22%2C%22id%22%3A%22react-aria4555914953-%3Ar5v%3A%22%2C%22imageUrl%22%3A%22%22%2C%22innerText%22%3A%22Debug%20with%20Agent%22%2C%22numChildButtons%22%3A0%2C%22tag%22%3A%22button%22%2C%22type%22%3A%22button%22%2C%22name%22%3A%22%22%2C%22value%22%3A%22%22%7D&cd[buttonText]=Debug%20with%20Agent&cd[formFeatures]=%5B%5D&cd[pageFeatures]=%7B%22title%22%3A%22Code%20Translator%20Linux%20-%20Replit%22%7D&sw=1920&sh=1200&v=2.9.281&r=stable&ec=2&o=4126&fbp=fb.1.1775373039067.47535755154987152&ler=other&cdl=API_unavailable&pmd[locale]=en&pmd[description]=Build%20and%20deploy%20software%20collaboratively%20with%20the%20power%20of%20AI%20without%20spending%20a%20second%20on%20setup.&pmd[keywords]=replit%2Cai%2Csoftware%2Cbuild%2Ccollaborate%2CIDE%2Cplatform%2Ccode%2Cdeploy%2Cprototype%2Conline%2Cagent&plt=3683&it=1775376380876&coo=false&es=automatic&tm=3&expv2[0]=pl1&expv2[1]=el3&expv2[2]=bc1&expv2[3]=ra2&expv2[4]=rp2&expv2[5]=im0&expv2[6]=hf0&rqm=GET:1  Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+region1.analytics.google.com/g/collect?v=2&tid=G-MPJY3F1YEL&gtm=45je6420h2v9135634466za20g&_p=1775376383496&gcd=13l3lPl2l2l1&npa=0&dma_cps=a&dma=1&ul=es-es&sr=1920x1200&cid=1707496639.1775373040&ecid=469214357&ir=1&uaa=x86&uab=64&uafvl=Chromium%3B146.0.7680.80%7CNot-A.Brand%3B24.0.0.0%7CGoogle%2520Chrome%3B146.0.7680.80&uamb=0&uam=&uap=Linux&uapv=&uaw=0&are=1&frm=0&pscdl=noapi&_eu=EBAIAGQ&tag_exp=0~115616985~115938466~115938469~116991816~117266401&dl=https%3A%2F%2Freplit.com%2F%40davidaycart%2FCode-Translator-Linux&dr=https%3A%2F%2Fcheckout.stripe.com%2F&dp=%2F%40davidaycart%2FCode-Translator-Linux&dt=replEnvironmentDesktop&sid=1775373040&sct=1&seg=1&_tu=wAQ&_s=75&tfd=8671373:1  Failed to load resource: net::ERR_CONNECTION_CLOSED
+00bo3mlkmjr8z.js:21 Haven't heard from the server in a while, resetting connection...
+(anonymous) @ 00bo3mlkmjr8z.js:21
+www.facebook.com/tr/?id=1153929076518158&ev=SubscribedButtonClick&dl=https%3A%2F%2Freplit.com%2F%40davidaycart%2FCode-Translator-Linux&rl=https%3A%2F%2Fcheckout.stripe.com%2F&if=false&ts=1775388346143&cd[buttonFeatures]=%7B%22classList%22%3A%22Button-module__nDccya__button%20Interactive2-module__BR3hWq__shades%20Interactive2-module__BR3hWq__root%20Interactive2-module__BR3hWq__transition%20Interactive2-module__BR3hWq__disabled%20_sdz_text%20_sdz_surface-2%20_sdz_switch-theme%20_sdz_theme-primary%20_sdz_surface-bg%20_sdz_custom-hover%3Ashades-up%20_sdz_custom-pressed%3Ashades-up-2%20Interactive2-module__BR3hWq__borderRadius%20Interactive2-module__BR3hWq__focus%22%2C%22destination%22%3A%22%22%2C%22id%22%3A%22react-aria4555914953-%3Ar9a%3A%22%2C%22imageUrl%22%3A%22%22%2C%22innerText%22%3A%22Continue%22%2C%22numChildButtons%22%3A0%2C%22tag%22%3A%22button%22%2C%22type%22%3A%22submit%22%2C%22name%22%3A%22%22%2C%22value%22%3A%22%22%7D&cd[buttonText]=Continue&cd[formFeatures]=%5B%5D&cd[pageFeatures]=%7B%22title%22%3A%22Code%20Translator%20Linux%20-%20Replit%22%7D&sw=1920&sh=1200&v=2.9.281&r=stable&ec=3&o=4126&fbp=fb.1.1775373039067.47535755154987152&ler=other&cdl=API_unavailable&pmd[locale]=en&pmd[description]=Build%20and%20deploy%20software%20collaboratively%20with%20the%20power%20of%20AI%20without%20spending%20a%20second%20on%20setup.&pmd[keywords]=replit%2Cai%2Csoftware%2Cbuild%2Ccollaborate%2CIDE%2Cplatform%2Ccode%2Cdeploy%2Cprototype%2Conline%2Cagent&plt=3683&it=1775376380876&coo=false&es=automatic&tm=3&expv2[0]=pl1&expv2[1]=el3&expv2[2]=bc1&expv2[3]=ra2&expv2[4]=rp2&expv2[5]=im0&expv2[6]=hf0&rqm=GET:1  Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+www.facebook.com/tr/?id=1153929076518158&ev=SubscribedButtonClick&dl=https%3A%2F%2Freplit.com%2F%40davidaycart%2FCode-Translator-Linux&rl=https%3A%2F%2Fcheckout.stripe.com%2F&if=false&ts=1775388358361&cd[buttonFeatures]=%7B%22classList%22%3A%22Button-module__nDccya__button%20Interactive2-module__BR3hWq__shades%20Interactive2-module__BR3hWq__root%20Interactive2-module__BR3hWq__transition%20Interactive2-module__BR3hWq__disabled%20_sdz_text%20_sdz_surface-2%20_sdz_switch-theme%20_sdz_theme-primary%20_sdz_surface-bg%20_sdz_custom-hover%3Ashades-up%20_sdz_custom-pressed%3Ashades-up-2%20Interactive2-module__BR3hWq__borderRadius%20Interactive2-module__BR3hWq__focus%22%2C%22destination%22%3A%22%22%2C%22id%22%3A%22react-aria4555914953-%3Ar9a%3A%22%2C%22imageUrl%22%3A%22%22%2C%22innerText%22%3A%22Continue%22%2C%22numChildButtons%22%3A0%2C%22tag%22%3A%22button%22%2C%22type%22%3A%22submit%22%2C%22name%22%3A%22%22%2C%22value%22%3A%22%22%7D&cd[buttonText]=Continue&cd[formFeatures]=%5B%5D&cd[pageFeatures]=%7B%22title%22%3A%22Code%20Translator%20Linux%20-%20Replit%22%7D&sw=1920&sh=1200&v=2.9.281&r=stable&ec=4&o=4126&fbp=fb.1.1775373039067.47535755154987152&ler=other&cdl=API_unavailable&pmd[locale]=en&pmd[description]=Build%20and%20deploy%20software%20collaboratively%20with%20the%20power%20of%20AI%20without%20spending%20a%20second%20on%20setup.&pmd[keywords]=replit%2Cai%2Csoftware%2Cbuild%2Ccollaborate%2CIDE%2Cplatform%2Ccode%2Cdeploy%2Cprototype%2Conline%2Cagent&plt=3683&it=1775376380876&coo=false&es=automatic&tm=3&expv2[0]=pl1&expv2[1]=el2&expv2[2]=bc1&expv2[3]=ra2&expv2[4]=rp2&expv2[5]=im0&expv2[6]=hf0&rqm=GET:1  Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+www.facebook.com/tr/?id=1153929076518158&ev=SubscribedButtonClick&dl=https%3A%2F%2Freplit.com%2F%40davidaycart%2FCode-Translator-Linux&rl=https%3A%2F%2Fcheckout.stripe.com%2F&if=false&ts=1775388365373&cd[buttonFeatures]=%7B%22classList%22%3A%22Button-module__nDccya__button%20Interactive2-module__BR3hWq__shades%20Interactive2-module__BR3hWq__root%20Interactive2-module__BR3hWq__transition%20Interactive2-module__BR3hWq__disabled%20_sdz_text%20_sdz_surface-2%20_sdz_switch-theme%20_sdz_theme-primary%20_sdz_surface-bg%20_sdz_custom-hover%3Ashades-up%20_sdz_custom-pressed%3Ashades-up-2%20Interactive2-module__BR3hWq__borderRadius%20Interactive2-module__BR3hWq__focus%22%2C%22destination%22%3A%22%22%2C%22id%22%3A%22react-aria4555914953-%3Ar9a%3A%22%2C%22imageUrl%22%3A%22%22%2C%22innerText%22%3A%22Continue%22%2C%22numChildButtons%22%3A0%2C%22tag%22%3A%22button%22%2C%22type%22%3A%22submit%22%2C%22name%22%3A%22%22%2C%22value%22%3A%22%22%7D&cd[buttonText]=Continue&cd[formFeatures]=%5B%5D&cd[pageFeatures]=%7B%22title%22%3A%22Code%20Translator%20Linux%20-%20Replit%22%7D&sw=1920&sh=1200&v=2.9.281&r=stable&ec=5&o=4126&fbp=fb.1.1775373039067.47535755154987152&ler=other&cdl=API_unavailable&pmd[locale]=en&pmd[description]=Build%20and%20deploy%20software%20collaboratively%20with%20the%20power%20of%20AI%20without%20spending%20a%20second%20on%20setup.&pmd[keywords]=replit%2Cai%2Csoftware%2Cbuild%2Ccollaborate%2CIDE%2Cplatform%2Ccode%2Cdeploy%2Cprototype%2Conline%2Cagent&plt=3683&it=1775376380876&coo=false&es=automatic&tm=3&expv2[0]=pl1&expv2[1]=el3&expv2[2]=bc1&expv2[3]=ra2&expv2[4]=rp2&expv2[5]=im0&expv2[6]=hf0&rqm=GET:1  Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+www.facebook.com/tr/?id=1153929076518158&ev=SubscribedButtonClick&dl=https%3A%2F%2Freplit.com%2F%40davidaycart%2FCode-Translator-Linux&rl=https%3A%2F%2Fcheckout.stripe.com%2F&if=false&ts=1775389034874&cd[buttonFeatures]=%7B%22classList%22%3A%22%20useView-module__vOh_Ha__view%20ScrollToLatestButton-module__BdAHPW__buttonContent%20Text-module__KIh4Sq__text%20Text-module__KIh4Sq__multiline%20_sdz_text%22%2C%22destination%22%3A%22%22%2C%22id%22%3A%22%22%2C%22imageUrl%22%3A%22%22%2C%22innerText%22%3A%22Scroll%20to%20latest%22%2C%22numChildButtons%22%3A0%2C%22tag%22%3A%22span%22%2C%22type%22%3Anull%7D&cd[buttonText]=Scroll%20to%20latest&cd[formFeatures]=%5B%5D&cd[pageFeatures]=%7B%22title%22%3A%22Code%20Translator%20Linux%20-%20Replit%22%7D&sw=1920&sh=1200&v=2.9.281&r=stable&ec=6&o=4126&fbp=fb.1.1775373039067.47535755154987152&ler=other&cdl=API_unavailable&pmd[locale]=en&pmd[description]=Build%20and%20deploy%20software%20collaboratively%20with%20the%20power%20of%20AI%20without%20spending%20a%20second%20on%20setup.&pmd[keywords]=replit%2Cai%2Csoftware%2Cbuild%2Ccollaborate%2CIDE%2Cplatform%2Ccode%2Cdeploy%2Cprototype%2Conline%2Cagent&plt=3683&it=1775376380876&coo=false&es=automatic&tm=3&expv2[0]=pl1&expv2[1]=el3&expv2[2]=bc1&expv2[3]=ra2&expv2[4]=rp2&expv2[5]=im0&expv2[6]=hf0&rqm=GET:1  Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+/data/repls/20f5b981-52d4-47e2-8164-579b03149638/get_connection_metadata:1  Failed to load resource: net::ERR_INTERNET_DISCONNECTED
+lockdown-install.js:1 SES Removing unpermitted intrinsics
+lockdown-install.js:1 SES Removing unpermitted intrinsics
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'ambient-light-sensor'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'battery'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'execution-while-not-rendered'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'execution-while-out-of-viewport'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'layout-animations'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'legacy-image-formats'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'navigation-override'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'oversized-images'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'publickey-credentials'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'speaker-selection'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'unoptimized-images'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'unsized-media'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'web-share'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Allow attribute will take precedence over 'allowfullscreen'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Allow attribute will take precedence over 'allowpaymentrequest'.
+lockdown-install.js:1 SES Removing unpermitted intrinsics
+lockdown-install.js:1 SES Removing unpermitted intrinsics
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'ambient-light-sensor'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'battery'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'execution-while-not-rendered'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'execution-while-out-of-viewport'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'layout-animations'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'legacy-image-formats'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'navigation-override'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'oversized-images'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'publickey-credentials'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'speaker-selection'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'unoptimized-images'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'unsized-media'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Unrecognized feature: 'web-share'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Allow attribute will take precedence over 'allowfullscreen'.
+workspace_iframe.html?initialPath=%2F&id=artifacts%2Feqso-client:32 Allow attribute will take precedence over 'allowpaymentrequest'.
+lockdown-install.js:1 SES Removing unpermitted intrinsics
+useAudio.ts:134 [Deprecation] The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)
+(anonymous) @ useAudio.ts:134
+await in (anonymous)
+(anonymous) @ home.tsx:48
+executeDispatch @ react-dom_client.js?v=9cd7f95c:11736
+runWithFiberInDEV @ react-dom_client.js?v=9cd7f95c:1485
+processDispatchQueue @ react-dom_client.js?v=9cd7f95c:11772
+(anonymous) @ react-dom_client.js?v=9cd7f95c:12182
+batchedUpdates$1 @ react-dom_client.js?v=9cd7f95c:2628
+dispatchEventForPluginEventSystem @ react-dom_client.js?v=9cd7f95c:11877
+dispatchEvent @ react-dom_client.js?v=9cd7f95c:14792
+dispatchDiscreteEvent @ react-dom_client.js?v=9cd7f95c:14773
+<button>
+exports.jsxDEV @ react_jsx-dev-runtime.js?v=9cd7f95c:250
+RoomPanel @ RoomPanel.tsx:168
+react-stack-bottom-frame @ react-dom_client.js?v=9cd7f95c:17424
+renderWithHooks @ react-dom_client.js?v=9cd7f95c:4206
+updateFunctionComponent @ react-dom_client.js?v=9cd7f95c:6619
+beginWork @ react-dom_client.js?v=9cd7f95c:7654
+runWithFiberInDEV @ react-dom_client.js?v=9cd7f95c:1485
+performUnitOfWork @ react-dom_client.js?v=9cd7f95c:10868
+workLoopSync @ react-dom_client.js?v=9cd7f95c:10728
+renderRootSync @ react-dom_client.js?v=9cd7f95c:10711
+performWorkOnRoot @ react-dom_client.js?v=9cd7f95c:10330
+performWorkOnRootViaSchedulerTask @ react-dom_client.js?v=9cd7f95c:11623
+performWorkUntilDeadline @ react-dom_client.js?v=9cd7f95c:36
+<RoomPanel>
+exports.jsxDEV @ react_jsx-dev-runtime.js?v=9cd7f95c:250
+HomePage @ home.tsx:144
+react-stack-bottom-frame @ react-dom_client.js?v=9cd7f95c:17424
+renderWithHooks @ react-dom_client.js?v=9cd7f95c:4206
+updateFunctionComponent @ react-dom_client.js?v=9cd7f95c:6619
+beginWork @ react-dom_client.js?v=9cd7f95c:7654
+runWithFiberInDEV @ react-dom_client.js?v=9cd7f95c:1485
+performUnitOfWork @ react-dom_client.js?v=9cd7f95c:10868
+workLoopSync @ react-dom_client.js?v=9cd7f95c:10728
+renderRootSync @ react-dom_client.js?v=9cd7f95c:10711
+performWorkOnRoot @ react-dom_client.js?v=9cd7f95c:10330
+performWorkOnRootViaSchedulerTask @ react-dom_client.js?v=9cd7f95c:11623
+performWorkUntilDeadline @ react-dom_client.js?v=9cd7f95c:36
+<HomePage>
+exports.createElement @ chunk-KC53NVYV.js?v=9cd7f95c:773
+h_route @ wouter.js?v=9cd7f95c:277
+Route @ wouter.js?v=9cd7f95c:309
+react-stack-bottom-frame @ react-dom_client.js?v=9cd7f95c:17424
+renderWithHooks @ react-dom_client.js?v=9cd7f95c:4206
+updateFunctionComponent @ react-dom_client.js?v=9cd7f95c:6619
+beginWork @ react-dom_client.js?v=9cd7f95c:7654
+runWithFiberInDEV @ react-dom_client.js?v=9cd7f95c:1485
+performUnitOfWork @ react-dom_client.js?v=9cd7f95c:10868
+workLoopSync @ react-dom_client.js?v=9cd7f95c:10728
+renderRootSync @ react-dom_client.js?v=9cd7f95c:10711
+performWorkOnRoot @ react-dom_client.js?v=9cd7f95c:10330
+performWorkOnRootViaSchedulerTask @ react-dom_client.js?v=9cd7f95c:11623
+performWorkUntilDeadline @ react-dom_client.js?v=9cd7f95c:36
+<Route>
+exports.jsxDEV @ react_jsx-dev-runtime.js?v=9cd7f95c:250
+Router @ App.tsx:13
+react-stack-bottom-frame @ react-dom_client.js?v=9cd7f95c:17424
+renderWithHooks @ react-dom_client.js?v=9cd7f95c:4206
+updateFunctionComponent @ react-dom_client.js?v=9cd7f95c:6619
+beginWork @ react-dom_client.js?v=9cd7f95c:7654
+runWithFiberInDEV @ react-dom_client.js?v=9cd7f95c:1485
+performUnitOfWork @ react-dom_client.js?v=9cd7f95c:10868
+workLoopSync @ react-dom_client.js?v=9cd7f95c:10728
+renderRootSync @ react-dom_client.js?v=9cd7f95c:10711
+performWorkOnRoot @ react-dom_client.js?v=9cd7f95c:10330
+performWorkOnRootViaSchedulerTask @ react-dom_client.js?v=9cd7f95c:11623
+performWorkUntilDeadline @ react-dom_client.js?v=9cd7f95c:36
+<Router>
+exports.jsxDEV @ react_jsx-dev-runtime.js?v=9cd7f95c:250
+App @ App.tsx:24
+react-stack-bottom-frame @ react-dom_client.js?v=9cd7f95c:17424
+renderWithHooks @ react-dom_client.js?v=9cd7f95c:4206
+updateFunctionComponent @ react-dom_client.js?v=9cd7f95c:6619
+beginWork @ react-dom_client.js?v=9cd7f95c:7654
+runWithFiberInDEV @ react-dom_client.js?v=9cd7f95c:1485
+performUnitOfWork @ react-dom_client.js?v=9cd7f95c:10868
+workLoopSync @ react-dom_client.js?v=9cd7f95c:10728
+renderRootSync @ react-dom_client.js?v=9cd7f95c:10711
+performWorkOnRoot @ react-dom_client.js?v=9cd7f95c:10330
+performWorkOnRootViaSchedulerTask @ react-dom_client.js?v=9cd7f95c:11623
+performWorkUntilDeadline @ react-dom_client.js?v=9cd7f95c:36
+<App>
+exports.jsxDEV @ react_jsx-dev-runtime.js?v=9cd7f95c:250
+(anonymous) @ main.tsx:5
+useAudio.ts:134 [Deprecation] The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)
+(anonymous) @ useAudio.ts:134
+await in (anonymous)
+(anonymous) @ home.tsx:48
+executeDispatch @ react-dom_client.js?v=9cd7f95c:11736
+runWithFiberInDEV @ react-dom_client.js?v=9cd7f95c:1485
+processDispatchQueue @ react-dom_client.js?v=9cd7f95c:11772
+(anonymous) @ react-dom_client.js?v=9cd7f95c:12182
+batchedUpdates$1 @ react-dom_client.js?v=9cd7f95c:2628
+dispatchEventForPluginEventSystem @ react-dom_client.js?v=9cd7f95c:11877
+dispatchEvent @ react-dom_client.js?v=9cd7f95c:14792
+dispatchDiscreteEvent @ react-dom_client.js?v=9cd7f95c:14773
+useAudio.ts:134 [Deprecation] The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)
+(anonymous) @ useAudio.ts:134
+await in (anonymous)
+(anonymous) @ home.tsx:48
+executeDispatch @ react-dom_client.js?v=9cd7f95c:11736
+runWithFiberInDEV @ react-dom_client.js?v=9cd7f95c:1485
+processDispatchQueue @ react-dom_client.js?v=9cd7f95c:11772
+(anonymous) @ react-dom_client.js?v=9cd7f95c:12182
+batchedUpdates$1 @ react-dom_client.js?v=9cd7f95c:2628
+dispatchEventForPluginEventSystem @ react-dom_client.js?v=9cd7f95c:11877
+dispatchEvent @ react-dom_client.js?v=9cd7f95c:14792
+dispatchDiscreteEvent @ react-dom_client.js?v=9cd7f95c:14773
+useAudio.ts:134 [Deprecation] The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)
+(anonymous) @ useAudio.ts:134
+await in (anonymous)
+(anonymous) @ home.tsx:48
+executeDispatch @ react-dom_client.js?v=9cd7f95c:11736
+runWithFiberInDEV @ react-dom_client.js?v=9cd7f95c:1485
+processDispatchQueue @ react-dom_client.js?v=9cd7f95c:11772
+(anonymous) @ react-dom_client.js?v=9cd7f95c:12182
+batchedUpdates$1 @ react-dom_client.js?v=9cd7f95c:2628
+dispatchEventForPluginEventSystem @ react-dom_client.js?v=9cd7f95c:11877
+dispatchEvent @ react-dom_client.js?v=9cd7f95c:14792
+dispatchDiscreteEvent @ react-dom_client.js?v=9cd7f95c:14773
