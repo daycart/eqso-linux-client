@@ -14,7 +14,8 @@ export const EQSO_COMMANDS = {
 
 export const SERVER_NAME = "_SERVER_";
 export const ROOM_ALL = "_ALL_";
-export const AUDIO_PAYLOAD_SIZE = 197;
+// eQSO audio: 8-bit unsigned linear PCM at 8 kHz, 20 ms per packet = 160 bytes
+export const AUDIO_PAYLOAD_SIZE = 160;
 
 export const HANDSHAKE_CLIENT = Buffer.from([0x0a, 0x82, 0x00, 0x00, 0x00]);
 export const HANDSHAKE_SERVER = Buffer.from([0x0a, 0xfa, 0x00, 0x00, 0x00]);

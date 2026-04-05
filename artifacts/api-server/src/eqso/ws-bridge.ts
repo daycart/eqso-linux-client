@@ -242,6 +242,7 @@ function handleRemoteMode(
     onMessage: (msg, rawBin) => {
       if (rawBin && rawBin.length > 0 && rawBin[0] === 0x01) {
         if (pttGranted) {
+          logger.debug({ bytes: rawBin.length - 1 }, "Remote proxy: forwarding audio to server");
           proxy.sendAudio(rawBin.slice(1));
         }
         return;

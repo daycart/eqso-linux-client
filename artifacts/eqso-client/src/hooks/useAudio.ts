@@ -9,6 +9,8 @@ export interface UseAudioReturn {
   inputLevel: number;
 }
 
+const AUDIO_CHUNK_BYTES = 160;
+
 export function useAudio(): UseAudioReturn {
   const ctxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -16,6 +18,7 @@ export function useAudio(): UseAudioReturn {
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const levelTimerRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
+  const accumRef = useRef<Uint8Array>(new Uint8Array(0));
 
   const [isRecording, setIsRecording] = useState(false);
   const [isMicAllowed, setIsMicAllowed] = useState<boolean | null>(null);
@@ -39,6 +42,7 @@ export function useAudio(): UseAudioReturn {
       });
       setIsMicAllowed(true);
       streamRef.current = stream;
+      accumRef.current = new Uint8Array(0);
 
       const ctx = getOrCreateCtx();
       const source = ctx.createMediaStreamSource(stream);
@@ -55,12 +59,24 @@ export function useAudio(): UseAudioReturn {
 
       processor.onaudioprocess = (ev) => {
         const input = ev.inputBuffer.getChannelData(0);
-        const pcm16 = new Int16Array(input.length);
+
+        // Convert Float32 → Uint8 (unsigned 8-bit linear PCM, range 0–255)
+        const pcm8 = new Uint8Array(input.length);
         for (let i = 0; i < input.length; i++) {
           const s = Math.max(-1, Math.min(1, input[i]));
-          pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+          pcm8[i] = Math.round((s + 1) * 127.5);
         }
-        onChunk(pcm16.buffer);
+
+        // Accumulate and emit 160-byte chunks
+        const merged = new Uint8Array(accumRef.current.length + pcm8.length);
+        merged.set(accumRef.current);
+        merged.set(pcm8, accumRef.current.length);
+        accumRef.current = merged;
+
+        while (accumRef.current.length >= AUDIO_CHUNK_BYTES) {
+          onChunk(accumRef.current.slice(0, AUDIO_CHUNK_BYTES).buffer);
+          accumRef.current = accumRef.current.slice(AUDIO_CHUNK_BYTES);
+        }
       };
 
       source.connect(processor);
@@ -97,6 +113,7 @@ export function useAudio(): UseAudioReturn {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
 
+    accumRef.current = new Uint8Array(0);
     setIsRecording(false);
     setInputLevel(0);
   }, []);
@@ -104,10 +121,12 @@ export function useAudio(): UseAudioReturn {
   const playAudio = useCallback((data: ArrayBuffer) => {
     try {
       const ctx = getOrCreateCtx();
-      const pcm16 = new Int16Array(data);
-      const float32 = new Float32Array(pcm16.length);
-      for (let i = 0; i < pcm16.length; i++) {
-        float32[i] = pcm16[i] / (pcm16[i] < 0 ? 0x8000 : 0x7fff);
+      const pcm8 = new Uint8Array(data);
+
+      // Decode unsigned 8-bit PCM → Float32
+      const float32 = new Float32Array(pcm8.length);
+      for (let i = 0; i < pcm8.length; i++) {
+        float32[i] = (pcm8[i] / 127.5) - 1.0;
       }
 
       const buffer = ctx.createBuffer(1, float32.length, 8000);
