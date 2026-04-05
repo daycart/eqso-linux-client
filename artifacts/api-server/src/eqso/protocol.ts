@@ -14,8 +14,10 @@ export const EQSO_COMMANDS = {
 
 export const SERVER_NAME = "_SERVER_";
 export const ROOM_ALL = "_ALL_";
-// eQSO audio: 8-bit unsigned linear PCM at 8 kHz, 20 ms per packet = 160 bytes
-export const AUDIO_PAYLOAD_SIZE = 160;
+// eQSO audio: GSM 06.10 full-rate codec (libgsm), 6 frames × 33 bytes = 198 bytes
+// Each frame encodes 20 ms at 8 kHz → 120 ms per packet (~8.3 packets/s)
+// GSM magic nibble 0xd appears at byte offsets 0, 33, 66, 99, 132, 165 of every packet
+export const AUDIO_PAYLOAD_SIZE = 198;
 
 export const HANDSHAKE_CLIENT = Buffer.from([0x0a, 0x82, 0x00, 0x00, 0x00]);
 export const HANDSHAKE_SERVER = Buffer.from([0x0a, 0xfa, 0x00, 0x00, 0x00]);

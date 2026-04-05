@@ -35,7 +35,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 ## eQSO Protocol
 
 The eQSO server implements the binary protocol reverse-engineered from OSQe:
-- `0x0a` handshake, `0x1a` join room, `0x01` + 197 bytes audio, `0x0d` PTT release
+- `0x0a` handshake, `0x1a` join room, `0x01` + 198 bytes audio, `0x0d` PTT release
 - `0x16` user list updates, `0x14` room list, `0x0c` keepalive
 - TCP Windows clients and WebSocket Linux clients share the same room/audio bus
 
