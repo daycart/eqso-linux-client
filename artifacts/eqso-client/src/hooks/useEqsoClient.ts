@@ -30,9 +30,9 @@ export const KNOWN_SERVERS: EqsoServer[] = [
     label: "ASORAPA — Radio Club Iria Flavia",
     description: "Enlace CB27 ASORAPA · Galicia",
     mode: "remote",
-    host: "asorapa.eqso.net",
-    port: 2171,
-    defaultRooms: ["ASORAPA", "CB27ES"],
+    host: "193.152.83.229",
+    port: 8008,
+    defaultRooms: ["CB", "ASORAPA"],
   },
   {
     id: "eqso-main",
