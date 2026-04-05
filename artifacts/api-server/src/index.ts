@@ -30,5 +30,5 @@ httpServer.listen(port, (err?: Error) => {
   logger.info({ port }, "HTTP + WebSocket server listening");
 });
 
-const EQSO_TCP_PORT = 2171;
+const EQSO_TCP_PORT = Number(process.env.EQSO_TCP_PORT ?? 2171);
 startTcpServer(EQSO_TCP_PORT);
