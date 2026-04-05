@@ -39,6 +39,18 @@ The eQSO server implements the binary protocol reverse-engineered from OSQe:
 - `0x16` user list updates, `0x14` room list, `0x0c` keepalive
 - TCP Windows clients and WebSocket Linux clients share the same room/audio bus
 
+## GSM 06.10 Codec
+
+Audio uses GSM 06.10 (libgsm) codec: 198 bytes / 120ms / 8 kHz mono.
+
+**Implementation**: `artifacts/api-server/src/eqso/ffmpeg-gsm.ts`
+- `FfmpegGsmDecoder`: streaming ffmpeg process (GSM → PCM). Pre-started at connection, ~500ms startup, <10ms per packet.
+- `FfmpegGsmEncoder`: streaming ffmpeg process (PCM → GSM). Same timing.
+- The old TypeScript hand-rolled implementation (`gsm610.ts`) was 55x too quiet and had 0 dB SNR encoder. Replaced by ffmpeg/libgsm via piped child processes.
+- ffmpeg command decode: `ffmpeg -probesize 32 -f gsm -ar 8000 -i pipe:0 -f s16le -ar 8000 pipe:1`
+- ffmpeg command encode: `ffmpeg -probesize 32 -f s16le -ar 8000 -ac 1 -i pipe:0 -f gsm -ar 8000 pipe:1`
+- Round-trip SNR: 20.1 dB. Decoder peak: 3568/32768 (~-19 dBFS). Browser gain node: 3x → ~-9 dBFS comfortable listening.
+
 ## Key Commands
 
 - `pnpm run typecheck` — full typecheck across all packages

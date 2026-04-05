@@ -15,7 +15,13 @@ import {
   AUDIO_PAYLOAD_SIZE,
 } from "./protocol";
 import { EqsoProxy, ProxyEvent } from "./eqso-proxy";
-import { gsmEncodePacket, gsmDecodePacket, GSM_FRAME_SAMPLES, FRAMES_PER_PACKET } from "./gsm610";
+import {
+  FfmpegGsmDecoder,
+  FfmpegGsmEncoder,
+  GSM_FRAME_SAMPLES,
+  FRAMES_PER_PACKET,
+  GSM_PACKET_BYTES,
+} from "./ffmpeg-gsm";
 
 // Binary opcodes for browser ↔ server WebSocket protocol
 const WS_AUDIO_LOCAL  = 0x01; // local relay: Uint8 unsigned PCM
@@ -201,6 +207,35 @@ function handleRemoteMode(
   // PCM accumulation buffer for TX: browser sends Int16 PCM chunks
   let pcmAccum = new Int16Array(0);
 
+  // ── FFmpeg codec instances (pre-warmed at connection time) ──────────────────
+  const decoder = new FfmpegGsmDecoder();
+  const encoder = new FfmpegGsmEncoder();
+  decoder.start();
+  encoder.start();
+
+  // When decoder produces a decoded PCM packet, send it to browser
+  decoder.on("pcm", (pcm: Int16Array) => {
+    let peak = 0;
+    const float32 = new Float32Array(pcm.length);
+    for (let i = 0; i < pcm.length; i++) {
+      const a = Math.abs(pcm[i]);
+      if (a > peak) peak = a;
+      float32[i] = pcm[i] / 32768;
+    }
+    const header = Buffer.alloc(1);
+    header[0] = WS_AUDIO_REMOTE;
+    const payload = Buffer.from(float32.buffer);
+    sendBin(ws, Buffer.concat([header, payload]));
+    logger.info({ samples: pcm.length, peak }, "Remote RX: sent Float32 to browser");
+  });
+
+  // When encoder produces a GSM packet, forward it to the eQSO server
+  encoder.on("gsm", (gsm: Buffer) => {
+    if (!pttGranted) return; // discard if PTT released mid-frame
+    proxy.sendAudio(gsm);
+    logger.info({ bytes: gsm.length }, "Remote TX: sent GSM packet");
+  });
+
   proxy.on("event", (ev: ProxyEvent) => {
     switch (ev.type) {
       case "connected":
@@ -242,29 +277,13 @@ function handleRemoteMode(
         // Incoming GSM packet from remote eQSO server: [0x01][198 bytes GSM]
         const pkt = ev.data as Buffer;
         if (pkt.length < 1 + AUDIO_PAYLOAD_SIZE) break;
-        try {
-          const gsmBytes = new Uint8Array(pkt.buffer, pkt.byteOffset + 1, AUDIO_PAYLOAD_SIZE);
-          const pcm = gsmDecodePacket(gsmBytes); // Int16Array, 960 samples
-          // Compute peak amplitude for diagnostics
-          let peak = 0;
-          for (let i = 0; i < pcm.length; i++) {
-            const a = Math.abs(pcm[i]);
-            if (a > peak) peak = a;
-          }
-          // Convert Int16 → Float32 for browser playback
-          const float32 = new Float32Array(pcm.length);
-          for (let i = 0; i < pcm.length; i++) {
-            float32[i] = pcm[i] / 32768;
-          }
-          // Send [0x11][Float32 bytes] to browser
-          const header = Buffer.alloc(1);
-          header[0] = WS_AUDIO_REMOTE;
-          const payload = Buffer.from(float32.buffer);
-          sendBin(ws, Buffer.concat([header, payload]));
-          logger.info({ samples: pcm.length, peak }, "Remote RX: sent Float32 to browser");
-        } catch (err) {
-          logger.warn({ err }, "GSM decode error");
-        }
+        // Feed 198-byte GSM payload into the streaming decoder
+        const gsmBuf = Buffer.from(
+          pkt.buffer,
+          pkt.byteOffset + 1,
+          Math.min(AUDIO_PAYLOAD_SIZE, GSM_PACKET_BYTES)
+        );
+        decoder.decode(gsmBuf);
         break;
       }
       case "keepalive":
@@ -297,17 +316,11 @@ function handleRemoteMode(
         merged.set(newSamples, pcmAccum.length);
         pcmAccum = merged;
 
-        // Emit complete GSM packets (960 samples each)
+        // Feed complete 960-sample chunks to the encoder
         while (pcmAccum.length >= PCM_CHUNK_SAMPLES) {
           const chunk = pcmAccum.slice(0, PCM_CHUNK_SAMPLES);
           pcmAccum = pcmAccum.slice(PCM_CHUNK_SAMPLES);
-          try {
-            const gsm = gsmEncodePacket(chunk);
-            proxy.sendAudio(Buffer.from(gsm));
-            logger.info({ bytes: gsm.length }, "Remote TX: sent GSM packet");
-          } catch (err) {
-            logger.warn({ err }, "GSM encode error");
-          }
+          encoder.encode(chunk);
         }
         return;
       }
@@ -358,6 +371,8 @@ function handleRemoteMode(
       }
       pttGranted = false;
       pcmAccum = new Int16Array(0);
+      decoder.stop();
+      encoder.stop();
       proxy.disconnect();
     },
   };

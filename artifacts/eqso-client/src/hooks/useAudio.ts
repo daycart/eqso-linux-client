@@ -68,9 +68,10 @@ export function useAudio(): UseAudioReturn {
     if (!ctxRef.current) {
       ctxRef.current = new AudioContext();
       const gain = ctxRef.current.createGain();
-      // Amplify decoded GSM: it arrives at a low level (~-50 dBFS).
-      // 8x linear gain ≈ +18 dB — makes quiet speech audible.
-      gain.gain.value = 8;
+      // GSM 06.10 decoded via libgsm/ffmpeg: typical speech peaks at ~3500/32768
+      // (~-19 dBFS). 3x gain brings typical speech to ~-9 dBFS — comfortable
+      // listening level with headroom for loud stations.
+      gain.gain.value = 3;
       gain.connect(ctxRef.current.destination);
       gainNodeRef.current = gain;
       nextPlayTimeRef.current = 0;
