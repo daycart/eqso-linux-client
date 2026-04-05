@@ -495,50 +495,76 @@ function unpackBits(frame: Uint8Array): {
   return { LARc, segs };
 }
 
+// RPE inverse quantization factor table (libgsm gsm_FAC, Q15)
+// Maps 3-bit RPE sample index [0..7] → quantization midpoints
+const RPE_FAC = new Int16Array([-28336, -19170, -9721, -3112, 3112, 9721, 19170, 28336]);
+
 class GsmDecoder {
-  private dpState = new Int16Array(120);
-  private synthState = new Int16Array(8);
+  // LTP history: 120 samples, oldest at index 0, newest at index 119.
+  // After each 40-sample segment the buffer shifts left by 40 and the
+  // new excitation is written to indices [80..119].
+  private dp = new Int16Array(120);
+  // Synthesis lattice state v[0..7].  v[0] holds the previous output sample.
+  private v  = new Int16Array(8);
 
   decodeFrame(frame: Uint8Array): Int16Array {
     const params = unpackBits(frame);
     if (!params) return new Int16Array(160);
 
     const { LARc, segs } = params;
-    const r = LARc_to_r(LARc);
+    const rp = LARc_to_r(LARc);          // reflection coefficients [0..7]
     const out = new Int16Array(160);
 
     for (let seg = 0; seg < 4; seg++) {
       const { nc, bc, mc, xmax, x } = segs[seg];
-      const xmaxD = xmaxDecode(xmax);
-      const gain = BCQ[bc] / 32768;
       const off = seg * 40;
 
-      // Reconstruct RPE excitation
-      const ep = new Int16Array(40);
+      // ── Step 1: RPE decode ───────────────────────────────────────────────
+      // Reconstruct excitation ep[0..39] from sub-grid samples.
+      // libgsm formula: ep[mc+3k] = GSM_MULT_R(xmaxD<<1, RPE_FAC[x[k]])
+      //                           = ((2·xmaxD·RPE_FAC[x[k]]) + 16384) >> 15
+      const xmaxD = xmaxDecode(xmax);
+      const ep = new Int16Array(40);       // zeros outside the sub-grid
       for (let k = 0; k < 13; k++) {
-        const xNorm = (x[k] - 4) / 3.5; // centered: [0..7] → [-1..+1]
-        ep[mc + 3 * k] = CLIP(Math.round(xNorm * xmaxD), -32768, 32767);
+        const val = ((2 * xmaxD * RPE_FAC[x[k]]) + 16384) >> 15;
+        ep[mc + 3 * k] = CLIP(val | 0, -32768, 32767);
       }
 
-      // Add LTP
+      // ── Step 2: LTP synthesis ────────────────────────────────────────────
+      // wt[k] = ep[k] + BCQ[bc] * dp[k − nc]
+      // The history dp[0..119] is oldest-first; the tap at lag nc for
+      // sample k is at index (120 − nc + k).
+      const wt = new Int16Array(40);
+      const bcGain = BCQ[bc];              // Q15
       for (let k = 0; k < 40; k++) {
-        const dpIdx = off + k - nc;
-        const dpVal = dpIdx >= 0 ? this.dpState[(off + k) % 120] : 0;
-        ep[k] = CLIP(ep[k] + Math.round(gain * dpVal), -32768, 32767);
-        this.dpState[(off + k) % 120] = ep[k];
+        const histIdx = 120 - nc + k;
+        const drp = (histIdx >= 0 && histIdx < 120) ? this.dp[histIdx] : 0;
+        const add = ((bcGain * drp) + 16384) >> 15;
+        wt[k] = CLIP(ep[k] + (add | 0), -32768, 32767);
       }
 
-      // Short-term synthesis (IIR)
+      // Update LTP history: shift left by 40, append new excitation
+      this.dp.copyWithin(0, 40);
+      this.dp.set(wt, 80);
+
+      // ── Step 3: Short-term synthesis (PARCOR lattice) ────────────────────
+      // libgsm (lpc.c):
+      //   for each sample:
+      //     sri = wt[k]
+      //     for i = 7 downto 0:
+      //       sri  -= GSM_MULT_R(rp[i], v[i])
+      //       v[i] += GSM_MULT_R(rp[i], sri)
+      //     v[0] = sri          ← override: v[0] tracks the raw output
+      //     out[k] = sri
       for (let k = 0; k < 40; k++) {
-        let s = ep[k];
-        for (let j = 7; j >= 1; j--) {
-          s = CLIP(s + Math.round((r[j] / 32768) * this.synthState[j - 1]), -32768, 32767);
+        let sri = wt[k];
+        for (let i = 7; i >= 0; i--) {
+          const sub = GSM_MULT_R(rp[i], this.v[i]);
+          sri = CLIP(sri - sub, -32768, 32767);
+          this.v[i] = CLIP(this.v[i] + GSM_MULT_R(rp[i], sri), -32768, 32767);
         }
-        s = CLIP(s + Math.round((r[0] / 32768) * 0), -32768, 32767);
-        // Shift synthesis state
-        for (let j = 7; j > 0; j--) this.synthState[j] = this.synthState[j - 1];
-        this.synthState[0] = s;
-        out[off + k] = s;
+        this.v[0] = sri;   // libgsm: *s++ = v[0] = sri  (overrides the loop update)
+        out[off + k] = sri;
       }
     }
 

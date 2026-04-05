@@ -62,13 +62,9 @@ class EqsoPacketParser {
         return pkt;
       }
 
-      // 0x08 PTT release 1 — [0x08][nameLen][name]
+      // 0x08 — single-byte opcode (discard), same as 0x09
       if (cmd === 0x08) {
-        if (this.acc.length < 2) return null;
-        const nameLen = this.acc[1];
-        const total = 2 + nameLen;
-        if (this.acc.length < total) return null;
-        this.acc = this.acc.slice(total);
+        this.acc = this.acc.slice(1);
         continue; // discard
       }
 
