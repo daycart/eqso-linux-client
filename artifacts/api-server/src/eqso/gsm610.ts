@@ -496,51 +496,76 @@ function unpackBits(frame: Uint8Array): {
 }
 
 // RPE inverse quantization factor table (libgsm gsm_FAC, Q15)
-// Maps 3-bit RPE sample index [0..7] → quantization midpoints
-const RPE_FAC = new Int16Array([-28336, -19170, -9721, -3112, 3112, 9721, 19170, 28336]);
+// Exact values from libgsm / ETSI GSM 06.10 reference implementation.
+const RPE_FAC = new Int16Array([-28521, -20972, -12124, -3835, 3835, 12124, 20972, 28521]);
+
+// Interpolated LARc per sub-frame, matching libgsm's Gsm_Short_Term_Synthesis_Filter
+// interpolation schedule (dec.c):
+//   sub 0: (3*prev + curr) >> 2
+//   sub 1: (prev  + curr)  >> 1
+//   sub 2: (prev  + 3*curr)>> 2
+//   sub 3: curr
+function interpolateLARc(prev: Int16Array, curr: Int16Array): Int16Array[] {
+  const out: Int16Array[] = [];
+  for (let sub = 0; sub < 4; sub++) {
+    const larInterp = new Int16Array(8);
+    for (let i = 0; i < 8; i++) {
+      let lar: number;
+      if (sub === 0)      lar = SASR(GSM_ADD(GSM_ADD(prev[i], prev[i]), GSM_ADD(prev[i], curr[i])), 2); // (3p+c)/4
+      else if (sub === 1) lar = SASR(GSM_ADD(prev[i], curr[i]), 1);
+      else if (sub === 2) lar = SASR(GSM_ADD(prev[i], GSM_ADD(curr[i], GSM_ADD(curr[i], curr[i]))), 2); // (p+3c)/4
+      else                lar = curr[i];
+      larInterp[i] = lar;
+    }
+    out.push(LARc_to_r(larInterp));
+  }
+  return out;
+}
 
 class GsmDecoder {
   // LTP history: 120 samples, oldest at index 0, newest at index 119.
-  // After each 40-sample segment the buffer shifts left by 40 and the
-  // new excitation is written to indices [80..119].
-  private dp = new Int16Array(120);
-  // Synthesis lattice state v[0..7].  v[0] holds the previous output sample.
-  private v  = new Int16Array(8);
+  private dp    = new Int16Array(120);
+  // Synthesis lattice state v[0..7].
+  private v     = new Int16Array(8);
+  // Previous frame LARc for interpolation.
+  private prevLARc = new Int16Array(8);
 
   decodeFrame(frame: Uint8Array): Int16Array {
     const params = unpackBits(frame);
     if (!params) return new Int16Array(160);
 
     const { LARc, segs } = params;
-    const rp = LARc_to_r(LARc);          // reflection coefficients [0..7]
+
+    // Interpolate LARc across 4 sub-frames (libgsm dec.c pattern)
+    const rpPerSeg = interpolateLARc(this.prevLARc, LARc);
+    this.prevLARc = new Int16Array(LARc);
+
     const out = new Int16Array(160);
 
     for (let seg = 0; seg < 4; seg++) {
       const { nc, bc, mc, xmax, x } = segs[seg];
       const off = seg * 40;
+      const rp  = rpPerSeg[seg];
 
       // ── Step 1: RPE decode ───────────────────────────────────────────────
-      // Reconstruct excitation ep[0..39] from sub-grid samples.
-      // libgsm formula: ep[mc+3k] = GSM_MULT_R(xmaxD<<1, RPE_FAC[x[k]])
-      //                           = ((2·xmaxD·RPE_FAC[x[k]]) + 16384) >> 15
+      // libgsm formula (rpe.c Apcm_inverse_quantization):
+      //   temp = GSM_MULT_R(xmaxcr, gsm_FAC[xmcr])  → Q14
+      //   xmr[k] = GSM_ADD(temp, temp)               → ×2 = Q13 audio
       const xmaxD = xmaxDecode(xmax);
-      const ep = new Int16Array(40);       // zeros outside the sub-grid
+      const ep = new Int16Array(40);
       for (let k = 0; k < 13; k++) {
-        const val = ((2 * xmaxD * RPE_FAC[x[k]]) + 16384) >> 15;
-        ep[mc + 3 * k] = CLIP(val | 0, -32768, 32767);
+        const temp = GSM_MULT_R(xmaxD, RPE_FAC[x[k]]);       // Q14
+        ep[mc + 3 * k] = CLIP(GSM_ADD(temp, temp), -32768, 32767); // ×2
       }
 
       // ── Step 2: LTP synthesis ────────────────────────────────────────────
-      // wt[k] = ep[k] + BCQ[bc] * dp[k − nc]
-      // The history dp[0..119] is oldest-first; the tap at lag nc for
-      // sample k is at index (120 − nc + k).
-      const wt = new Int16Array(40);
-      const bcGain = BCQ[bc];              // Q15
+      // wt[k] = ep[k] + BCQ[bc] * dp[120 − nc + k]
+      const wt     = new Int16Array(40);
+      const bcGain = BCQ[bc];
       for (let k = 0; k < 40; k++) {
         const histIdx = 120 - nc + k;
         const drp = (histIdx >= 0 && histIdx < 120) ? this.dp[histIdx] : 0;
-        const add = ((bcGain * drp) + 16384) >> 15;
-        wt[k] = CLIP(ep[k] + (add | 0), -32768, 32767);
+        wt[k] = CLIP(GSM_ADD(ep[k], GSM_MULT_R(bcGain, drp)), -32768, 32767);
       }
 
       // Update LTP history: shift left by 40, append new excitation
@@ -548,22 +573,16 @@ class GsmDecoder {
       this.dp.set(wt, 80);
 
       // ── Step 3: Short-term synthesis (PARCOR lattice) ────────────────────
-      // libgsm (lpc.c):
-      //   for each sample:
-      //     sri = wt[k]
-      //     for i = 7 downto 0:
-      //       sri  -= GSM_MULT_R(rp[i], v[i])
-      //       v[i] += GSM_MULT_R(rp[i], sri)
-      //     v[0] = sri          ← override: v[0] tracks the raw output
-      //     out[k] = sri
+      // Exact libgsm lpc.c pattern:
+      //   for i = 7 downto 0: sri -= MULT_R(rp[i], v[i]); v[i] += MULT_R(rp[i], sri)
+      //   *s++ = v[0] = sri   ← v[0] is overridden with sri (output sample)
       for (let k = 0; k < 40; k++) {
         let sri = wt[k];
         for (let i = 7; i >= 0; i--) {
-          const sub = GSM_MULT_R(rp[i], this.v[i]);
-          sri = CLIP(sri - sub, -32768, 32767);
+          sri = CLIP(sri - GSM_MULT_R(rp[i], this.v[i]), -32768, 32767);
           this.v[i] = CLIP(this.v[i] + GSM_MULT_R(rp[i], sri), -32768, 32767);
         }
-        this.v[0] = sri;   // libgsm: *s++ = v[0] = sri  (overrides the loop update)
+        this.v[0] = sri;
         out[off + k] = sri;
       }
     }

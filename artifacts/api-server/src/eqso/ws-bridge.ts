@@ -261,7 +261,7 @@ function handleRemoteMode(
           header[0] = WS_AUDIO_REMOTE;
           const payload = Buffer.from(float32.buffer);
           sendBin(ws, Buffer.concat([header, payload]));
-          logger.debug({ samples: pcm.length, peak }, "Remote RX: sent Float32 to browser");
+          logger.info({ samples: pcm.length, peak }, "Remote RX: sent Float32 to browser");
         } catch (err) {
           logger.warn({ err }, "GSM decode error");
         }
