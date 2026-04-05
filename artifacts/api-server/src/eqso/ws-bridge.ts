@@ -358,10 +358,11 @@ function handleRemoteMode(
         case "ptt_start":
           pttGranted = true;
           pcmAccum = new Int16Array(0); // reset accumulator
-          // Announce PTT to the eQSO server: [0x05][name bytes]
-          if (currentName) proxy.sendPttStartSignal(currentName);
+          // No separate PTT-announce packet in eQSO — the first [0x01][198 GSM] frame
+          // announces PTT implicitly. Just stop the silence heartbeat.
+          proxy.startTransmitting();
           sendJson(ws, { type: "ptt_granted" });
-          logger.info({ name: currentName, room: currentRoom }, "Remote TX: PTT start sent to eQSO server");
+          logger.info({ name: currentName, room: currentRoom }, "Remote TX: PTT start (first voice frame will open channel)");
           break;
         case "ptt_end":
           pttGranted = false;

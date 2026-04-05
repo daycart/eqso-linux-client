@@ -307,16 +307,14 @@ export class EqsoProxy extends EventEmitter {
   }
 
   /**
-   * Send PTT-start announcement to the eQSO server.
-   * Protocol: [0x05][name bytes] — no length prefix, just raw ASCII name.
-   * The server echoes a 0x16 PTT-started notification to all other clients.
+   * Signal PTT start to the eQSO server.
+   * In the eQSO protocol there is no separate PTT-announce opcode.
+   * The first [0x01][198 bytes GSM] voice frame itself announces PTT.
+   * We only need to stop the silence heartbeat so the channel is free.
    */
-  sendPttStartSignal(name: string): void {
-    const nb = Buffer.from(name.slice(0, 20), "ascii");
-    const pkt = Buffer.concat([Buffer.from([0x05]), nb]);
-    logger.info({ name, hex: pkt.toString("hex") }, "eQSO proxy: sending PTT start signal");
+  startTransmitting(): void {
     this.transmitting = true;
-    this.socketWrite(pkt);
+    logger.info("eQSO proxy: TX started — silence heartbeat paused");
   }
 
   sendPttEnd(): void {
