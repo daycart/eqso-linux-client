@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useEqsoClient } from "@/hooks/useEqsoClient";
+import { useEqsoClient, EqsoServer } from "@/hooks/useEqsoClient";
 import { useAudio } from "@/hooks/useAudio";
 import { ConnectPanel } from "@/components/ConnectPanel";
 import { RoomPanel } from "@/components/RoomPanel";
@@ -13,8 +13,8 @@ export default function HomePage() {
   const [pttActive, setPttActive] = useState(false);
   const pttChunkRef = useRef<(data: ArrayBuffer) => void>(() => {});
 
-  const handleConnect = () => {
-    eqso.connect();
+  const handleConnect = (server: EqsoServer, customHost?: string, customPort?: number) => {
+    eqso.connect(server, customHost, customPort);
   };
 
   const handleDisconnect = () => {
@@ -119,6 +119,7 @@ export default function HomePage() {
             callsign={callsign}
             selectedRoom={selectedRoom}
             statusMessage={statusMessage}
+            selectedServer={eqso.selectedServer}
             onCallsignChange={setCallsign}
             onRoomChange={setSelectedRoom}
             onStatusMessageChange={setStatusMessage}

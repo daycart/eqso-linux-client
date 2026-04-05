@@ -13,41 +13,257 @@ import {
   buildErrorMessage,
   buildServerInfo,
   AUDIO_PAYLOAD_SIZE,
-  KEEPALIVE_PACKET,
 } from "./protocol";
+import { EqsoProxy, ProxyEvent } from "./eqso-proxy";
 
-const SERVER_VERSION = "eQSO Linux Server v1.0 (WebSocket)";
+const SERVER_VERSION = "eQSO Linux Server v1.0";
 const KEEPALIVE_MS = 30_000;
 
 interface WsMessage {
-  type: "join" | "ptt_start" | "ptt_end" | "ping";
+  type:
+    | "select_server"
+    | "join"
+    | "ptt_start"
+    | "ptt_end"
+    | "ping";
+  mode?: "local" | "remote";
+  host?: string;
+  port?: number;
   name?: string;
   room?: string;
   message?: string;
   password?: string;
 }
 
-function safeWsSend(ws: WebSocket, data: Buffer | string): void {
+function sendJson(ws: WebSocket, obj: object): void {
   if (ws.readyState === WebSocket.OPEN) {
-    try {
-      ws.send(data);
-    } catch {
-    }
+    try { ws.send(JSON.stringify(obj)); } catch { /* ignore */ }
   }
 }
 
-function sendJson(ws: WebSocket, obj: object): void {
-  safeWsSend(ws, JSON.stringify(obj));
+function sendBin(ws: WebSocket, data: Buffer): void {
+  if (ws.readyState === WebSocket.OPEN) {
+    try { ws.send(data); } catch { /* ignore */ }
+  }
 }
 
-function sendRoomListWs(ws: WebSocket): void {
-  const rooms = roomManager.getRooms();
-  sendJson(ws, { type: "room_list", rooms });
+function handleLocalMode(
+  ws: WebSocket,
+  id: string,
+  keepaliveTimer: ReturnType<typeof setInterval>
+): {
+  onMessage: (msg: WsMessage, raw: Buffer | null) => void;
+  onClose: () => void;
+} {
+  const clientInfo = {
+    id,
+    name: `_WS_${id.slice(0, 6)}`,
+    room: "",
+    message: "",
+    send: (data: Buffer) => sendBin(ws, data),
+    close: () => ws.close(),
+  };
+  roomManager.addClient(clientInfo);
+
+  sendJson(ws, {
+    type: "room_list",
+    rooms: roomManager.getRooms(),
+  });
+  sendJson(ws, { type: "server_info", message: SERVER_VERSION + " (Local)" });
+
+  const pingTimer = setInterval(() => {
+    sendJson(ws, { type: "keepalive" });
+  }, KEEPALIVE_MS);
+
+  return {
+    onMessage: (msg, rawBin) => {
+      if (rawBin && rawBin.length > 0 && rawBin[0] === 0x01) {
+        const client = roomManager.getClient(id);
+        if (client?.room) {
+          roomManager.broadcastToRoom(client.room, rawBin, id);
+        }
+        return;
+      }
+
+      switch (msg.type) {
+        case "join": {
+          const name = (msg.name ?? "").trim().toUpperCase();
+          const room = (msg.room ?? "GENERAL").trim().toUpperCase();
+          const message = (msg.message ?? "").trim();
+
+          if (!name || name.length > 20) {
+            sendJson(ws, { type: "error", message: "Indicativo inválido (máx 20 chars)" });
+            return;
+          }
+          if (!room || room.length > 20) {
+            sendJson(ws, { type: "error", message: "Sala inválida (máx 20 chars)" });
+            return;
+          }
+          if (roomManager.isNameTaken(name, id)) {
+            sendJson(ws, { type: "error", message: `Indicativo "${name}" ya está en uso` });
+            return;
+          }
+
+          const ci = roomManager.getClient(id);
+          if (ci) { ci.name = name; ci.message = message; }
+
+          const oldRoom = ci?.room ?? "";
+          const oldMembers = oldRoom ? roomManager.getRoomMembers(oldRoom) : [];
+          roomManager.joinRoom(id, room);
+
+          if (oldRoom && oldRoom !== room) {
+            const leftPkt = buildUserLeft(name);
+            for (const m of oldMembers) { if (m.id !== id) m.send(leftPkt); }
+          }
+
+          const members = roomManager.getRoomMembers(room);
+          const memberData = members.filter((m) => m.id !== id).map((m) => ({ name: m.name, message: m.message }));
+          sendJson(ws, { type: "joined", room, name, members: memberData });
+
+          const joinedPkt = buildUserJoined(name, message);
+          for (const m of members) { if (m.id !== id) m.send(joinedPkt); }
+          logger.info({ id, name, room }, "WS local client joined room");
+          break;
+        }
+
+        case "ptt_start": {
+          const client = roomManager.getClient(id);
+          if (client?.room && client.name) {
+            const locked = roomManager.tryLockRoom(client.room, id);
+            if (locked) {
+              roomManager.broadcastToRoom(client.room, buildPttStarted(client.name), id);
+              sendJson(ws, { type: "ptt_granted" });
+            } else {
+              sendJson(ws, { type: "ptt_denied", reason: "Canal ocupado" });
+            }
+          }
+          break;
+        }
+
+        case "ptt_end": {
+          const client = roomManager.getClient(id);
+          if (client?.room && client.name) {
+            roomManager.broadcastToRoom(client.room, buildPttReleased(client.name), id);
+            roomManager.unlockRoom(client.room, id);
+            sendJson(ws, { type: "ptt_released" });
+          }
+          break;
+        }
+
+        case "ping":
+          sendJson(ws, { type: "pong" });
+          break;
+      }
+    },
+
+    onClose: () => {
+      clearInterval(pingTimer);
+      const client = roomManager.getClient(id);
+      if (client?.room && client.name) {
+        roomManager.broadcastToRoom(client.room, buildUserLeft(client.name), id);
+      }
+      roomManager.removeClient(id);
+    },
+  };
 }
 
-function sendStats(ws: WebSocket): void {
-  const stats = roomManager.getStats();
-  sendJson(ws, { type: "stats", ...stats });
+function handleRemoteMode(
+  ws: WebSocket,
+  id: string,
+  host: string,
+  port: number
+): {
+  onMessage: (msg: WsMessage, raw: Buffer | null) => void;
+  onClose: () => void;
+} {
+  const proxy = new EqsoProxy(host, port);
+  let pttGranted = false;
+
+  proxy.on("event", (ev: ProxyEvent) => {
+    switch (ev.type) {
+      case "connected":
+        sendJson(ws, { type: "server_info", message: `Conectado a ${host}:${port}` });
+        break;
+      case "disconnected":
+        sendJson(ws, { type: "disconnected", message: "Servidor desconectado" });
+        break;
+      case "error":
+        sendJson(ws, { type: "error", message: `Error de conexión: ${ev.data}` });
+        break;
+      case "room_list":
+        sendJson(ws, { type: "room_list", rooms: ev.data as string[] });
+        break;
+      case "members":
+        sendJson(ws, {
+          type: "joined",
+          room: "__current__",
+          name: "__pending__",
+          members: ev.data,
+        });
+        break;
+      case "user_joined":
+        sendJson(ws, { type: "user_joined", ...(ev.data as object) });
+        break;
+      case "user_left":
+        sendJson(ws, { type: "user_left", ...(ev.data as object) });
+        break;
+      case "ptt_started":
+        sendJson(ws, { type: "ptt_started", ...(ev.data as object) });
+        break;
+      case "ptt_released":
+        sendJson(ws, { type: "ptt_released_remote", ...(ev.data as object) });
+        break;
+      case "audio":
+        sendBin(ws, ev.data as Buffer);
+        break;
+      case "keepalive":
+        sendJson(ws, { type: "keepalive" });
+        break;
+    }
+  });
+
+  proxy.connect();
+
+  return {
+    onMessage: (msg, rawBin) => {
+      if (rawBin && rawBin.length > 0 && rawBin[0] === 0x01) {
+        if (pttGranted) {
+          proxy.sendAudio(rawBin.slice(1));
+        }
+        return;
+      }
+
+      switch (msg.type) {
+        case "join": {
+          const name = (msg.name ?? "").trim().toUpperCase();
+          const room = (msg.room ?? "GENERAL").trim().toUpperCase();
+          const message = (msg.message ?? "").trim();
+          const password = (msg.password ?? "").trim();
+          proxy.sendJoin(name, room, message, password);
+          sendJson(ws, { type: "joined", room, name, members: [] });
+          break;
+        }
+        case "ptt_start":
+          pttGranted = true;
+          proxy.sendPttStart();
+          sendJson(ws, { type: "ptt_granted" });
+          break;
+        case "ptt_end":
+          pttGranted = false;
+          proxy.sendPttEnd();
+          sendJson(ws, { type: "ptt_released" });
+          break;
+        case "ping":
+          sendJson(ws, { type: "pong" });
+          break;
+      }
+    },
+
+    onClose: () => {
+      pttGranted = false;
+      proxy.disconnect();
+    },
+  };
 }
 
 export function startWsBridge(httpServer: HttpServer): WebSocketServer {
@@ -55,153 +271,66 @@ export function startWsBridge(httpServer: HttpServer): WebSocketServer {
 
   wss.on("connection", (ws: WebSocket, _req: IncomingMessage) => {
     const id = randomUUID();
-    logger.info({ id }, "New WebSocket eQSO client");
+    logger.info({ id }, "New WS eQSO client");
 
-    const clientInfo = {
-      id,
-      name: `_WS_${id.slice(0, 6)}`,
-      room: "",
-      message: "",
-      send: (data: Buffer) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          try {
-            ws.send(data);
-          } catch {
-          }
-        }
-      },
-      close: () => ws.close(),
-    };
-
-    roomManager.addClient(clientInfo);
-
-    sendRoomListWs(ws);
-    sendJson(ws, { type: "server_info", message: SERVER_VERSION });
+    let handler: {
+      onMessage: (msg: WsMessage, raw: Buffer | null) => void;
+      onClose: () => void;
+    } | null = null;
 
     const keepaliveTimer = setInterval(() => {
       if (ws.readyState !== WebSocket.OPEN) {
         clearInterval(keepaliveTimer);
         return;
       }
-      sendJson(ws, { type: "keepalive" });
     }, KEEPALIVE_MS);
+
+    sendJson(ws, {
+      type: "room_list",
+      rooms: roomManager.getRooms(),
+    });
+    sendJson(ws, { type: "server_info", message: SERVER_VERSION });
 
     ws.on("message", (raw) => {
       try {
-        if (raw instanceof Buffer && raw.length > 1 && raw[0] === 0x01) {
-          const client = roomManager.getClient(id);
-          if (client?.room) {
-            const audioPkt = raw.length > AUDIO_PAYLOAD_SIZE + 1
-              ? raw.slice(0, AUDIO_PAYLOAD_SIZE + 1)
-              : raw;
-            roomManager.broadcastToRoom(client.room, audioPkt as Buffer, id);
-          }
+        const isBin = raw instanceof Buffer && raw.length > 0 && raw[0] === 0x01;
+
+        if (isBin) {
+          handler?.onMessage({} as WsMessage, raw as Buffer);
           return;
         }
 
         const msg: WsMessage = JSON.parse(raw.toString());
 
-        switch (msg.type) {
-          case "join": {
-            const name = (msg.name ?? "").trim().toUpperCase();
-            const room = (msg.room ?? "GENERAL").trim().toUpperCase();
-            const message = (msg.message ?? "").trim();
+        if (msg.type === "select_server") {
+          handler?.onClose();
+          handler = null;
 
-            if (!name || name.length > 20) {
-              sendJson(ws, { type: "error", message: "Invalid callsign (max 20 chars)" });
-              return;
-            }
-            if (!room || room.length > 20) {
-              sendJson(ws, { type: "error", message: "Invalid room name (max 20 chars)" });
-              return;
-            }
-            if (roomManager.isNameTaken(name, id)) {
-              sendJson(ws, { type: "error", message: `Callsign "${name}" already in use` });
-              return;
-            }
-
-            const ci = roomManager.getClient(id);
-            if (ci) {
-              ci.name = name;
-              ci.message = message;
-            }
-
-            const oldRoom = ci?.room ?? "";
-            const oldMembers = oldRoom ? roomManager.getRoomMembers(oldRoom) : [];
-
-            roomManager.joinRoom(id, room);
-
-            if (oldRoom && oldRoom !== room) {
-              const leftPkt = buildUserLeft(name);
-              for (const m of oldMembers) {
-                if (m.id !== id) m.send(leftPkt);
-              }
-            }
-
-            const members = roomManager.getRoomMembers(room);
-            const memberData = members
-              .filter((m) => m.id !== id)
-              .map((m) => ({ name: m.name, message: m.message }));
-
-            sendJson(ws, {
-              type: "joined",
-              room,
-              name,
-              members: memberData,
-            });
-
-            const joinedPkt = buildUserJoined(name, message);
-            for (const m of members) {
-              if (m.id !== id) m.send(joinedPkt);
-            }
-
-            logger.info({ id, name, room }, "WS client joined room");
-            break;
+          if (msg.mode === "remote" && msg.host) {
+            const port = msg.port ?? 2171;
+            logger.info({ id, host: msg.host, port }, "WS client selecting remote server");
+            handler = handleRemoteMode(ws, id, msg.host, port);
+          } else {
+            logger.info({ id }, "WS client selecting local server");
+            handler = handleLocalMode(ws, id, keepaliveTimer);
           }
-
-          case "ptt_start": {
-            const client = roomManager.getClient(id);
-            if (client?.room && client.name) {
-              const locked = roomManager.tryLockRoom(client.room, id);
-              if (locked) {
-                const ptt = buildPttStarted(client.name);
-                roomManager.broadcastToRoom(client.room, ptt, id);
-                sendJson(ws, { type: "ptt_granted" });
-              } else {
-                sendJson(ws, { type: "ptt_denied", reason: "Channel busy" });
-              }
-            }
-            break;
-          }
-
-          case "ptt_end": {
-            const client = roomManager.getClient(id);
-            if (client?.room && client.name) {
-              const rel = buildPttReleased(client.name);
-              roomManager.broadcastToRoom(client.room, rel, id);
-              roomManager.unlockRoom(client.room, id);
-              sendJson(ws, { type: "ptt_released" });
-            }
-            break;
-          }
-
-          case "ping":
-            sendJson(ws, { type: "pong" });
-            break;
+          return;
         }
+
+        if (!handler) {
+          handler = handleLocalMode(ws, id, keepaliveTimer);
+        }
+
+        handler.onMessage(msg, null);
       } catch (err) {
-        logger.warn({ err, id }, "WS message parse error");
+        logger.warn({ err, id }, "WS message error");
       }
     });
 
     ws.on("close", () => {
       clearInterval(keepaliveTimer);
-      const client = roomManager.getClient(id);
-      if (client?.room && client.name) {
-        const leftPkt = buildUserLeft(client.name);
-        roomManager.broadcastToRoom(client.room, leftPkt, id);
-      }
-      roomManager.removeClient(id);
+      handler?.onClose();
+      handler = null;
       logger.info({ id }, "WS client disconnected");
     });
 

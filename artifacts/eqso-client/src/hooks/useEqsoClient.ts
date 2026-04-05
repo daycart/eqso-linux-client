@@ -7,6 +7,53 @@ export interface RoomMember {
   message: string;
 }
 
+export interface EqsoServer {
+  id: string;
+  label: string;
+  description: string;
+  mode: "local" | "remote";
+  host?: string;
+  port?: number;
+  defaultRooms?: string[];
+}
+
+export const KNOWN_SERVERS: EqsoServer[] = [
+  {
+    id: "local",
+    label: "Servidor Local",
+    description: "Servidor eQSO propio (Linux)",
+    mode: "local",
+    defaultRooms: ["GENERAL", "CB27", "ASORAPA", "PRUEBA"],
+  },
+  {
+    id: "asorapa",
+    label: "ASORAPA — Radio Club Iria Flavia",
+    description: "Enlace CB27 ASORAPA · Galicia",
+    mode: "remote",
+    host: "asorapa.eqso.net",
+    port: 2171,
+    defaultRooms: ["ASORAPA", "CB27ES"],
+  },
+  {
+    id: "eqso-main",
+    label: "eQSO Principal (server.eqso.net)",
+    description: "Servidor oficial eQSO · Puerto 2171",
+    mode: "remote",
+    host: "server.eqso.net",
+    port: 2171,
+    defaultRooms: ["101ENGLISH", "SPAIN", "HISPANIC"],
+  },
+  {
+    id: "custom",
+    label: "Servidor personalizado...",
+    description: "Introduce dirección y puerto manual",
+    mode: "remote",
+    host: "",
+    port: 2171,
+    defaultRooms: [],
+  },
+];
+
 export interface EqsoState {
   status: ConnectionStatus;
   error: string | null;
@@ -17,10 +64,11 @@ export interface EqsoState {
   activeSpeaker: string | null;
   pttGranted: boolean;
   channelBusy: boolean;
+  selectedServer: EqsoServer;
 }
 
 export interface EqsoActions {
-  connect: () => void;
+  connect: (server: EqsoServer, customHost?: string, customPort?: number) => void;
   disconnect: () => void;
   join: (name: string, room: string, message?: string) => void;
   pttStart: () => void;
@@ -37,7 +85,7 @@ function getWsUrl(): string {
 
 export function useEqsoClient(): EqsoState & EqsoActions {
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingJoinRef = useRef<{ name: string; room: string } | null>(null);
 
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
   const [error, setError] = useState<string | null>(null);
@@ -48,58 +96,95 @@ export function useEqsoClient(): EqsoState & EqsoActions {
   const [activeSpeaker, setActiveSpeaker] = useState<string | null>(null);
   const [pttGranted, setPttGranted] = useState(false);
   const [channelBusy, setChannelBusy] = useState(false);
+  const [selectedServer, setSelectedServer] = useState<EqsoServer>(KNOWN_SERVERS[0]);
 
-  const handleMessage = useCallback((ev: MessageEvent) => {
-    try {
-      if (ev.data instanceof Blob || ev.data instanceof ArrayBuffer) {
-        return;
+  const handleTextMessage = useCallback((msg: Record<string, unknown>) => {
+    switch (msg.type) {
+      case "room_list":
+        setRooms((msg.rooms as string[]) ?? []);
+        break;
+
+      case "server_info":
+        break;
+
+      case "joined": {
+        const room = msg.room === "__current__" && pendingJoinRef.current
+          ? pendingJoinRef.current.room
+          : (msg.room as string) ?? null;
+        const name = msg.name === "__pending__" && pendingJoinRef.current
+          ? pendingJoinRef.current.name
+          : (msg.name as string) ?? null;
+        setCurrentRoom(room);
+        setCurrentName(name);
+        setMembers((msg.members as RoomMember[]) ?? []);
+        pendingJoinRef.current = null;
+        break;
       }
-      const msg = JSON.parse(ev.data as string);
-      switch (msg.type) {
-        case "room_list":
-          setRooms(msg.rooms ?? []);
-          break;
-        case "server_info":
-          break;
-        case "joined":
-          setCurrentRoom(msg.room ?? null);
-          setCurrentName(msg.name ?? null);
-          setMembers(msg.members ?? []);
-          break;
-        case "error":
-          setError(msg.message ?? "Unknown error");
-          break;
-        case "ptt_granted":
-          setPttGranted(true);
-          setChannelBusy(false);
-          break;
-        case "ptt_denied":
-          setPttGranted(false);
-          setChannelBusy(true);
-          setTimeout(() => setChannelBusy(false), 2000);
-          break;
-        case "ptt_released":
-          setPttGranted(false);
-          break;
-        case "keepalive":
-          break;
-        case "pong":
-          break;
-        default:
-          break;
-      }
-    } catch {
+
+      case "user_joined":
+        setMembers((prev) => {
+          const m = { name: msg.name as string, message: (msg.message as string) ?? "" };
+          if (prev.some((x) => x.name === m.name)) return prev;
+          return [...prev, m];
+        });
+        break;
+
+      case "user_left":
+        setMembers((prev) => prev.filter((m) => m.name !== (msg.name as string)));
+        break;
+
+      case "ptt_started":
+        setActiveSpeaker(msg.name as string);
+        setChannelBusy(true);
+        break;
+
+      case "ptt_released":
+        setPttGranted(false);
+        break;
+
+      case "ptt_released_remote":
+        setActiveSpeaker(null);
+        setChannelBusy(false);
+        break;
+
+      case "ptt_granted":
+        setPttGranted(true);
+        setChannelBusy(false);
+        break;
+
+      case "ptt_denied":
+        setPttGranted(false);
+        setChannelBusy(true);
+        setTimeout(() => setChannelBusy(false), 2000);
+        break;
+
+      case "disconnected":
+        setStatus("disconnected");
+        setCurrentRoom(null);
+        setCurrentName(null);
+        setMembers([]);
+        setActiveSpeaker(null);
+        break;
+
+      case "error":
+        setError((msg.message as string) ?? "Error desconocido");
+        break;
+
+      case "keepalive":
+      case "pong":
+        break;
     }
   }, []);
 
-  const handleBinary = useCallback((_data: ArrayBuffer) => {
-    const view = new Uint8Array(_data);
+  const handleBinary = useCallback((data: ArrayBuffer) => {
+    const view = new Uint8Array(data);
     if (view.length < 1) return;
-
     const cmd = view[0];
+
     if (cmd === 0x01) {
       return;
     }
+
     if (cmd === 0x16 && view.length >= 2) {
       const count = view[1];
       if (count === 1 && view.length >= 9) {
@@ -109,12 +194,12 @@ export function useEqsoClient(): EqsoState & EqsoActions {
         const nameLen = view[off++];
         if (off + nameLen > view.length) return;
         const name = new TextDecoder().decode(view.slice(off, off + nameLen));
+        off += nameLen;
 
         if (action === 0x00) {
-          const msgLen = view.length > off + nameLen ? view[off + nameLen] : 0;
-          const msg = msgLen > 0
-            ? new TextDecoder().decode(view.slice(off + nameLen + 1, off + nameLen + 1 + msgLen))
-            : "";
+          if (off >= view.length) return;
+          const msgLen = view[off++];
+          const msg = msgLen > 0 ? new TextDecoder().decode(view.slice(off, off + msgLen)) : "";
           setMembers((prev) => {
             if (prev.some((m) => m.name === name)) return prev;
             return [...prev, { name, message: msg }];
@@ -128,7 +213,7 @@ export function useEqsoClient(): EqsoState & EqsoActions {
           setActiveSpeaker(null);
           setChannelBusy(false);
         }
-      } else if (count > 0) {
+      } else if (count > 1) {
         const newMembers: RoomMember[] = [];
         let off = 4;
         for (let i = 0; i < count; i++) {
@@ -140,29 +225,42 @@ export function useEqsoClient(): EqsoState & EqsoActions {
           const name = new TextDecoder().decode(view.slice(off, off + nameLen));
           off += nameLen;
           const msgLen = view[off++];
-          const msg = msgLen > 0
-            ? new TextDecoder().decode(view.slice(off, off + msgLen))
-            : "";
+          const msg = msgLen > 0 ? new TextDecoder().decode(view.slice(off, off + msgLen)) : "";
           off += msgLen;
           newMembers.push({ name, message: msg });
         }
-        if (newMembers.length > 0) {
-          setMembers(newMembers);
-        }
+        if (newMembers.length > 0) setMembers(newMembers);
       }
     }
   }, []);
 
-  const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+  const connect = useCallback((server: EqsoServer, customHost?: string, customPort?: number) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.close();
+    }
+
+    setSelectedServer(server);
     setStatus("connecting");
     setError(null);
+    setCurrentRoom(null);
+    setCurrentName(null);
+    setMembers([]);
+    setActiveSpeaker(null);
+    setPttGranted(false);
 
     const ws = new WebSocket(getWsUrl());
     ws.binaryType = "arraybuffer";
     wsRef.current = ws;
 
     ws.onopen = () => {
+      const host = customHost ?? server.host;
+      const port = customPort ?? server.port ?? 2171;
+
+      if (server.mode === "remote" && host) {
+        ws.send(JSON.stringify({ type: "select_server", mode: "remote", host, port }));
+      } else {
+        ws.send(JSON.stringify({ type: "select_server", mode: "local" }));
+      }
       setStatus("connected");
       setError(null);
     };
@@ -171,7 +269,10 @@ export function useEqsoClient(): EqsoState & EqsoActions {
       if (ev.data instanceof ArrayBuffer) {
         handleBinary(ev.data);
       } else {
-        handleMessage(ev);
+        try {
+          const msg = JSON.parse(ev.data as string);
+          handleTextMessage(msg);
+        } catch { /* ignore */ }
       }
     };
 
@@ -186,23 +287,25 @@ export function useEqsoClient(): EqsoState & EqsoActions {
 
     ws.onerror = () => {
       setStatus("error");
-      setError("Could not connect to eQSO server");
+      setError("No se pudo conectar al servidor eQSO");
     };
-  }, [handleMessage, handleBinary]);
+  }, [handleTextMessage, handleBinary]);
 
   const disconnect = useCallback(() => {
-    if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
     wsRef.current?.close();
     wsRef.current = null;
     setStatus("disconnected");
     setCurrentRoom(null);
     setCurrentName(null);
     setMembers([]);
+    setPttGranted(false);
+    pendingJoinRef.current = null;
   }, []);
 
   const join = useCallback((name: string, room: string, message = "") => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    pendingJoinRef.current = { name, room };
     ws.send(JSON.stringify({ type: "join", name: name.toUpperCase(), room: room.toUpperCase(), message }));
   }, []);
 
@@ -223,33 +326,19 @@ export function useEqsoClient(): EqsoState & EqsoActions {
     if (!ws || ws.readyState !== WebSocket.OPEN || !pttGranted) return;
     const header = new Uint8Array([0x01]);
     const payload = new Uint8Array(data);
-    const pkt = new Uint8Array(header.length + payload.length);
+    const pkt = new Uint8Array(1 + payload.length);
     pkt.set(header, 0);
     pkt.set(payload, 1);
     ws.send(pkt.buffer);
   }, [pttGranted]);
 
   useEffect(() => {
-    return () => {
-      wsRef.current?.close();
-    };
+    return () => { wsRef.current?.close(); };
   }, []);
 
   return {
-    status,
-    error,
-    rooms,
-    currentRoom,
-    currentName,
-    members,
-    activeSpeaker,
-    pttGranted,
-    channelBusy,
-    connect,
-    disconnect,
-    join,
-    pttStart,
-    pttEnd,
-    sendAudio,
+    status, error, rooms, currentRoom, currentName, members,
+    activeSpeaker, pttGranted, channelBusy, selectedServer,
+    connect, disconnect, join, pttStart, pttEnd, sendAudio,
   };
 }
