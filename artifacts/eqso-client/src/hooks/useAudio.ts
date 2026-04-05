@@ -37,6 +37,10 @@ function downsampleFloat32(input: Float32Array, fromRate: number, toRate: number
   return out;
 }
 
+// Maximum seconds we allow the scheduler to fall behind before resetting.
+// If the browser pauses (tab hidden, slow CPU) we don't want a huge backlog.
+const MAX_QUEUE_AHEAD_SEC = 1.5;
+
 export function useAudio(): UseAudioReturn {
   const ctxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -46,20 +50,30 @@ export function useAudio(): UseAudioReturn {
   const levelTimerRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
   const accumLocalRef = useRef<Uint8Array>(new Uint8Array(0));
   const accumRemoteRef = useRef<Int16Array>(new Int16Array(0));
+  // Tracks the AudioContext time at which the next buffer should start.
+  // Buffers are chained end-to-end so they play without gaps or overlaps.
+  const nextPlayTimeRef = useRef<number>(0);
+  // GainNode shared across all playback — amplifies decoded GSM which is quiet.
+  const gainNodeRef = useRef<GainNode | null>(null);
 
   const [isRecording, setIsRecording] = useState(false);
   const [isMicAllowed, setIsMicAllowed] = useState<boolean | null>(null);
   const [inputLevel, setInputLevel] = useState(0);
 
   /**
-   * Get or create the AudioContext.
-   * Always uses the browser's preferred native sample rate to avoid
-   * the browser silently ignoring our sampleRate request and giving
-   * us garbage PCM data at the wrong rate.
+   * Get or create the AudioContext and the shared GainNode.
+   * Always uses the browser's preferred native sample rate.
    */
   const getOrCreateCtx = useCallback((): AudioContext => {
     if (!ctxRef.current) {
       ctxRef.current = new AudioContext();
+      const gain = ctxRef.current.createGain();
+      // Amplify decoded GSM: it arrives at a low level (~-50 dBFS).
+      // 8x linear gain ≈ +18 dB — makes quiet speech audible.
+      gain.gain.value = 8;
+      gain.connect(ctxRef.current.destination);
+      gainNodeRef.current = gain;
+      nextPlayTimeRef.current = 0;
     }
     if (ctxRef.current.state === "suspended") {
       ctxRef.current.resume().catch(() => {});
@@ -197,7 +211,10 @@ export function useAudio(): UseAudioReturn {
   }, []);
 
   /**
-   * Play received audio.
+   * Play received audio using a sequential scheduler.
+   * Each buffer is chained to start exactly when the previous one ends,
+   * preventing overlapping playback when packets arrive in bursts.
+   *
    * @param data      Raw bytes (without the opcode header byte).
    * @param isFloat32 true = Float32 PCM at 8000 Hz (remote GSM decoded);
    *                  false = Uint8 unsigned PCM at 8000 Hz (local relay).
@@ -205,7 +222,6 @@ export function useAudio(): UseAudioReturn {
   const playAudio = useCallback((data: ArrayBuffer, isFloat32 = false) => {
     try {
       const ctx = getOrCreateCtx();
-      // Resume context on every call — browsers may re-suspend it
       if (ctx.state !== "running") {
         ctx.resume().catch(() => {});
       }
@@ -213,7 +229,6 @@ export function useAudio(): UseAudioReturn {
       let float32: Float32Array;
 
       if (isFloat32) {
-        // data may be unaligned — copy into fresh ArrayBuffer first
         const copy = data.slice(0);
         float32 = new Float32Array(copy);
       } else {
@@ -229,18 +244,27 @@ export function useAudio(): UseAudioReturn {
         return;
       }
 
-      // Audio data is at 8000 Hz; the AudioContext may be at a higher native
-      // rate — the browser automatically resamples when the buffer sampleRate
-      // differs from the context sampleRate.
+      // Audio data is at 8000 Hz; browser resamples automatically when
+      // the buffer sampleRate differs from the context sampleRate.
       const buffer = ctx.createBuffer(1, float32.length, GSM_RATE);
       buffer.getChannelData(0).set(float32);
 
       const source = ctx.createBufferSource();
       source.buffer = buffer;
-      source.connect(ctx.destination);
-      source.start();
+      // Route through the shared gain node for volume amplification.
+      source.connect(gainNodeRef.current ?? ctx.destination);
 
-      console.debug(`[audio] playAudio: ${float32.length} samples, ctx=${ctx.state}`);
+      // ── Sequential scheduling ─────────────────────────────────────────────
+      // If the scheduler has fallen far behind (e.g. long silence, tab hidden),
+      // reset nextPlayTime to "now" so we don't queue a massive backlog.
+      const now = ctx.currentTime;
+      if (nextPlayTimeRef.current < now || nextPlayTimeRef.current > now + MAX_QUEUE_AHEAD_SEC) {
+        nextPlayTimeRef.current = now;
+      }
+      source.start(nextPlayTimeRef.current);
+      nextPlayTimeRef.current += buffer.duration;
+
+      console.debug(`[audio] playAudio: ${float32.length} samples, ctx=${ctx.state}, lag=${(nextPlayTimeRef.current - now).toFixed(3)}s`);
     } catch (err) {
       console.error("[audio] playAudio error:", err);
     }
