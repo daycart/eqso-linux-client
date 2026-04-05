@@ -1,24 +1,15 @@
 import net from "net";
 import { EventEmitter } from "events";
 import { logger } from "../lib/logger";
-import {
-  HANDSHAKE_CLIENT,
-  HANDSHAKE_SERVER,
-  buildPttStarted,
-  buildPttReleased,
-  buildUserJoined,
-  buildUserLeft,
-  tryParseJoin,
-  EQSO_COMMANDS,
-  AUDIO_PAYLOAD_SIZE,
-  KEEPALIVE_PACKET,
-} from "./protocol";
+import { AUDIO_PAYLOAD_SIZE } from "./protocol";
+
+const HANDSHAKE_CLIENT = Buffer.from([0x0a, 0x82, 0x00, 0x00, 0x00]);
 
 function buildJoinPacket(name: string, room: string, message: string, password: string): Buffer {
-  const nb = Buffer.from(name, "ascii");
-  const rb = Buffer.from(room, "ascii");
-  const mb = Buffer.from(message, "ascii");
-  const pb = Buffer.from(password, "ascii");
+  const nb = Buffer.from(name.slice(0, 20), "ascii");
+  const rb = Buffer.from(room.slice(0, 20), "ascii");
+  const mb = Buffer.from(message.slice(0, 100), "ascii");
+  const pb = Buffer.from(password.slice(0, 50), "ascii");
   return Buffer.concat([
     Buffer.from([0x1a]),
     Buffer.from([nb.length]), nb,
@@ -46,12 +37,165 @@ export interface ProxyEvent {
   data?: unknown;
 }
 
+// ---------------------------------------------------------------------------
+// Packet parser — accumulates bytes and tries to extract complete packets
+// ---------------------------------------------------------------------------
+class EqsoPacketParser {
+  private acc = Buffer.alloc(0);
+
+  feed(data: Buffer): void {
+    this.acc = Buffer.concat([this.acc, data]);
+  }
+
+  /**
+   * Try to pull the next complete packet from the accumulator.
+   * Returns a Buffer (the full packet including opcode) or null if not enough data.
+   */
+  next(): Buffer | null {
+    while (this.acc.length > 0) {
+      const cmd = this.acc[0];
+
+      // 0x0c  keepalive  — 1 byte
+      if (cmd === 0x0c) {
+        const pkt = this.acc.slice(0, 1);
+        this.acc = this.acc.slice(1);
+        return pkt;
+      }
+
+      // 0x08  PTT ack byte 1 — 1 byte
+      if (cmd === 0x08) {
+        this.acc = this.acc.slice(1);
+        continue; // discard
+      }
+
+      // 0x06 [0x00]  PTT ack byte 2 — 2 bytes
+      if (cmd === 0x06) {
+        if (this.acc.length < 2) return null;
+        this.acc = this.acc.slice(2);
+        continue; // discard
+      }
+
+      // 0x0b server text message — [0x0b] [len] [text...] [0x03]
+      if (cmd === 0x0b) {
+        if (this.acc.length < 2) return null;
+        const textLen = this.acc[1];
+        const total = 2 + textLen + 1; // cmd + len + text + terminator
+        if (this.acc.length < total) return null;
+        const pkt = this.acc.slice(0, total);
+        this.acc = this.acc.slice(total);
+        return pkt;
+      }
+
+      // 0x0a HANDSHAKE — 5 bytes
+      if (cmd === 0x0a) {
+        if (this.acc.length < 5) return null;
+        const pkt = this.acc.slice(0, 5);
+        this.acc = this.acc.slice(5);
+        return pkt;
+      }
+
+      // 0x14 ROOM LIST — 0x14 count [0x00 0x00 0x00] [len name]*
+      if (cmd === 0x14) {
+        if (this.acc.length < 5) return null;
+        const count = this.acc[1];
+        let off = 5;
+        for (let i = 0; i < count; i++) {
+          if (off >= this.acc.length) return null;
+          const nameLen = this.acc[off++];
+          if (off + nameLen > this.acc.length) return null;
+          off += nameLen;
+        }
+        const pkt = this.acc.slice(0, off);
+        this.acc = this.acc.slice(off);
+        return pkt;
+      }
+
+      // 0x16 USER UPDATE — variable
+      if (cmd === 0x16) {
+        const result = this.tryParseUserUpdate();
+        if (result === null) return null;
+        if (result === false) continue; // discard, already consumed
+        return result;
+      }
+
+      // 0x01 AUDIO — 0x01 + AUDIO_PAYLOAD_SIZE bytes
+      if (cmd === 0x01) {
+        if (this.acc.length < 1 + AUDIO_PAYLOAD_SIZE) return null;
+        const pkt = this.acc.slice(0, 1 + AUDIO_PAYLOAD_SIZE);
+        this.acc = this.acc.slice(1 + AUDIO_PAYLOAD_SIZE);
+        return pkt;
+      }
+
+      // Unknown byte — skip
+      logger.debug({ cmd: cmd.toString(16) }, "eQSO proxy: unknown byte, skipping");
+      this.acc = this.acc.slice(1);
+    }
+    return null;
+  }
+
+  /**
+   * Try to parse a complete 0x16 USER_UPDATE packet.
+   * Returns the packet Buffer if complete, null if need more data, false to discard.
+   */
+  private tryParseUserUpdate(): Buffer | null | false {
+    // Minimum: cmd(1) count(1) xx(3)
+    if (this.acc.length < 5) return null;
+
+    const count = this.acc[1];
+    let off = 4; // skip cmd, count, 2 more bytes (offsets differ per packet)
+
+    if (count === 0) {
+      // single action with count=0 — just consume 5 bytes (server info style)
+      const pkt = this.acc.slice(0, 5);
+      this.acc = this.acc.slice(5);
+      return pkt;
+    }
+
+    for (let i = 0; i < count; i++) {
+      // Each entry: [4 bytes status/flags] [nameLen name] [msgLen msg] [0x00]
+      if (off + 4 >= this.acc.length) return null;
+      // action byte is at offset 4 from the packet start for single-count, or within the loop
+      off += (i === 0 ? 4 : 4); // 4 bytes of flags per entry
+
+      if (off >= this.acc.length) return null;
+      const nameLen = this.acc[off++];
+      if (off + nameLen > this.acc.length) return null;
+      off += nameLen;
+
+      if (off >= this.acc.length) return null;
+      const action = this.acc[off - nameLen - 5 + 4]; // action byte within this entry
+
+      // action 0x01 (leave) and 0x02/0x03 (ptt) have no message
+      if (action === 0x00) {
+        // join: has message
+        if (off >= this.acc.length) return null;
+        const msgLen = this.acc[off++];
+        if (off + msgLen > this.acc.length) return null;
+        off += msgLen;
+      }
+
+      // terminator 0x00
+      if (off >= this.acc.length) return null;
+      if (this.acc[off] !== 0x00) {
+        // not a proper terminator — something is off, skip the command byte
+        this.acc = this.acc.slice(1);
+        return false;
+      }
+      off++;
+    }
+
+    const pkt = this.acc.slice(0, off);
+    this.acc = this.acc.slice(off);
+    return pkt;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// EqsoProxy — connects to a remote eQSO TCP server and translates packets
+// ---------------------------------------------------------------------------
 export class EqsoProxy extends EventEmitter {
   private socket: net.Socket | null = null;
-  private buf = Buffer.alloc(0);
-  private readMultiByte = false;
-  private multiByteCmd = 0;
-  private multiByteBuf = Buffer.alloc(0);
+  private parser = new EqsoPacketParser();
   private handshakeDone = false;
   private host: string;
   private port: number;
@@ -71,10 +215,16 @@ export class EqsoProxy extends EventEmitter {
       logger.info({ host: this.host, port: this.port }, "eQSO proxy TCP connected");
       this.connected = true;
       sock.write(HANDSHAKE_CLIENT);
+      logger.debug("eQSO proxy: sent handshake");
     });
 
     sock.on("data", (data: Buffer) => {
-      this.processData(data);
+      logger.debug(
+        { bytes: data.length, hex: data.slice(0, 20).toString("hex") },
+        "eQSO proxy: received TCP data"
+      );
+      this.parser.feed(data);
+      this.drainPackets();
     });
 
     sock.on("close", () => {
@@ -101,11 +251,19 @@ export class EqsoProxy extends EventEmitter {
 
   sendJoin(name: string, room: string, message: string, password = ""): void {
     const pkt = buildJoinPacket(name, room, message, password);
+    logger.info(
+      { name, room, hex: pkt.toString("hex") },
+      "eQSO proxy: sending join packet"
+    );
     this.socketWrite(pkt);
   }
 
-  sendPttStart(): void {
-    this.socketWrite(Buffer.from([0x01, ...new Array(AUDIO_PAYLOAD_SIZE).fill(0)]));
+  sendPttStart(audioData?: Buffer): void {
+    const payload = audioData
+      ? audioData.slice(0, AUDIO_PAYLOAD_SIZE)
+      : Buffer.alloc(AUDIO_PAYLOAD_SIZE);
+    const pkt = Buffer.concat([Buffer.from([0x01]), payload]);
+    this.socketWrite(pkt);
   }
 
   sendPttEnd(): void {
@@ -113,8 +271,12 @@ export class EqsoProxy extends EventEmitter {
   }
 
   sendAudio(data: Buffer): void {
-    const payload = data.slice(0, AUDIO_PAYLOAD_SIZE);
-    const pkt = Buffer.concat([Buffer.from([0x01]), payload]);
+    if (data.length < AUDIO_PAYLOAD_SIZE) {
+      const padded = Buffer.alloc(AUDIO_PAYLOAD_SIZE);
+      data.copy(padded);
+      data = padded;
+    }
+    const pkt = Buffer.concat([Buffer.from([0x01]), data.slice(0, AUDIO_PAYLOAD_SIZE)]);
     this.socketWrite(pkt);
   }
 
@@ -122,189 +284,161 @@ export class EqsoProxy extends EventEmitter {
     if (this.socket && !this.socket.destroyed && this.connected) {
       try {
         this.socket.write(data);
-      } catch {
+      } catch (err) {
+        logger.warn({ err }, "eQSO proxy: socket write error");
       }
+    } else {
+      logger.warn(
+        { connected: this.connected, destroyed: this.socket?.destroyed },
+        "eQSO proxy: tried to write but socket not ready"
+      );
     }
   }
 
-  private processData(data: Buffer): void {
-    this.buf = Buffer.concat([this.buf, data]);
+  private drainPackets(): void {
+    let pkt: Buffer | null;
+    while ((pkt = this.parser.next()) !== null) {
+      this.handlePacket(pkt);
+    }
+  }
 
-    let i = 0;
-    while (i < this.buf.length) {
-      const byte = this.buf[i];
+  private handlePacket(pkt: Buffer): void {
+    if (pkt.length === 0) return;
+    const cmd = pkt[0];
 
-      if (!this.readMultiByte) {
-        switch (byte) {
-          case EQSO_COMMANDS.KEEPALIVE:
-            this.emit("event", { type: "keepalive" } as ProxyEvent);
-            i++;
-            break;
-
-          case EQSO_COMMANDS.HANDSHAKE:
-            if (this.buf.length - i >= 5) {
-              const chunk = this.buf.slice(i, i + 5);
-              if (chunk.equals(HANDSHAKE_SERVER)) {
-                if (!this.handshakeDone) {
-                  this.handshakeDone = true;
-                  this.emit("event", { type: "connected" } as ProxyEvent);
-                }
-              }
-              i += 5;
-            } else {
-              break;
-            }
-            break;
-
-          case EQSO_COMMANDS.ROOM_LIST: {
-            const start = i;
-            if (this.buf.length < i + 2) { i = this.buf.length; break; }
-            const count = this.buf[i + 1];
-            let off = i + 5;
-            const rooms: string[] = [];
-            for (let r = 0; r < count; r++) {
-              if (off >= this.buf.length) break;
-              const len = this.buf[off++];
-              if (off + len > this.buf.length) { off = this.buf.length; break; }
-              rooms.push(this.buf.slice(off, off + len).toString("ascii"));
-              off += len;
-            }
-            if (rooms.length >= 0) {
-              this.emit("event", { type: "room_list", data: rooms } as ProxyEvent);
-              i = off;
-            } else {
-              i = this.buf.length;
-            }
-            break;
-          }
-
-          case EQSO_COMMANDS.USER_UPDATE:
-            this.readMultiByte = true;
-            this.multiByteCmd = EQSO_COMMANDS.USER_UPDATE;
-            this.multiByteBuf = Buffer.from([byte]);
-            i++;
-            break;
-
-          case EQSO_COMMANDS.VOICE:
-            this.readMultiByte = true;
-            this.multiByteCmd = EQSO_COMMANDS.VOICE;
-            this.multiByteBuf = Buffer.alloc(0);
-            i++;
-            break;
-
-          case 0x08:
-          case 0x06:
-            i++;
-            if (byte === 0x06 && i < this.buf.length && this.buf[i] === 0x00) i++;
-            break;
-
-          default:
-            i++;
-            break;
+    switch (cmd) {
+      // SERVER TEXT MESSAGE (error, announcement)
+      case 0x0b: {
+        if (pkt.length >= 2) {
+          const textLen = pkt[1];
+          const text = pkt.slice(2, 2 + textLen).toString("ascii");
+          logger.info({ text }, "eQSO proxy: server text message");
+          this.emit("event", { type: "server_info", data: text } as ProxyEvent);
         }
-
-        if (this.readMultiByte) continue;
-        if (i > 0 && i <= this.buf.length) {
-          this.buf = this.buf.slice(i);
-          i = 0;
-        }
-      } else {
-        this.multiByteBuf = Buffer.concat([this.multiByteBuf, Buffer.from([byte])]);
-        i++;
-
-        switch (this.multiByteCmd) {
-          case EQSO_COMMANDS.USER_UPDATE: {
-            if (this.multiByteBuf.length < 2) break;
-            const count = this.multiByteBuf[1];
-
-            if (count === 1 && this.multiByteBuf.length >= 9) {
-              const action = this.multiByteBuf[4];
-              let off = 8;
-              if (off >= this.multiByteBuf.length) break;
-              const nameLen = this.multiByteBuf[off++];
-              if (off + nameLen > this.multiByteBuf.length) break;
-              const name = this.multiByteBuf.slice(off, off + nameLen).toString("ascii");
-              off += nameLen;
-
-              if (action === 0x00) {
-                if (off >= this.multiByteBuf.length) break;
-                const msgLen = this.multiByteBuf[off++];
-                if (off + msgLen > this.multiByteBuf.length) break;
-                const msg = this.multiByteBuf.slice(off, off + msgLen).toString("ascii");
-                off += msgLen;
-                if (off >= this.multiByteBuf.length || this.multiByteBuf[off] !== 0x00) break;
-                off++;
-                this.emit("event", { type: "user_joined", data: { name, message: msg } } as ProxyEvent);
-              } else if (action === 0x01) {
-                if (off >= this.multiByteBuf.length || this.multiByteBuf[off] !== 0x00) break;
-                this.emit("event", { type: "user_left", data: { name } } as ProxyEvent);
-                off++;
-              } else if (action === 0x02) {
-                if (off >= this.multiByteBuf.length || this.multiByteBuf[off] !== 0x00) break;
-                this.emit("event", { type: "ptt_started", data: { name } } as ProxyEvent);
-                off++;
-              } else if (action === 0x03) {
-                if (off >= this.multiByteBuf.length || this.multiByteBuf[off] !== 0x00) break;
-                this.emit("event", { type: "ptt_released", data: { name } } as ProxyEvent);
-                off++;
-              }
-
-              this.readMultiByte = false;
-              this.buf = Buffer.concat([this.buf.slice(i), this.buf.slice(i)]);
-              this.buf = this.buf.slice(i);
-              this.multiByteBuf = Buffer.alloc(0);
-              i = 0;
-            } else if (count > 1 && this.multiByteBuf.length > 4) {
-              let off = 4;
-              const members: Array<{ name: string; message: string }> = [];
-              let complete = true;
-              for (let r = 0; r < count; r++) {
-                if (off + 5 >= this.multiByteBuf.length) { complete = false; break; }
-                off += 5;
-                if (off >= this.multiByteBuf.length) { complete = false; break; }
-                const nameLen = this.multiByteBuf[off++];
-                if (off + nameLen >= this.multiByteBuf.length) { complete = false; break; }
-                const name = this.multiByteBuf.slice(off, off + nameLen).toString("ascii");
-                off += nameLen;
-                const msgLen = this.multiByteBuf[off++];
-                if (off + msgLen > this.multiByteBuf.length) { complete = false; break; }
-                const msg = this.multiByteBuf.slice(off, off + msgLen).toString("ascii");
-                off += msgLen;
-                members.push({ name, message: msg });
-              }
-              if (complete && off < this.multiByteBuf.length && this.multiByteBuf[off] === 0x00) {
-                this.emit("event", { type: "members", data: members } as ProxyEvent);
-                this.readMultiByte = false;
-                this.buf = this.buf.slice(i);
-                this.multiByteBuf = Buffer.alloc(0);
-                i = 0;
-              }
-            }
-            break;
-          }
-
-          case EQSO_COMMANDS.VOICE: {
-            if (this.multiByteBuf.length >= AUDIO_PAYLOAD_SIZE) {
-              const audioPkt = Buffer.concat([
-                Buffer.from([0x01]),
-                this.multiByteBuf.slice(0, AUDIO_PAYLOAD_SIZE),
-              ]);
-              this.emit("event", { type: "audio", data: audioPkt } as ProxyEvent);
-              this.multiByteBuf = this.multiByteBuf.slice(AUDIO_PAYLOAD_SIZE);
-              if (this.multiByteBuf.length === 0) {
-                this.readMultiByte = false;
-                this.buf = this.buf.slice(i);
-                i = 0;
-              }
-            }
-            break;
-          }
-        }
+        break;
       }
+
+      // KEEPALIVE
+      case 0x0c:
+        this.emit("event", { type: "keepalive" } as ProxyEvent);
+        break;
+
+      // HANDSHAKE response
+      case 0x0a:
+        if (!this.handshakeDone) {
+          this.handshakeDone = true;
+          logger.info({ hex: pkt.toString("hex") }, "eQSO proxy: handshake from server");
+          this.emit("event", { type: "connected" } as ProxyEvent);
+        }
+        break;
+
+      // ROOM LIST
+      case 0x14: {
+        const count = pkt[1];
+        const rooms: string[] = [];
+        let off = 5;
+        for (let i = 0; i < count; i++) {
+          if (off >= pkt.length) break;
+          const len = pkt[off++];
+          if (off + len > pkt.length) break;
+          rooms.push(pkt.slice(off, off + len).toString("ascii"));
+          off += len;
+        }
+        logger.info({ rooms }, "eQSO proxy: room list received");
+        this.emit("event", { type: "room_list", data: rooms } as ProxyEvent);
+        break;
+      }
+
+      // USER UPDATE
+      case 0x16:
+        this.handleUserUpdate(pkt);
+        break;
+
+      // AUDIO
+      case 0x01: {
+        const audioPkt = pkt; // full buffer including 0x01 opcode
+        this.emit("event", { type: "audio", data: audioPkt } as ProxyEvent);
+        break;
+      }
+
+      default:
+        logger.debug({ cmd: cmd.toString(16) }, "eQSO proxy: unhandled packet opcode");
+        break;
+    }
+  }
+
+  private handleUserUpdate(pkt: Buffer): void {
+    if (pkt.length < 5) return;
+    const count = pkt[1];
+    logger.debug({ count, hex: pkt.toString("hex") }, "eQSO proxy: user update packet");
+
+    if (count === 0) return;
+
+    // Parse single-entry packets (action events)
+    if (count === 1) {
+      const action = pkt[5]; // byte at position 5 is the action for single-entry packets
+      let off = 9; // 1(cmd) + 1(count) + 2(?) + 1(?) + 4(flags before name) = different layout
+
+      // Layout: [0x16] [count=1] [0x00 0x00] [0x00] [action] [0x00 0x00 0x00] [nameLen] [name] [msgLen?/0x00] [0x00]
+      // position: 0      1        2    3       4      5        6    7    8       9
+      if (off >= pkt.length) return;
+      const nameLen = pkt[off++];
+      if (off + nameLen > pkt.length) return;
+      const name = pkt.slice(off, off + nameLen).toString("ascii");
+      off += nameLen;
+
+      switch (action) {
+        case 0x00: { // join with message
+          if (off >= pkt.length) return;
+          const msgLen = pkt[off++];
+          const msg = off + msgLen <= pkt.length
+            ? pkt.slice(off, off + msgLen).toString("ascii")
+            : "";
+          logger.info({ name, msg, action }, "eQSO proxy: user joined");
+          this.emit("event", { type: "user_joined", data: { name, message: msg } } as ProxyEvent);
+          break;
+        }
+        case 0x01:
+          logger.info({ name }, "eQSO proxy: user left");
+          this.emit("event", { type: "user_left", data: { name } } as ProxyEvent);
+          break;
+        case 0x02:
+          logger.info({ name }, "eQSO proxy: PTT started");
+          this.emit("event", { type: "ptt_started", data: { name } } as ProxyEvent);
+          break;
+        case 0x03:
+          logger.info({ name }, "eQSO proxy: PTT released");
+          this.emit("event", { type: "ptt_released", data: { name } } as ProxyEvent);
+          break;
+        default:
+          logger.debug({ action, name }, "eQSO proxy: unknown user action");
+          break;
+      }
+      return;
     }
 
-    if (i > 0 && i <= this.buf.length) {
-      this.buf = this.buf.slice(i);
+    // Multi-entry: member list (after join)
+    const members: Array<{ name: string; message: string }> = [];
+    let off = 4; // cmd(1) + count(1) + 2 bytes header = 4
+
+    for (let i = 0; i < count; i++) {
+      // each entry: 5 bytes flags, nameLen, name, msgLen, msg
+      if (off + 5 >= pkt.length) break;
+      off += 5; // skip flags
+      if (off >= pkt.length) break;
+      const nameLen = pkt[off++];
+      if (off + nameLen > pkt.length) break;
+      const name = pkt.slice(off, off + nameLen).toString("ascii");
+      off += nameLen;
+      if (off >= pkt.length) break;
+      const msgLen = pkt[off++];
+      const msg = off + msgLen <= pkt.length
+        ? pkt.slice(off, off + msgLen).toString("ascii")
+        : "";
+      off += msgLen;
+      members.push({ name, message: msg });
     }
+    logger.info({ count: members.length, members }, "eQSO proxy: member list received");
+    this.emit("event", { type: "members", data: members } as ProxyEvent);
   }
 }

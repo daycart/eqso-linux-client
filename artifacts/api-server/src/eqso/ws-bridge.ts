@@ -193,6 +193,9 @@ function handleRemoteMode(
       case "connected":
         sendJson(ws, { type: "server_info", message: `Conectado a ${host}:${port}` });
         break;
+      case "server_info":
+        sendJson(ws, { type: "error", message: String(ev.data) });
+        break;
       case "disconnected":
         sendJson(ws, { type: "disconnected", message: "Servidor desconectado" });
         break;
@@ -248,8 +251,10 @@ function handleRemoteMode(
           const room = (msg.room ?? "GENERAL").trim().toUpperCase();
           const message = (msg.message ?? "").trim();
           const password = (msg.password ?? "").trim();
+          logger.info({ id, name, room, host, port }, "Remote proxy: join requested");
           proxy.sendJoin(name, room, message, password);
           sendJson(ws, { type: "joined", room, name, members: [] });
+          logger.info({ id, name, room }, "Remote proxy: sent joined to browser");
           break;
         }
         case "ptt_start":
