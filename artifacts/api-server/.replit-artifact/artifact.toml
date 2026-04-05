@@ -1,32 +1,36 @@
 kind = "api"
-previewPath = "/api" # TODO - should be excluded from preview in the first place
-title = "API Server"
-version = "1.0.0"
-id = "3B4_FFSkEVBkAeYMFRJ2e"
+  previewPath = "/api" # TODO - should be excluded from preview in the first place
+  title = "API Server"
+  version = "1.0.0"
+  id = "3B4_FFSkEVBkAeYMFRJ2e"
 
-[[services]]
-localPort = 8080
-name = "API Server"
-paths = ["/api", "/ws"]
+  [[services]]
+  localPort = 8080
+  name = "API Server"
+  paths = ["/api", "/ws"]
 
-[services.development]
-run = "pnpm --filter @workspace/api-server run dev"
+  [services.development]
+  run = "pnpm --filter @workspace/api-server run dev"
 
-[services.production]
+  [services.production]
 
-[services.production.build]
-args = ["pnpm", "--filter", "@workspace/api-server", "run", "build"]
+  [services.production.build]
+  # 1. Build the React client (BASE_PATH=/ so assets are at root in production)
+  # 2. Build the API server (esbuild cleans dist/, then compiles)
+  # 3. Copy the client's static output into the server's dist/public
+  args = ["sh", "-c", "PORT=3000 BASE_PATH=/ NODE_ENV=production pnpm --filter @workspace/eqso-client run build && pnpm --filter @workspace/api-server run build && cp -r artifacts/eqso-client/dist/public artifacts/api-server/dist/public"]
 
-[services.production.build.env]
-NODE_ENV = "production"
+  [services.production.build.env]
+  NODE_ENV = "production"
 
-[services.production.run]
-# we don't run through pnpm to make startup faster in production
-args = ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
+  [services.production.run]
+  # we don't run through pnpm to make startup faster in production
+  args = ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
 
-[services.production.run.env]
-PORT = "8080"
-NODE_ENV = "production"
+  [services.production.run.env]
+  PORT = "8080"
+  NODE_ENV = "production"
 
-[services.production.health.startup]
-path = "/api/healthz"
+  [services.production.health.startup]
+  path = "/api/healthz"
+  
