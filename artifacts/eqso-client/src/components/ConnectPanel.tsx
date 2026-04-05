@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ConnectionStatus, EqsoServer, KNOWN_SERVERS } from "@/hooks/useEqsoClient";
 
 interface ConnectPanelProps {
@@ -23,7 +23,6 @@ export function ConnectPanel({
   callsign,
   selectedRoom,
   statusMessage,
-  selectedServer,
   onCallsignChange,
   onRoomChange,
   onStatusMessageChange,
@@ -34,11 +33,24 @@ export function ConnectPanel({
   const isConnecting = status === "connecting";
 
   const [chosenServerId, setChosenServerId] = useState<string>(KNOWN_SERVERS[0].id);
-  const [customHost, setCustomHost] = useState("192.168.1.1");
-  const [customPort, setCustomPort] = useState(2171);
+  const [editHost, setEditHost] = useState("");
+  const [editPort, setEditPort] = useState(2171);
+  const [connectedServerLabel, setConnectedServerLabel] = useState("");
 
   const chosenServer = KNOWN_SERVERS.find((s) => s.id === chosenServerId) ?? KNOWN_SERVERS[0];
-  const isCustom = chosenServerId === "custom";
+  const isRemote = chosenServer.mode === "remote";
+
+  useEffect(() => {
+    if (chosenServer.host !== undefined) {
+      setEditHost(chosenServer.host);
+    }
+    if (chosenServer.port !== undefined) {
+      setEditPort(chosenServer.port);
+    }
+    if (chosenServer.defaultRooms?.[0]) {
+      onRoomChange(chosenServer.defaultRooms[0]);
+    }
+  }, [chosenServerId]);
 
   const availableRooms =
     rooms.length > 0
@@ -48,12 +60,28 @@ export function ConnectPanel({
       : ["GENERAL", "CB27"];
 
   const handleConnect = () => {
-    if (isCustom) {
-      onConnect(chosenServer, customHost, customPort);
+    const label = chosenServer.id === "custom"
+      ? `${editHost}:${editPort}`
+      : chosenServer.label;
+    setConnectedServerLabel(label);
+
+    if (isRemote) {
+      onConnect(chosenServer, editHost, editPort);
     } else {
       onConnect(chosenServer);
     }
   };
+
+  const handleChangeServer = () => {
+    if (isRemote) {
+      onConnect(chosenServer, editHost, editPort);
+    } else {
+      onConnect(chosenServer);
+    }
+  };
+
+  const hostIsValid = editHost.trim().length > 0;
+  const canConnect = !isConnecting && (!isRemote || hostIsValid);
 
   return (
     <div className="flex flex-1 items-center justify-center p-6">
@@ -75,18 +103,14 @@ export function ConnectPanel({
             </div>
           )}
 
-          {/* SERVER SELECTOR */}
+          {/* SERVER PRESET SELECTOR */}
           <div>
             <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
               Servidor eQSO
             </label>
             <select
               value={chosenServerId}
-              onChange={(e) => {
-                setChosenServerId(e.target.value);
-                const srv = KNOWN_SERVERS.find((s) => s.id === e.target.value);
-                if (srv?.defaultRooms?.[0]) onRoomChange(srv.defaultRooms[0]);
-              }}
+              onChange={(e) => setChosenServerId(e.target.value)}
               disabled={isConnected}
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 text-sm disabled:opacity-60"
             >
@@ -97,26 +121,24 @@ export function ConnectPanel({
             {chosenServer.description && (
               <p className="text-xs text-gray-500 mt-1 ml-1">{chosenServer.description}</p>
             )}
-            {chosenServer.mode === "remote" && !isCustom && chosenServer.host && (
-              <p className="text-xs text-green-600 font-mono mt-1 ml-1">
-                {chosenServer.host}:{chosenServer.port}
-              </p>
-            )}
           </div>
 
-          {/* CUSTOM SERVER FIELDS */}
-          {isCustom && (
+          {/* HOST + PORT — visible for all remote servers, editable */}
+          {isRemote && (
             <div className="flex gap-2">
               <div className="flex-1">
                 <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
-                  Host / IP
+                  IP / Hostname
                 </label>
                 <input
                   type="text"
-                  value={customHost}
-                  onChange={(e) => setCustomHost(e.target.value)}
-                  placeholder="servidor.eqso.net"
+                  value={editHost}
+                  onChange={(e) => setEditHost(e.target.value)}
+                  placeholder="192.168.1.1 o servidor.eqso.net"
                   disabled={isConnected}
+                  spellCheck={false}
+                  autoCapitalize="none"
+                  autoCorrect="off"
                   className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white placeholder-gray-600 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 font-mono text-sm disabled:opacity-60"
                 />
               </div>
@@ -126,8 +148,8 @@ export function ConnectPanel({
                 </label>
                 <input
                   type="number"
-                  value={customPort}
-                  onChange={(e) => setCustomPort(Number(e.target.value))}
+                  value={editPort}
+                  onChange={(e) => setEditPort(Number(e.target.value))}
                   min={1}
                   max={65535}
                   disabled={isConnected}
@@ -173,7 +195,8 @@ export function ConnectPanel({
           {/* STATUS MESSAGE */}
           <div>
             <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
-              Mensaje de estado <span className="text-gray-600 font-normal normal-case">(opcional)</span>
+              Mensaje de estado{" "}
+              <span className="text-gray-600 font-normal normal-case">(opcional)</span>
             </label>
             <input
               type="text"
@@ -189,7 +212,7 @@ export function ConnectPanel({
           {!isConnected ? (
             <button
               onClick={handleConnect}
-              disabled={isConnecting || (isCustom && !customHost.trim())}
+              disabled={!canConnect}
               className="w-full bg-green-600 hover:bg-green-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-semibold rounded-lg py-3 transition-colors"
             >
               {isConnecting ? "Conectando..." : "Conectar al servidor"}
@@ -198,7 +221,12 @@ export function ConnectPanel({
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-green-400 text-sm">
                 <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0" />
-                Conectado a <strong>{chosenServer.label}</strong>
+                <span>
+                  Conectado
+                  {connectedServerLabel ? (
+                    <span className="text-white"> · {connectedServerLabel}</span>
+                  ) : null}
+                </span>
               </div>
               <button
                 onClick={onJoin}
@@ -208,7 +236,7 @@ export function ConnectPanel({
                 Entrar a la sala #{selectedRoom}
               </button>
               <button
-                onClick={() => onConnect(chosenServer, isCustom ? customHost : undefined, isCustom ? customPort : undefined)}
+                onClick={handleChangeServer}
                 className="w-full text-xs text-gray-500 hover:text-gray-300 py-1 transition-colors"
               >
                 Cambiar servidor
@@ -218,9 +246,13 @@ export function ConnectPanel({
         </div>
 
         <div className="mt-4 bg-gray-900/50 border border-gray-800 rounded-lg p-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Clientes Windows eQSO</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+            Clientes Windows eQSO
+          </p>
           <p className="text-xs text-gray-500 leading-relaxed">
-            Conecta desde Windows directamente al servidor local TCP puerto <span className="text-green-400 font-mono">2171</span>. Compatible al 100% con el cliente eQSO original.
+            Conecta desde Windows directamente al servidor local TCP puerto{" "}
+            <span className="text-green-400 font-mono">2171</span>. Compatible al 100%
+            con el cliente eQSO original.
           </p>
         </div>
       </div>
