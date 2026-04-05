@@ -41,11 +41,17 @@ function downsampleFloat32(input: Float32Array, fromRate: number, toRate: number
 // If the browser pauses (tab hidden, slow CPU) we don't want a huge backlog.
 const MAX_QUEUE_AHEAD_SEC = 1.5;
 
+// Gain applied to mic input before encoding. Mic sensitivity is typically very
+// low (~0.004 peak Float32), so we boost by this factor before GSM encoding.
+// GSM codec needs at least -25 dBFS (~0.06 peak) for intelligible speech.
+const MIC_BOOST_GAIN = 20;
+
 export function useAudio(): UseAudioReturn {
   const ctxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const micGainRef = useRef<GainNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const levelTimerRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
   const accumLocalRef = useRef<Uint8Array>(new Uint8Array(0));
@@ -125,10 +131,18 @@ export function useAudio(): UseAudioReturn {
       const source = ctx.createMediaStreamSource(stream);
       sourceRef.current = source;
 
+      // Boost mic gain: typical laptop/webcam mics output ~0.004 peak (Float32).
+      // GSM codec needs at least 0.06 peak for intelligible speech.
+      // Route: source → micGain → analyser/processor
+      const micGain = ctx.createGain();
+      micGain.gain.value = MIC_BOOST_GAIN;
+      micGainRef.current = micGain;
+      source.connect(micGain);
+
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
       analyserRef.current = analyser;
-      source.connect(analyser);
+      micGain.connect(analyser);
 
       const BUFFER_SIZE = 4096;
       const processor = ctx.createScriptProcessor(BUFFER_SIZE, 1, 1);
@@ -155,7 +169,7 @@ export function useAudio(): UseAudioReturn {
             sumSq += rawInput[i] * rawInput[i];
           }
           const rms = Math.sqrt(sumSq / rawInput.length);
-          console.debug(`[audio] TX mic rms=${rms.toFixed(4)} peak=${peak.toFixed(4)} rate=${nativeRate}`);
+          console.debug(`[audio] TX mic (post-gain×${MIC_BOOST_GAIN}) rms=${rms.toFixed(4)} peak=${peak.toFixed(4)} rate=${nativeRate}`);
         }
 
         if (mode === "local") {
@@ -196,9 +210,9 @@ export function useAudio(): UseAudioReturn {
         }
       };
 
-      source.connect(processor);
+      micGain.connect(processor);
       // Must connect to destination for onaudioprocess to fire;
-      // the output buffer stays silent (we never write to it)
+      // outBuf[0] = 1e-10 keeps Chrome from silencing the callback.
       processor.connect(ctx.destination);
 
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
@@ -225,6 +239,8 @@ export function useAudio(): UseAudioReturn {
     }
     processorRef.current?.disconnect();
     processorRef.current = null;
+    micGainRef.current?.disconnect();
+    micGainRef.current = null;
     sourceRef.current?.disconnect();
     sourceRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
