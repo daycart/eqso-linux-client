@@ -5,12 +5,23 @@
  * Downsamples to 8 kHz using a box-filter averager (anti-aliased) and emits
  * 960-sample (120 ms) chunks so the GSM encoder gets audio at real-time rate.
  *
- * Anti-aliasing: nearest-neighbour decimation (taking every 6th sample)
- * causes severe aliasing — frequencies 4–8 kHz fold back into 0–4 kHz and
- * add noise/distortion. A box-filter averager (mean of `ratio` consecutive
- * samples before decimation) acts as a low-pass FIR with cutoff at
- * ≈ 0.443 × Fs/ratio = 0.443 × 48000/6 ≈ 3 540 Hz — exactly the speech
- * intelligibility band needed by GSM 06.10.
+ * KEY FIX — carry buffer between blocks
+ * ──────────────────────────────────────
+ * If we naively compute outLen = floor(128 / ratio) and consume outLen*ratio
+ * input samples per block, the remaining (128 mod ratio) samples are lost.
+ * For ratio=6: 128/6=21.33 → 21 outputs × 6 = 126 consumed, 2 DISCARDED.
+ * Discarded samples are replaced by the START of the NEXT block, creating a
+ * tiny phase discontinuity every 2.67 ms (375 Hz), which produces an audible
+ * artefact at 375 Hz — heard as "metallic / distorted" speech.
+ *
+ * Fix: maintain a carry buffer (≤ ratio-1 samples) that is prepended to the
+ * next block. This way EVERY input sample is used and the downsampled stream
+ * is contiguous, producing exactly 48000/ratio = 8000 samples/sec output.
+ *
+ * Anti-aliasing: box-filter averaging (mean of `ratio` consecutive samples)
+ * acts as a FIR low-pass with cutoff ≈ 0.443 × Fs/ratio ≈ 3 540 Hz (for
+ * 48 kHz, ratio 6). This prevents aliasing of 4–8 kHz content into the
+ * speech band — a known problem with plain nearest-neighbour decimation.
  */
 class MicProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -23,10 +34,12 @@ class MicProcessor extends AudioWorkletProcessor {
     } = options.processorOptions;
 
     this._ratio        = nativeRate / targetRate;  // e.g. 6.0
+    this._iRatio       = Math.round(this._ratio);  // integer step, e.g. 6
     this._chunkSamples = chunkSamples;
     this._warmupBlocks = warmupBlocks;
     this._blockCount   = 0;
-    this._accum        = new Float32Array(0);
+    this._carry        = new Float32Array(0);  // unconsumed samples from prev block
+    this._accum        = new Float32Array(0);  // output accumulator (8 kHz samples)
     this._logEvery     = Math.round(nativeRate / 128);  // ~1 s worth of blocks
     this._logCounter   = 0;
     this._peakAccum    = 0;
@@ -43,7 +56,7 @@ class MicProcessor extends AudioWorkletProcessor {
     // --- Warmup: discard first N blocks so mic hardware stabilises ----------
     if (this._blockCount <= this._warmupBlocks) return true;
 
-    // --- Level tracking -----------------------------------------------------
+    // --- Level tracking (at 48 kHz, before downsampling) -------------------
     for (let i = 0; i < input.length; i++) {
       const a = Math.abs(input[i]);
       if (a > this._peakAccum) this._peakAccum = a;
@@ -61,24 +74,28 @@ class MicProcessor extends AudioWorkletProcessor {
       this._rmsCount   = 0;
     }
 
-    // --- Anti-aliased downsampling (box-filter averaging + decimation) ------
-    // For each output sample, average `ratio` consecutive input samples.
-    // This is a FIR low-pass with cutoff ≈ Fs/(2*ratio) = 4 000 Hz (at 48 kHz,
-    // ratio=6), preventing aliasing of 4–8 kHz content into the speech band.
-    const ratio  = this._ratio;
-    const iRatio = Math.round(ratio);          // integer step (6 for 48→8 kHz)
-    const outLen = Math.floor(input.length / ratio);
+    // --- Anti-aliased downsampling with carry buffer ------------------------
+    // Prepend leftover samples from the previous block so no sample is lost.
+    const iRatio  = this._iRatio;
+    const combined = new Float32Array(this._carry.length + input.length);
+    combined.set(this._carry);
+    combined.set(input, this._carry.length);
+
+    const outLen = Math.floor(combined.length / iRatio);
     const ds     = new Float32Array(outLen);
 
     for (let i = 0; i < outLen; i++) {
       const start = i * iRatio;
       let sum = 0;
-      const end = Math.min(start + iRatio, input.length);
-      for (let j = start; j < end; j++) sum += input[j];
-      ds[i] = sum / (end - start);
+      for (let j = start; j < start + iRatio; j++) sum += combined[j];
+      ds[i] = sum / iRatio;
     }
 
-    // --- Accumulate ---------------------------------------------------------
+    // Save unconsumed tail for the next block (< iRatio samples)
+    const consumed  = outLen * iRatio;
+    this._carry     = combined.slice(consumed);
+
+    // --- Accumulate output samples -----------------------------------------
     const merged = new Float32Array(this._accum.length + outLen);
     merged.set(this._accum);
     merged.set(ds, this._accum.length);

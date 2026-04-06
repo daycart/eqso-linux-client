@@ -46,13 +46,13 @@ const MAX_QUEUE_AHEAD_SEC = 1.5;
 // Gain applied to mic input before encoding.
 // autoGainControl is disabled (see getUserMedia below) so we apply gain here.
 // Raw mic output (no AGC) is typically 0.003–0.15 peak Float32 depending on
-// hardware.  ×4 is a moderate boost: quiet mics reach ~0.012–0.06 peak; loud
-// mics reach up to ~0.6 — below the soft clipper ceiling (see below).
+// hardware.  ×8 boost: quiet mics (0.003 peak) reach ~0.024 (usable for GSM);
+// typical mics (0.05 peak) reach ~0.40; loud mics clamp via the tanh clipper.
 // We removed the DynamicsCompressor: Chrome applies automatic make-up gain
 // that can push the output above 1.0 Float32 → hard clipping at the Int16
 // conversion step → severe distortion.  Instead we use a WaveShaperNode with
 // a tanh(2×x)/tanh(2) curve that saturates gracefully around ±0.9.
-const MIC_BOOST_GAIN = 4;
+const MIC_BOOST_GAIN = 8;
 
 /** Build a 4096-point tanh soft-clipper curve for a WaveShaperNode. */
 function buildSoftClipCurve(): Float32Array {

@@ -41,11 +41,11 @@ The eQSO server implements the binary protocol reverse-engineered from OSQe:
 
 ## TX Audio Pipeline (Browser)
 
-Cadena: `MediaStream → micGain(×4) → WaveShaperNode(tanh soft-clip) → AnalyserNode → AudioWorkletNode(mic-processor)`
+Cadena: `MediaStream → micGain(×8) → WaveShaperNode(tanh soft-clip) → AnalyserNode → AudioWorkletNode(mic-processor)`
 
-- **AudioWorklet** (`public/mic-worklet.js`): procesa bloques de 128 muestras en el hilo de audio (2.67ms@48kHz). **Anti-aliasing**: promedia `ratio` muestras consecutivas antes de decimar (box-filter FIR, corte ≈3.5kHz para 48→8kHz), eliminando distorsión por aliasing del contenido 4-8kHz. Acumula 960 muestras → emite chunk cada ~122ms ≈ real-time.
+- **AudioWorklet** (`public/mic-worklet.js`): procesa bloques de 128 muestras en el hilo de audio (2.67ms@48kHz). **Anti-aliasing**: box-filter FIR (media de `ratio` muestras consecutivas antes de decimar, corte ≈3.5kHz para 48→8kHz). **Carry buffer entre bloques**: 128 mod 6 = 2 muestras sobrantes se propagaban al siguiente bloque. Sin esto, se descartan 2 muestras cada 2.67ms → discontinuidad a 375Hz → artefacto tonal audible ("voz distorsionada"). Con carry buffer, TODAS las muestras se usan y la tasa de salida es exactamente 8000Hz.
 - **Warmup**: 0.5s descartado en el worklet (≈188 bloques) para que el hardware del micrófono se estabilice.
-- **WaveShaperNode (soft-clipper tanh)**: curva tanh(2x)/tanh(2), oversample="4x". Reemplaza DynamicsCompressor (Chrome aplica make-up gain automático que empujaba la señal >1.0 Float32 → hard clipping severo al convertir a Int16). El tanh limita suavemente sin pumping ni artefactos.
+- **WaveShaperNode (soft-clipper tanh)**: curva tanh(2x)/tanh(2), oversample="4x". Reemplaza DynamicsCompressor (Chrome aplica make-up gain automático que empujaba la señal >1.0 Float32 → hard clipping severo al convertir a Int16). El tanh limita suavemente sin pumping ni artefactos. Gain ×8 (nivel suficiente para VOX de la radio receptora).
 - **Cadena de timing**: PTT start → worklet warmup 500ms → chunks cada 122ms → servidor encode GSM → ASORAPA recibe audio a tiempo real.
 
 ## GSM 06.10 Codec
