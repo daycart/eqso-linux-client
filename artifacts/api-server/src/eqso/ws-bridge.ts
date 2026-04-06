@@ -27,7 +27,6 @@ import { gsmDecodePacket } from "./gsm610";
 // Binary opcodes for browser ↔ server WebSocket protocol
 const WS_AUDIO_LOCAL  = 0x01; // local relay: Uint8 unsigned PCM
 const WS_AUDIO_REMOTE = 0x11; // remote RX:   Float32 PCM (decoded from GSM)
-const WS_TX_MONITOR   = 0x12; // TX self-monitor: Float32 PCM (ffmpeg-decoded TX audio, never muted)
 const WS_PCM_TX       = 0x05; // remote TX:   Int16 signed PCM (→ encode to GSM)
 
 const PCM_CHUNK_SAMPLES = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET; // 960 samples per GSM packet
@@ -230,27 +229,8 @@ function handleRemoteMode(
   // ── GSM codec instances (per connection) ───────────────────────────────────
   const decoder = new FfmpegGsmDecoder();
   const encoder = new FfmpegGsmEncoder();
-  // TX self-monitor decoder: reliable ffmpeg-based decode of our own outgoing frames.
-  // The user hears exactly what reaches ASORAPA — confirms codec quality in real time.
-  const selfMonDecoder = new FfmpegGsmDecoder();
   decoder.start();
   encoder.start();
-  selfMonDecoder.start();
-
-  selfMonDecoder.on("pcm", (pcm: Int16Array) => {
-    if (!pttGranted) return; // only emit during active TX
-    const float32 = new Float32Array(pcm.length);
-    let peak = 0;
-    for (let i = 0; i < pcm.length; i++) {
-      const a = Math.abs(pcm[i]);
-      if (a > peak) peak = a;
-      float32[i] = pcm[i] / 32768;
-    }
-    const hdr = Buffer.alloc(1);
-    hdr[0] = WS_TX_MONITOR;
-    sendBin(ws, Buffer.concat([hdr, Buffer.from(float32.buffer)]));
-    logger.info({ samples: pcm.length, peak }, "Remote TX: ffmpeg self-monitor decoded peak");
-  });
 
   // When decoder produces a decoded PCM packet, send it to browser.
   // IMPORTANT: suppress RX output while we are transmitting (PTT active).
@@ -278,24 +258,30 @@ function handleRemoteMode(
   });
 
   // When encoder produces a GSM packet, forward it to the eQSO server
-  // and feed it to the reliable ffmpeg self-monitor decoder.
+  // and send a decoded copy back to the browser as a TX self-monitor.
+  // The self-monitor lets the user hear exactly what reaches the remote radio.
   encoder.on("gsm", (gsm: Buffer) => {
     if (!pttGranted) return; // discard if PTT released mid-frame
     proxy.sendAudio(gsm);
     logger.info({ bytes: gsm.length }, "Remote TX: sent GSM packet");
 
-    // Feed to reliable ffmpeg self-monitor (user hears exactly what ASORAPA receives).
-    selfMonDecoder.decode(Buffer.from(gsm.buffer, gsm.byteOffset, gsm.byteLength));
-
-    // JS decoder peak log (known to underreport by ~7-16×, kept for rough diagnostics).
+    // TX self-monitor: decode our outgoing GSM and play it in the browser.
+    // This confirms whether the codec is producing intelligible audio.
     try {
       const monPcm = gsmDecodePacket(new Uint8Array(gsm.buffer, gsm.byteOffset, gsm.byteLength));
       let monPeak = 0;
+      const float32 = new Float32Array(monPcm.length);
       for (let i = 0; i < monPcm.length; i++) {
+        float32[i] = monPcm[i] / 32768;
         if (Math.abs(monPcm[i]) > monPeak) monPeak = Math.abs(monPcm[i]);
       }
-      logger.info({ monPeak }, "Remote TX: self-monitor JS peak (underreports ~7-16x)");
-    } catch { /* ignore */ }
+      logger.info({ monPeak }, "Remote TX: self-monitor decoded peak");
+      const hdr = Buffer.alloc(1);
+      hdr[0] = WS_AUDIO_REMOTE;
+      sendBin(ws, Buffer.concat([hdr, Buffer.from(float32.buffer)]));
+    } catch (err) {
+      logger.warn({ err }, "Remote TX: self-monitor decode error");
+    }
   });
 
   // Session parameters saved so we can auto-re-join on reconnect.
@@ -406,7 +392,7 @@ function handleRemoteMode(
             const a = Math.abs(newSamples[i]);
             if (a > peak) peak = a;
           }
-          logger.info({ samples: newSamples.length, peak, peakPct: ((peak / 32767) * 100).toFixed(1) + "%" }, "Remote TX: PCM from browser");
+          logger.debug({ samples: newSamples.length, peak, peakPct: ((peak / 32767) * 100).toFixed(1) + "%" }, "Remote TX: PCM from browser");
         }
 
         // Merge into accumulation buffer
@@ -493,7 +479,6 @@ function handleRemoteMode(
       pcmAccum = new Int16Array(0);
       decoder.stop();
       encoder.stop();
-      selfMonDecoder.stop();
       proxy.disconnect();
     },
   };

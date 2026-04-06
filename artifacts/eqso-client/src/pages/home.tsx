@@ -12,9 +12,6 @@ export default function HomePage() {
   const eqso = useEqsoClient(
     useCallback((data: ArrayBuffer, isFloat32: boolean) => {
       audioRef.current?.playAudio(data, isFloat32);
-    }, []),
-    useCallback((data: ArrayBuffer) => {
-      audioRef.current?.playMonitor(data);
     }, [])
   );
   const [callsign, setCallsign] = useState("");
