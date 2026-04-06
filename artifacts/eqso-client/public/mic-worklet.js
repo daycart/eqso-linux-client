@@ -14,13 +14,13 @@
  * ── Gain tuning ──────────────────────────────────────────────────────────
  * autoGainControl=true in getUserMedia lets the OS normalise the mic to a
  * consistent level (typically 15–25 % FS for this hardware).  Our fixed
- * gain×3 then brings it to 45–75 % FS — ideal for GSM 06.10.  At loud
- * speech the tanh soft-clips gracefully to ~87 % FS, activating radio VOX.
+ * gain×1.5 brings it to 22–38 % FS — clean input for GSM 06.10 without
+ * tanh harmonic distortion.  Radio VOX activates reliably at these levels.
  *
- *   OS-normalised mic peak ~0.18: tanh(3×0.18)=tanh(0.54)=0.514 → 51 %
- *   OS-normalised mic peak ~0.25: tanh(3×0.25)=tanh(0.75)=0.635 → 64 %
- *   OS-normalised mic peak ~0.40: tanh(3×0.40)=tanh(1.20)=0.834 → 83 %
- *   OS-normalised mic peak ~0.45: tanh(3×0.45)=tanh(1.35)=0.876 → 88 %
+ *   OS-normalised mic peak ~0.18: tanh(1.5×0.18)=tanh(0.27)=0.263 → 26 %
+ *   OS-normalised mic peak ~0.25: tanh(1.5×0.25)=tanh(0.38)=0.363 → 36 %
+ *   OS-normalised mic peak ~0.40: tanh(1.5×0.40)=tanh(0.60)=0.537 → 54 %
+ *   OS-normalised mic peak ~0.67: tanh(1.5×0.67)=tanh(1.00)=0.762 → 76 %
  *
  * ── Warmup ────────────────────────────────────────────────────────────────
  * The first 80 ms of mic audio is discarded to absorb the hardware startup
@@ -50,10 +50,10 @@ class MicProcessor extends AudioWorkletProcessor {
     this._accum         = new Float32Array(0);
     this._pendingEmit   = null;
 
-    // gain=3: brings OS-normalised mic (15–25 % FS) to 45–75 % FS.
-    // The soft-knee limiter below keeps the output below 0.90 FS even at
-    // very loud speech. Loud speech reaches ~85 % FS → activates radio VOX.
-    this._gain = 3;
+    // gain=1.5: brings OS-normalised mic (15–25 % FS) to 22–38 % FS.
+    // Lower gain avoids tanh harmonic distortion that makes voice unintelligible;
+    // the codec's VOX threshold is low enough to activate at these levels.
+    this._gain = 1.5;
 
     // Level logging: once per second at 8 kHz
     this._logEvery  = Math.round(nativeRate / 128); // ~375 process blocks/s
