@@ -62,9 +62,10 @@ class MicProcessor extends AudioWorkletProcessor {
 
     // ── Carrier 200 Hz ───────────────────────────────────────────────────
     // Mantiene el VOX de ASORAPA activo durante los silencios entre palabras.
-    // Amplitud 5% (0.05) — suficiente para VOX, imperceptible bajo el ruido
-    // de radio. Clamp a ±1.0 después de sumar, evita hard clip.
-    this._carrierAmp   = 0.05;
+    // Amplitud 8% (0.08) — igual que v8 (versión que funcionaba). Con el clamp
+    // a ±1.0, la distorsión ocurre SOLO si voz_peak + carrier > 1.0 (en los
+    // picos más altos), y queda truncada suavemente — no cuadra onda completa.
+    this._carrierAmp   = 0.08;
     this._carrierFreq  = 200; // Hz
     this._carrierPhase = 0;
     this._carrierStep  = (2 * Math.PI * this._carrierFreq) / (nativeRate / this._iRatio);
@@ -203,4 +204,4 @@ class MicProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('mic-processor-v14', MicProcessor);
+registerProcessor('mic-processor-v15', MicProcessor);
