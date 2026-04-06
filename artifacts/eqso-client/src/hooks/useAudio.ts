@@ -78,9 +78,38 @@ export function useAudio(): UseAudioReturn {
   }, [getOrCreateCtx]);
 
   /**
+   * Tear down the mic chain (source → analyser → worklet → silentSink).
+   * Called when the mic track ends (device disconnected/switched) so the next
+   * PTT press runs getUserMedia again against the new hardware.
+   */
+  const releaseMic = useCallback(() => {
+    if (levelTimerRef.current !== null) {
+      cancelAnimationFrame(levelTimerRef.current);
+      levelTimerRef.current = null;
+    }
+    try { processorRef.current?.port.postMessage({ type: "emit", emitting: false }); } catch { /* ignore */ }
+    try { processorRef.current?.disconnect(); } catch { /* ignore */ }
+    try { analyserRef.current?.disconnect(); } catch { /* ignore */ }
+    try { sourceRef.current?.disconnect(); } catch { /* ignore */ }
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    processorRef.current  = null;
+    analyserRef.current   = null;
+    sourceRef.current     = null;
+    streamRef.current     = null;
+    micInitializedRef.current  = false;
+    micInitPromiseRef.current  = null;
+    setInputLevel(0);
+    console.debug("[audio] mic released — will re-init on next PTT");
+  }, []);
+
+  /**
    * Initialize the microphone and audio worklet chain ONCE per session.
    * The worklet runs continuously in "silent" mode (emitting=false) between
    * PTT presses — no getUserMedia delay on subsequent presses.
+   *
+   * If the user plugs/unplugs headphones the track fires onended → releaseMic()
+   * resets all refs → the very next PTT call runs getUserMedia against the new
+   * hardware automatically.
    */
   const initMicOnce = useCallback(async (mode: "local" | "remote"): Promise<void> => {
     if (micInitializedRef.current) return;
@@ -105,6 +134,13 @@ export function useAudio(): UseAudioReturn {
         console.debug(`[audio] mic granted: ${tracks.length} track(s)`, tracks.map(t => t.label));
         setIsMicAllowed(true);
         streamRef.current = stream;
+
+        // When the OS switches the audio device (e.g. user plugs in headphones)
+        // the active track fires "ended" and its samples become all-zeros.
+        // Release the dead chain so the next PTT calls getUserMedia afresh.
+        tracks.forEach(track => {
+          track.onended = () => releaseMic();
+        });
 
         const ctx = getOrCreateCtx();
         if (ctx.state === "suspended") ctx.resume().catch(() => {});
@@ -215,7 +251,7 @@ export function useAudio(): UseAudioReturn {
 
     micInitPromiseRef.current = doInit();
     return micInitPromiseRef.current;
-  }, [getOrCreateCtx]);
+  }, [getOrCreateCtx, releaseMic]);
 
   /**
    * Start recording — open the mic (first call only) then signal the worklet
@@ -234,6 +270,17 @@ export function useAudio(): UseAudioReturn {
     accumLocalRef.current = new Uint8Array(0);
     accumRemoteRef.current = new Int16Array(0);
 
+    // If the mic was already open but the track ended (e.g. user plugged in
+    // headphones after the first PTT), the stream produces all-zeros.  Detect
+    // this before signalling the worklet and force a re-init with the new device.
+    if (micInitializedRef.current && streamRef.current) {
+      const dead = streamRef.current.getAudioTracks().some(t => t.readyState === "ended");
+      if (dead) {
+        console.debug("[audio] mic track ended — releasing for re-init");
+        releaseMic();
+      }
+    }
+
     // Initialize mic if not done yet (first PTT only; subsequent calls are instant)
     await initMicOnce(mode);
 
@@ -249,7 +296,7 @@ export function useAudio(): UseAudioReturn {
     }
 
     setIsRecording(true);
-  }, [initMicOnce]);
+  }, [initMicOnce, releaseMic]);
 
   /**
    * Stop recording — signal the worklet to stop emitting.
@@ -354,6 +401,22 @@ export function useAudio(): UseAudioReturn {
       ctxRef.current?.close();
     };
   }, [teardown]);
+
+  // When the user plugs or unplugs headphones/speakers the browser fires
+  // devicechange.  Release the old mic chain so the next PTT press captures
+  // audio from the newly selected default device.  Without this, the stream
+  // keeps pointing at the stale (possibly ended) track and delivers silence.
+  useEffect(() => {
+    const onDeviceChange = () => {
+      if (!micInitializedRef.current) return;
+      console.debug("[audio] devicechange — releasing mic for re-init");
+      releaseMic();
+    };
+    navigator.mediaDevices.addEventListener("devicechange", onDeviceChange);
+    return () => {
+      navigator.mediaDevices.removeEventListener("devicechange", onDeviceChange);
+    };
+  }, [releaseMic]);
 
   return {
     isRecording,
