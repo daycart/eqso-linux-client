@@ -1,33 +1,37 @@
 /**
  * MicProcessor — AudioWorkletProcessor for real-time mic capture.
  *
- * Signal chain:
- *   input (48 kHz) → AGC (with warmup calibration) → box-filter decimation
- *   (48→8 kHz) → accumulate 960 samples → emit chunk
+ * The worklet runs CONTINUOUSLY once the mic is open (for the whole session).
+ * PTT state is controlled via port messages:
+ *   { type: 'emit', emitting: true }  → start posting chunks
+ *   { type: 'emit', emitting: false } → stop posting chunks (mic stays open)
  *
- * ── Automatic Gain Control ────────────────────────────────────────────────
- * A one-pole peak follower adjusts gain sample-by-sample:
+ * ── Signal chain ──────────────────────────────────────────────────────────
+ *   input (48 kHz) → fixed gain + tanh soft-clip → box-filter decimation
+ *   (48→8 kHz) → accumulate 960 samples → emit chunk (when emitting=true)
  *
- *   peakEnv ← max(|x|, α_atk) or min(|x|, α_rel)   (fast attack, slow release)
- *   gain    ← TARGET / peakEnv  (clamped, then smoothed)
+ * ── Why fixed gain instead of AGC ────────────────────────────────────────
+ * An AGC gain follower releases slowly during pauses between words.  After
+ * a 300 ms inter-word pause the gain can shoot to ×40 (max clamped).  When
+ * the next word starts, tanh(40 × 0.4) = 1.0 — a full-scale transient that
+ * the GSM 06.10 predictor cannot track, producing a loud burst artefact and
+ * then silence.  A fixed gain avoids this entirely: the codec receives
+ * natural speech dynamics with no gain transients.
  *
- * CRITICAL: the AGC runs DURING THE WARMUP period so that by the time
- * real audio is emitted the gain has already converged for this mic.
- * Without this, every PTT press starts with gain=initial and the first
- * second of audio blasts at full level, then drops — which kills the radio
- * VOX because the level drops below its threshold after the first burst.
- *
- * TARGET_PEAK = 0.55 Float32 ≈ −5 dBFS: matches the level that a typical
- * Windows eQSO client sends, triggering the repeater VOX reliably.
+ * ── Warmup ────────────────────────────────────────────────────────────────
+ * The first 80 ms of mic audio is discarded to absorb the hardware startup
+ * pop/click.  After warmup the worklet posts { type: 'ready' } and begins
+ * honouring PTT start requests.  Any 'emit: true' message received DURING
+ * warmup is queued and applied immediately when warmup finishes.
  *
  * ── Anti-aliased downsampling ─────────────────────────────────────────────
- * Box-filter (mean of `ratio` consecutive samples) is a FIR low-pass at
+ * Box-filter (mean of ratio consecutive samples) is a FIR low-pass at
  * ≈ 3 540 Hz for 48→8 kHz, preventing aliasing of 4–8 kHz content.
  *
  * ── Carry buffer ─────────────────────────────────────────────────────────
  * 128 mod 6 = 2 samples would be discarded per block without this buffer,
- * creating a 375 Hz phase discontinuity (metallic artefact).  The carry
- * buffer prepends them to the next block so every sample is used.
+ * creating a 375 Hz phase discontinuity.  The carry buffer prepends them to
+ * the next block so every sample is used.
  */
 class MicProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -39,44 +43,40 @@ class MicProcessor extends AudioWorkletProcessor {
       warmupBlocks,
     } = options.processorOptions;
 
-    this._ratio        = nativeRate / targetRate;
-    this._iRatio       = Math.round(this._ratio);
-    this._chunkSamples = chunkSamples;
-    this._warmupBlocks = warmupBlocks;
-    this._blockCount   = 0;
-    this._carry        = new Float32Array(0);
-    this._accum        = new Float32Array(0);
+    this._iRatio        = Math.round(nativeRate / targetRate);
+    this._chunkSamples  = chunkSamples;
+    this._warmupBlocks  = warmupBlocks;
+    this._blockCount    = 0;
+    this._emitting      = false;
+    this._warmupDone    = false;
+    this._carry         = new Float32Array(0);
+    this._accum         = new Float32Array(0);
 
-    // ── AGC parameters ───────────────────────────────────────────────────
-    // Fast attack (5 ms) so the envelope catches loud transients quickly.
-    // Slow release (400 ms) so the gain doesn't pump between words.
-    // Gain smoothing (30 ms) prevents zipper noise on rapid gain changes.
-    const ATK_TC     = 0.005;
-    const REL_TC     = 0.400;
-    const SMOOTH_TC  = 0.030;
-    this._atkAlpha   = Math.exp(-1 / (nativeRate * ATK_TC));
-    this._relAlpha   = Math.exp(-1 / (nativeRate * REL_TC));
-    this._smAlpha    = Math.exp(-1 / (nativeRate * SMOOTH_TC));
+    // Fixed gain × tanh soft-clip.
+    // At this user's mic level (raw peak ≈ 0.15 Float32), gain=4 gives:
+    //   tanh(4 × 0.15) = 0.54 Float32  →  ~17 700 Int16 (54 % FS)
+    // This is well within the GSM codec's comfortable operating range
+    // and reliably triggers a CB radio VOX/COS at the repeater.
+    this._gain = 4.0;
 
-    // Target output peak (Float32, post-tanh).
-    // 0.55 ≈ -5 dBFS — matches a typical Windows eQSO client level and
-    // reliably triggers a CB radio VOX/COS.
-    this._target     = 0.55;
-    this._gainMin    = 0.05;
-    this._gainMax    = 40.0;
+    // Level logging (posted once per second)
+    this._logEvery  = Math.round(nativeRate / 128);
+    this._logCount  = 0;
+    this._logPeak   = 0;
+    this._logRmsAcc = 0;
+    this._logRmsCnt = 0;
 
-    // Start with a conservative envelope so the first desired gain is
-    // reasonable (≈ 1) instead of slamming to GAIN_MAX.
-    // The gain will rise to the correct value within the warmup period.
-    this._peakEnv    = this._target;   // pretend level = target → gain ≈ 1.0
-    this._agcGain    = 1.0;
-
-    // ── Level logging ────────────────────────────────────────────────────
-    this._logEvery   = Math.round(nativeRate / 128);
-    this._logCounter = 0;
-    this._logPeak    = 0;
-    this._logRmsAcc  = 0;
-    this._logRmsCnt  = 0;
+    this.port.onmessage = (ev) => {
+      if (ev.data?.type === 'emit') {
+        if (this._warmupDone) {
+          this._emitting = ev.data.emitting;
+        } else {
+          // Warmup still running — remember intent, apply after warmup
+          this._pendingEmit = ev.data.emitting;
+        }
+      }
+    };
+    this._pendingEmit = null;
   }
 
   process(inputs) {
@@ -84,55 +84,50 @@ class MicProcessor extends AudioWorkletProcessor {
     if (!input || input.length === 0) return true;
 
     this._blockCount++;
-    const isWarmup = this._blockCount <= this._warmupBlocks;
 
-    // ── AGC (runs even during warmup to pre-calibrate) ──────────────────
+    // ── Warmup: discard audio, absorb mic startup pop ─────────────────────
+    if (this._blockCount <= this._warmupBlocks) {
+      if (this._blockCount === this._warmupBlocks) {
+        this._warmupDone = true;
+        if (this._pendingEmit !== null) {
+          this._emitting = this._pendingEmit;
+          this._pendingEmit = null;
+        }
+        this.port.postMessage({ type: 'ready' });
+      }
+      return true;
+    }
+
+    // ── Apply fixed gain + tanh soft-clip ────────────────────────────────
     const gained = new Float32Array(input.length);
     for (let i = 0; i < input.length; i++) {
-      const raw    = input[i];
-      const absRaw = Math.abs(raw);
+      gained[i] = Math.tanh(this._gain * input[i]);
+    }
 
-      // Peak envelope follower
-      if (absRaw > this._peakEnv) {
-        this._peakEnv = absRaw + this._atkAlpha * (this._peakEnv - absRaw);
-      } else {
-        this._peakEnv = absRaw + this._relAlpha * (this._peakEnv - absRaw);
+    // ── Level log (only while emitting, once per second) ─────────────────
+    if (this._emitting) {
+      for (let i = 0; i < gained.length; i++) {
+        const a = Math.abs(gained[i]);
+        if (a > this._logPeak) this._logPeak = a;
+        this._logRmsAcc += gained[i] * gained[i];
+        this._logRmsCnt++;
       }
-
-      // Desired gain → smooth toward it
-      const desired = Math.min(this._gainMax,
-                      Math.max(this._gainMin,
-                        this._target / Math.max(this._peakEnv, 0.0001)));
-      this._agcGain = desired + this._smAlpha * (this._agcGain - desired);
-
-      // Apply gain + tanh soft-clip
-      gained[i] = Math.tanh(this._agcGain * raw);
+      this._logCount++;
+      if (this._logCount >= this._logEvery) {
+        this.port.postMessage({
+          type: 'level',
+          rms:  Math.sqrt(this._logRmsAcc / this._logRmsCnt),
+          peak: this._logPeak,
+          gain: this._gain,
+        });
+        this._logCount  = 0;
+        this._logPeak   = 0;
+        this._logRmsAcc = 0;
+        this._logRmsCnt = 0;
+      }
     }
 
-    // During warmup: calibrate AGC but do not emit audio
-    if (isWarmup) return true;
-
-    // ── Level log ────────────────────────────────────────────────────────
-    for (let i = 0; i < gained.length; i++) {
-      const a = Math.abs(gained[i]);
-      if (a > this._logPeak) this._logPeak = a;
-      this._logRmsAcc += gained[i] * gained[i];
-      this._logRmsCnt++;
-    }
-    this._logCounter++;
-    if (this._logCounter >= this._logEvery) {
-      const rms = Math.sqrt(this._logRmsAcc / this._logRmsCnt);
-      this.port.postMessage({
-        type: 'level',
-        rms,
-        peak: this._logPeak,
-        gain: this._agcGain,
-      });
-      this._logCounter = 0;
-      this._logPeak    = 0;
-      this._logRmsAcc  = 0;
-      this._logRmsCnt  = 0;
-    }
+    if (!this._emitting) return true;
 
     // ── Box-filter downsampling with carry buffer ─────────────────────────
     const iRatio   = this._iRatio;
