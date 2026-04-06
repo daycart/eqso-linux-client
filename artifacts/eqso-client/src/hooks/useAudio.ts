@@ -183,8 +183,17 @@ export function useAudio(): UseAudioReturn {
           }
         };
 
+        // The worklet must be connected to something for Chrome to keep the
+        // audio graph alive, but we MUST NOT connect it to ctx.destination —
+        // that would play the raw mic audio through the speakers and create
+        // an acoustic echo/feedback loop.  A muted GainNode acts as a silent
+        // sink that satisfies the Web Audio engine without any audible output.
+        const silentSink = ctx.createGain();
+        silentSink.gain.value = 0;
+        silentSink.connect(ctx.destination);
+
         analyser.connect(workletNode);
-        workletNode.connect(ctx.destination);
+        workletNode.connect(silentSink);
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
         const updateLevel = () => {
