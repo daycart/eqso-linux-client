@@ -163,7 +163,7 @@ export function useAudio(): UseAudioReturn {
 
         // Version suffix forces the browser to bypass the service-worker / HTTP
         // cache and fetch the latest worklet whenever this constant is bumped.
-        const WORKLET_VERSION = "6";
+        const WORKLET_VERSION = "7";
         const workletUrl = import.meta.env.BASE_URL + "mic-worklet.js?v=" + WORKLET_VERSION;
         try {
           await ctx.audioWorklet.addModule(workletUrl);
@@ -172,7 +172,7 @@ export function useAudio(): UseAudioReturn {
         }
 
         const warmupBlocks = Math.round(TX_WARMUP_SECONDS * nativeRate / 128);
-        const workletNode = new AudioWorkletNode(ctx, "mic-processor-v6", {
+        const workletNode = new AudioWorkletNode(ctx, "mic-processor-v7", {
           processorOptions: {
             nativeRate,
             targetRate:   GSM_RATE,
@@ -193,7 +193,7 @@ export function useAudio(): UseAudioReturn {
 
           if (msg.type === "level") {
             console.debug(
-              `[audio] TX mic (gain×${msg.gain?.toFixed(0)})`,
+              `[audio] TX mic AGC gain=${msg.gain?.toFixed(1)}`,
               `rms8k=${msg.rms?.toFixed(4)} peak8k=${msg.peak?.toFixed(4)} rate=${nativeRate}`
             );
             return;

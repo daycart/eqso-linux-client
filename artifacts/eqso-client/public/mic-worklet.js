@@ -1,21 +1,26 @@
 /**
- * MicProcessor — AudioWorkletProcessor for real-time mic capture.
+ * MicProcessor v7 — AudioWorkletProcessor with Automatic Gain Control (AGC).
  *
  * ── Signal chain ──────────────────────────────────────────────────────────
  *   input (native rate) → box-filter decimation to 8 kHz
- *   → fixed gain → soft clip at 95 % FS (tanh)
+ *   → AGC (adaptive gain, attack 800ms / release 80ms)
+ *   → soft clip at tanh
  *   → accumulate chunks → emit (when emitting=true)
  *
- * ── Why NO VOX noise floor ───────────────────────────────────────────────
- * Injecting pseudo-random noise during silence makes the GSM LPC encoder
- * produce wideband excitation vectors that decode as loud noise at the radio.
- * The Windows eQSO client sends silence between words and the radio VOX hold
- * timer keeps the channel keyed.  We do the same.
+ * ── Why AGC ───────────────────────────────────────────────────────────────
+ * Fixed gain fails because microphone sensitivity varies enormously between
+ * users and devices (factor of 30× observed in tests):
+ *   - gain=2  → rms8k=0.012 → too quiet for radio VOX (threshold ~5%)
+ *   - gain=6  → rms8k=0.37  → hard clipping → square wave → GSM noise
+ * AGC keeps output RMS at a target level regardless of mic sensitivity.
+ * tanh prevents hard clipping even if AGC momentarily overshoots.
  *
- * ── Gain ─────────────────────────────────────────────────────────────────
- * gain=2: brings typical mic voice (10–30 % FS raw) to 20–55 % FS post-tanh.
- * This avoids constant clipping that hardens the signal into a square wave.
- * The user can raise their OS mic volume if the signal is too quiet.
+ * ── AGC parameters ────────────────────────────────────────────────────────
+ * Target RMS output: 0.22 (22% FS) — well above typical VOX thresholds
+ * Attack:  800 ms — slow gain increase avoids amplifying breath/pops
+ * Release: 80  ms — fast gain decrease protects against clipping on loud input
+ * Max gain: 80  — for very quiet mics (0.003 FS raw → 0.22 FS output)
+ * Min gain: 0.3 — for very loud mics (headset close to mouth)
  *
  * ── Warmup ────────────────────────────────────────────────────────────────
  * The first 80 ms of mic audio is discarded to absorb the hardware startup
@@ -45,11 +50,19 @@ class MicProcessor extends AudioWorkletProcessor {
     this._accum         = new Float32Array(0);
     this._pendingEmit   = null;
 
-    // gain=2: typical mic voice reaches 20-55 % FS → clean GSM encoding.
-    // Raising to 3-4 increases loudness but adds more harmonic distortion.
-    this._gain = 2;
+    // ── AGC state ─────────────────────────────────────────────────────────
+    // Process() runs every 128/nativeRate seconds (≈2.67 ms at 48 kHz).
+    // Time constants are expressed as per-block exponential decay coefficients.
+    const blockMs = (128 / nativeRate) * 1000;
+    this._agcGain    = 4.0;                             // start at moderate gain
+    this._agcTarget  = 0.22;                            // target RMS output level
+    this._agcMaxGain = 80.0;
+    this._agcMinGain = 0.3;
+    this._agcAttack  = Math.exp(-blockMs / 800);        // 800 ms attack
+    this._agcRelease = Math.exp(-blockMs / 80);         // 80 ms release
+    this._rmsEst     = 0.01;                            // running RMS estimate
 
-    // Level logging: once per second (measured at 48 kHz process-block rate)
+    // Level logging: once per second
     this._logEvery  = Math.round(nativeRate / 128);
     this._logCount  = 0;
     this._logPeak   = 0;
@@ -62,6 +75,9 @@ class MicProcessor extends AudioWorkletProcessor {
           // Flush stale audio accumulated while PTT was off
           this._carry = new Float32Array(0);
           this._accum = new Float32Array(0);
+          // Reset RMS estimate so AGC starts fresh each PTT press
+          this._rmsEst = 0.01;
+          this._agcGain = 4.0;
         }
         if (this._warmupDone) {
           this._emitting = ev.data.emitting;
@@ -107,10 +123,28 @@ class MicProcessor extends AudioWorkletProcessor {
     }
     this._carry = combined.slice(outLen * iRatio);
 
-    // ── Step 2: Apply gain + soft clip (tanh) ────────────────────────────
-    // gain=2 keeps peaks below 97 % FS for normal speech — avoids square-wave
-    // clipping that degrades GSM LPC analysis.
-    const g = this._gain;
+    // ── Step 2: AGC — measure block RMS and adjust gain ───────────────────
+    let sumSq = 0;
+    for (let i = 0; i < outLen; i++) sumSq += ds[i] * ds[i];
+    const blockRms = outLen > 0 ? Math.sqrt(sumSq / outLen) : 0;
+
+    // Smooth RMS estimate with release time constant to track signal envelope
+    this._rmsEst = this._rmsEst * this._agcRelease + blockRms * (1 - this._agcRelease);
+    if (this._rmsEst < 1e-7) this._rmsEst = 1e-7; // avoid divide-by-zero
+
+    const neededGain = this._agcTarget / this._rmsEst;
+
+    if (neededGain < this._agcGain) {
+      // Signal is louder than target → release (fast): decrease gain
+      this._agcGain = this._agcGain * this._agcRelease + neededGain * (1 - this._agcRelease);
+    } else {
+      // Signal is quieter than target → attack (slow): increase gain
+      this._agcGain = this._agcGain * this._agcAttack + neededGain * (1 - this._agcAttack);
+    }
+    this._agcGain = Math.max(this._agcMinGain, Math.min(this._agcMaxGain, this._agcGain));
+
+    // ── Step 3: Apply AGC gain + tanh soft clip ───────────────────────────
+    const g = this._agcGain;
     for (let i = 0; i < outLen; i++) {
       ds[i] = Math.tanh(g * ds[i]);
     }
@@ -129,7 +163,7 @@ class MicProcessor extends AudioWorkletProcessor {
           type: 'level',
           rms:  Math.sqrt(this._logRmsAcc / Math.max(1, this._logRmsCnt)),
           peak: this._logPeak,
-          gain: this._gain,
+          gain: this._agcGain,
         });
         this._logCount  = 0;
         this._logPeak   = 0;
@@ -156,4 +190,4 @@ class MicProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('mic-processor-v6', MicProcessor);
+registerProcessor('mic-processor-v7', MicProcessor);
