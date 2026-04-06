@@ -82,6 +82,13 @@ const WS_AUDIO_REMOTE = 0x11; // remote RX:   Float32 PCM decoded from GSM
 const WS_PCM_TX       = 0x05; // remote TX:   Int16 signed PCM → GSM encode on server
 
 function getWsUrl(): string {
+  // Build-time override: set the VITE_API_WS_URL secret in GitHub Actions
+  // (or any CI) to point the GitHub Pages build at your deployed API server.
+  // Example: wss://mi-servidor.example.com/ws
+  if (import.meta.env.VITE_API_WS_URL) {
+    return import.meta.env.VITE_API_WS_URL as string;
+  }
+  // Default: same host + base path (works in Replit and self-hosted setups)
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   const host = window.location.host;
   const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";

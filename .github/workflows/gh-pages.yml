@@ -1,0 +1,67 @@
+name: Publicar cliente en GitHub Pages
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Compilar cliente
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10.26.1"
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Compilar cliente web
+        run: pnpm --filter @workspace/eqso-client run build
+        env:
+          NODE_ENV: production
+          # PORT es requerido por vite.config.ts (usado solo en modo dev)
+          PORT: "8080"
+          # BASE_PATH: debe coincidir con el nombre del repositorio en GitHub Pages
+          BASE_PATH: /eqso-linux-client/
+          # URL del servidor API WebSocket (opcional).
+          # Configúrala como secreto VITE_API_WS_URL en tu repositorio GitHub:
+          #   Settings → Secrets and variables → Actions → New repository secret
+          # Ejemplo: wss://tu-servidor.example.com/ws
+          VITE_API_WS_URL: ${{ secrets.VITE_API_WS_URL }}
+
+      - name: Subir artefacto
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: artifacts/eqso-client/dist/public
+
+  deploy:
+    name: Publicar en GitHub Pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Desplegar en GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
