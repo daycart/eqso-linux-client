@@ -121,10 +121,11 @@ export class FfmpegGsmEncoder extends EventEmitter {
       "-probesize", "32", "-analyzeduration", "0",
       "-f", "s16le", "-ar", "8000", "-ac", "1",
       "-i", "pipe:0",
-      // Telephony bandpass: 300–3400 Hz is the GSM/PSTN intelligibility window.
-      // Removed acompressor: it adds ~200 ms of buffering latency and causes
-      // pumping artifacts. Gain is now applied client-side (MIC_BOOST_GAIN).
-      "-af", "highpass=f=300,lowpass=f=3400",
+      // No audio filter: GSM 06.10 is inherently bandpass 300–3400 Hz.
+      // IIR filters (highpass/lowpass) caused ffmpeg to buffer samples internally
+      // and flush in bursts of 3 GSM packets at once, creating 372 ms gaps
+      // followed by 3-packet bursts → ASORAPA audio buffer starved → radio lost.
+      // Level normalisation is done client-side (DynamicsCompressor + ×8 gain).
       "-f", "gsm", "-ar", "8000",
       "pipe:1",
     ], { stdio: ["pipe", "pipe", "pipe"] });
@@ -143,10 +144,17 @@ export class FfmpegGsmEncoder extends EventEmitter {
     this.proc.stdout.on("data", (chunk: Buffer) => {
       this.accumulator = Buffer.concat([this.accumulator, chunk]);
       // Emit complete 198-byte / 6-frame GSM packets to callers
+      let emitted = 0;
       while (this.accumulator.length >= GSM_PACKET_BYTES) {
         const gsmBuf = Buffer.from(this.accumulator.slice(0, GSM_PACKET_BYTES));
         this.accumulator = this.accumulator.slice(GSM_PACKET_BYTES);
         this.emit("gsm", gsmBuf);
+        emitted++;
+      }
+      // Log bursts: >1 packet from one stdout event means the filter/codec
+      // is buffering internally. With no filter this should always be 1.
+      if (emitted > 1) {
+        logger.warn({ emitted, chunkBytes: chunk.length }, "ffmpeg GSM encoder: burst output — packets emitted in one event");
       }
     });
 
