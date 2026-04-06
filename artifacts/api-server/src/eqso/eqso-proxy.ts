@@ -232,6 +232,7 @@ export class EqsoProxy extends EventEmitter {
   private silenceTimer: ReturnType<typeof setInterval> | null = null;
   private transmitting = false;
   private destroyed = false;           // set by disconnect() — no more reconnects
+  private sessionReady = false;        // true only after handshake confirmed — gate for audio writes
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -265,6 +266,7 @@ export class EqsoProxy extends EventEmitter {
     // Reset parser state for fresh connection
     this.parser = new EqsoPacketParser();
     this.handshakeDone = false;
+    this.sessionReady = false;
     this.transmitting = false;
 
     const sock = new net.Socket();
@@ -290,6 +292,7 @@ export class EqsoProxy extends EventEmitter {
 
     sock.on("close", () => {
       this.connected = false;
+      this.sessionReady = false;
       this.stopSilenceFrames();
       logger.info({ host: this.host }, "eQSO proxy TCP closed");
       this.scheduleReconnect();
@@ -297,6 +300,7 @@ export class EqsoProxy extends EventEmitter {
 
     sock.on("error", (err) => {
       this.connected = false;
+      this.sessionReady = false;
       this.stopSilenceFrames();
       logger.warn({ err, host: this.host }, "eQSO proxy TCP error");
       // The "close" event fires after "error" so reconnect is handled there.
@@ -366,16 +370,20 @@ export class EqsoProxy extends EventEmitter {
   }
 
   /**
-   * Send one GSM audio frame (33 bytes) to the eQSO server.
-   * eQSO protocol: [0x01][33 bytes] per frame, 50 frames/second.
-   * DO NOT bundle multiple frames — the server/radio-link expects the
-   * 20 ms cadence of individual frames to keep the audio decodable.
+   * Send one GSM audio packet (198 bytes = 6 frames) to the eQSO server.
+   * eQSO protocol: [0x01][198 bytes] per packet.
+   * ASORAPA expects exactly 198 bytes after 0x01 — sending 33 bytes
+   * corrupts the parser and causes ECONNRESET within seconds.
    */
   sendAudio(data: Buffer): void {
-    const GSM_FRAME_BYTES = 33;
-    const frameData = data.length >= GSM_FRAME_BYTES
-      ? data.slice(0, GSM_FRAME_BYTES)
-      : Buffer.concat([data, Buffer.alloc(GSM_FRAME_BYTES - data.length)]);
+    if (!this.sessionReady) {
+      logger.debug("sendAudio: dropped — session not ready (handshake pending)");
+      return;
+    }
+    const AUDIO_BYTES = 198;
+    const frameData = data.length >= AUDIO_BYTES
+      ? data.slice(0, AUDIO_BYTES)
+      : Buffer.concat([data, Buffer.alloc(AUDIO_BYTES - data.length)]);
     const pkt = Buffer.concat([Buffer.from([0x01]), frameData]);
     this.socketWrite(pkt);
   }
@@ -428,6 +436,7 @@ export class EqsoProxy extends EventEmitter {
       case 0x0a:
         if (!this.handshakeDone) {
           this.handshakeDone = true;
+          this.sessionReady = true;   // ungate audio writes — session is now valid
           logger.info({ hex: pkt.toString("hex") }, "eQSO proxy: handshake from server");
           this.emit("event", { type: "connected" } as ProxyEvent);
           // Start sending 0x02 silence heartbeats now that handshake is done

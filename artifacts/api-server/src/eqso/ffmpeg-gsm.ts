@@ -46,13 +46,13 @@ logger.info({ ENCODER_BIN, DECODER_BIN }, "ffmpeg GSM codec binary paths resolve
 
 export const GSM_FRAME_BYTES    = 33;
 export const GSM_FRAME_SAMPLES  = 160;
-// eQSO protocol: one GSM frame (33 bytes) per audio packet — 50 packets/s at 20ms/frame.
-// The Windows eQSO client sends [0x01][33 bytes] every 20 ms, not 6 frames bundled.
-// Sending 6-frame blocks (198 bytes) every 120 ms produces carrier without audio at the radio.
-export const FRAMES_PER_PACKET  = 1;
-export const GSM_PACKET_BYTES   = GSM_FRAME_BYTES * FRAMES_PER_PACKET;     // 33
-export const PCM_PACKET_BYTES   = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET * 2; // 320
-export const AUDIO_PAYLOAD_SIZE = 198; // eQSO TCP packet payload still 198 bytes on receive
+// eQSO protocol: [0x01][198 bytes = 6 GSM frames] per audio packet at ~8.3 pkt/s (120ms/packet).
+// ASORAPA's parser expects exactly 198 bytes after each 0x01 opcode.
+// Sending individual 33-byte frames corrupts ASORAPA's protocol state → ECONNRESET.
+export const FRAMES_PER_PACKET  = 6;
+export const GSM_PACKET_BYTES   = GSM_FRAME_BYTES * FRAMES_PER_PACKET;     // 198
+export const PCM_PACKET_BYTES   = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET * 2; // 1920
+export const AUDIO_PAYLOAD_SIZE = 198; // eQSO TCP audio payload size (RX and TX)
 
 // ---------------------------------------------------------------------------
 // FfmpegGsmDecoder: GSM bytes → Int16 PCM samples
