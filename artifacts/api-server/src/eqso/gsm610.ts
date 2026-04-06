@@ -659,6 +659,9 @@ export const GSM_FRAME_SAMPLES = 160;
 export const FRAMES_PER_PACKET = 6;
 export const GSM_PACKET_BYTES  = GSM_FRAME_BYTES * FRAMES_PER_PACKET; // 198
 
+// Export classes for per-connection instances
+export { GsmEncoder, GsmDecoder };
+
 // Module-level stateful instances (one encoder, one decoder per server process)
 const globalEncoder = new GsmEncoder();
 const globalDecoder = new GsmDecoder();
