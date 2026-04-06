@@ -2,29 +2,28 @@
  * MicProcessor — AudioWorkletProcessor for real-time mic capture.
  *
  * ── Signal chain ──────────────────────────────────────────────────────────
- *   input (48 kHz) → box-filter decimation (48→8 kHz)
- *   → AGC (slow-attack/slow-release, target RMS = 35% FS)
- *   → tanh soft-clip (hard ceiling ±1)
+ *   input (48 kHz) → box-filter decimation (48→8 kHz, raw signal)
+ *   → fixed gain × tanh soft-clip (at 8 kHz)
  *   → accumulate 960 samples → emit chunk (when emitting=true)
  *
- * ── Why AGC instead of fixed gain ────────────────────────────────────────
- * With autoGainControl:false the raw mic level depends entirely on
- * hardware sensitivity — can range from 1 % to 30 % FS.  A fixed gain
- * that is good for a loud mic will over-compress a quiet one, and vice
- * versa.  A slow-attack/slow-release AGC gives consistent output while
- * avoiding the "pumping on word gaps" artifact of a fast AGC.
+ * ── Why downsample BEFORE tanh ───────────────────────────────────────────
+ * tanh applied at 48 kHz generates harmonics above 4 kHz; the box-filter
+ * then folds them back into the 0–4 kHz band (aliasing distortion).
+ * Downsampling first keeps tanh harmonics above the GSM Nyquist (4 kHz).
  *
- *   Attack  200 ms — follows rising speech envelope without chasing syllables
- *   Release 4 000 ms — does not pump up gain during short pauses
- *   Max gain × 60 — enough for even very quiet laptop mics
- *   Min gain × 1  — never attenuates (tanh handles peaks)
+ * ── Gain tuning ──────────────────────────────────────────────────────────
+ * autoGainControl=true in getUserMedia lets the OS normalise the mic to a
+ * consistent level (typically 15–25 % FS for this hardware).  Our fixed
+ * gain×3 then brings it to 45–75 % FS — ideal for GSM 06.10.  At loud
+ * speech the tanh soft-clips gracefully without pumping artefacts.
  *
- * tanh is applied AFTER downsampling (at 8 kHz).  This avoids aliasing:
- * harmonics from tanh clipping are at 8 kHz multiples (above GSM Nyquist).
+ *   OS-normalised mic peak ~0.18: tanh(3×0.18)=tanh(0.54)=0.514 → 51 %
+ *   OS-normalised mic peak ~0.25: tanh(3×0.25)=tanh(0.75)=0.635 → 64 %
+ *   OS-normalised mic peak ~0.40: tanh(3×0.40)=tanh(1.20)=0.834 → 83 %
  *
  * ── Warmup ────────────────────────────────────────────────────────────────
  * The first 80 ms of mic audio is discarded to absorb the hardware startup
- * pop/click and let the AGC settle.
+ * pop/click.  After warmup the worklet posts { type: 'ready' }.
  *
  * ── Carry buffer ─────────────────────────────────────────────────────────
  * 128 mod 6 = 2 samples would be discarded per block without this buffer,
@@ -41,7 +40,6 @@ class MicProcessor extends AudioWorkletProcessor {
     } = options.processorOptions;
 
     this._iRatio        = Math.round(nativeRate / targetRate);
-    this._targetRate    = targetRate;
     this._chunkSamples  = chunkSamples;
     this._warmupBlocks  = warmupBlocks;
     this._blockCount    = 0;
@@ -51,19 +49,14 @@ class MicProcessor extends AudioWorkletProcessor {
     this._accum         = new Float32Array(0);
     this._pendingEmit   = null;
 
-    // ── AGC state ─────────────────────────────────────────────────────────
-    // Target RMS at 8 kHz output (post-AGC, pre-tanh): 35 % FS.
-    // GSM 06.10 works well with 20–70 % FS; 35 % gives headroom for peaks.
-    this._agcTarget  = 0.35;
-    this._agcGain    = 8;           // start at ×8; adapts quickly on first TX
-    this._agcRmsEst  = 0;           // exponential RMS envelope
-    // Time-constants (in 8 kHz samples)
-    this._agcAttackTC  = 0.200 * targetRate; // 200 ms
-    this._agcReleaseTC = 4.000 * targetRate; // 4 s
+    // Fixed gain applied at 8 kHz (after downsampling).
+    // Works best when getUserMedia uses autoGainControl:true so the OS
+    // normalises the mic before we apply our boost.
+    this._gain = 3;
 
-    // Level logging (once per second at 8 kHz)
-    this._logEvery  = targetRate;   // samples counted at 8 kHz
-    this._logSamples = 0;
+    // Level logging: once per second at 8 kHz
+    this._logEvery  = Math.round(nativeRate / 128); // ~375 process blocks/s
+    this._logCount  = 0;
     this._logPeak   = 0;
     this._logRmsAcc = 0;
     this._logRmsCnt = 0;
@@ -104,6 +97,7 @@ class MicProcessor extends AudioWorkletProcessor {
     }
 
     // ── Step 1: Box-filter downsample 48 kHz → 8 kHz (raw signal) ────────
+    // Downsample BEFORE applying gain+tanh to avoid aliasing of clip harmonics.
     const iRatio   = this._iRatio;
     const combined = new Float32Array(this._carry.length + input.length);
     combined.set(this._carry);
@@ -119,35 +113,13 @@ class MicProcessor extends AudioWorkletProcessor {
     }
     this._carry = combined.slice(outLen * iRatio);
 
-    // ── Step 2: AGC — track envelope, adjust gain slowly ─────────────────
-    // Compute RMS of this small frame at 8 kHz
-    let frameRmsSq = 0;
-    for (let i = 0; i < outLen; i++) frameRmsSq += ds[i] * ds[i];
-    const frameRms = Math.sqrt(frameRmsSq / Math.max(1, outLen));
-
-    // Exponential smoothing (attack faster than release)
-    const dtSamples = outLen;
-    // alpha = 1 - e^(-dt/TC); for small TC use approximation
-    const atkAlpha = 1 - Math.exp(-dtSamples / this._agcAttackTC);
-    const relAlpha = 1 - Math.exp(-dtSamples / this._agcReleaseTC);
-    const alpha = (frameRms > this._agcRmsEst) ? atkAlpha : relAlpha;
-    this._agcRmsEst += alpha * (frameRms - this._agcRmsEst);
-
-    // Desired gain to reach target RMS; clamp to [1, 60]
-    const desired = this._agcTarget / Math.max(0.001, this._agcRmsEst);
-    const clamped = Math.min(60, Math.max(1, desired));
-
-    // Smooth the gain itself (same attack/release as RMS) to avoid clicks
-    const gainAlpha = (clamped < this._agcGain) ? atkAlpha : relAlpha;
-    this._agcGain += gainAlpha * (clamped - this._agcGain);
-
-    // ── Step 3: Apply AGC gain + tanh limiter at 8 kHz ───────────────────
-    const g = this._agcGain;
+    // ── Step 2: Apply fixed gain + tanh at 8 kHz ─────────────────────────
+    const g = this._gain;
     for (let i = 0; i < outLen; i++) {
       ds[i] = Math.tanh(g * ds[i]);
     }
 
-    // ── Level log (once per second, post-AGC+tanh) ────────────────────────
+    // ── Level log (once per second at 48 kHz process-block rate) ─────────
     if (this._emitting) {
       for (let i = 0; i < outLen; i++) {
         const a = Math.abs(ds[i]);
@@ -155,18 +127,18 @@ class MicProcessor extends AudioWorkletProcessor {
         this._logRmsAcc += ds[i] * ds[i];
         this._logRmsCnt++;
       }
-      this._logSamples += outLen;
-      if (this._logSamples >= this._logEvery) {
+      this._logCount++;
+      if (this._logCount >= this._logEvery) {
         this.port.postMessage({
-          type:   'level',
-          rms:    Math.sqrt(this._logRmsAcc / Math.max(1, this._logRmsCnt)),
-          peak:   this._logPeak,
-          agcGain: Math.round(this._agcGain * 10) / 10,
+          type: 'level',
+          rms:  Math.sqrt(this._logRmsAcc / Math.max(1, this._logRmsCnt)),
+          peak: this._logPeak,
+          gain: this._gain,
         });
-        this._logSamples = 0;
-        this._logPeak    = 0;
-        this._logRmsAcc  = 0;
-        this._logRmsCnt  = 0;
+        this._logCount  = 0;
+        this._logPeak   = 0;
+        this._logRmsAcc = 0;
+        this._logRmsCnt = 0;
       }
     }
 

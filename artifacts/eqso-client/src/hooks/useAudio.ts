@@ -123,11 +123,12 @@ export function useAudio(): UseAudioReturn {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             channelCount: 1,
-            // Disable OS AGC: the worklet applies its own fixed gain×tanh soft-clip.
-            // With autoGainControl=true the OS boosts the mic to near-saturation
-            // before our worklet sees it, causing double-amplification and heavy
-            // tanh clipping → distorted, "crushed" audio at the radio.
-            autoGainControl: false,
+            // Let the OS normalise the mic level (autoGainControl=true).
+            // The OS brings the mic to ~15–25 % FS; our worklet then applies
+            // a fixed gain×3 + tanh to reach 50–80 % FS — ideal for GSM.
+            // echoCancellation/noiseSuppression off: radio audio is half-duplex,
+            // no acoustic feedback path to suppress.
+            autoGainControl: true,
             echoCancellation: false,
             noiseSuppression: false,
           },
@@ -186,7 +187,7 @@ export function useAudio(): UseAudioReturn {
 
           if (msg.type === "level") {
             console.debug(
-              `[audio] TX mic AGC×${(msg as any).agcGain?.toFixed(1)}`,
+              `[audio] TX mic (gain×${msg.gain?.toFixed(0)})`,
               `rms8k=${msg.rms?.toFixed(4)} peak8k=${msg.peak?.toFixed(4)} rate=${nativeRate}`
             );
             return;
