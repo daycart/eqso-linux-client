@@ -10,7 +10,11 @@
   },
   "private": true,
   "devDependencies": {
-    "typescript": "~5.9.2",
-    "prettier": "^3.8.1"
+    "prettier": "^3.8.1",
+    "typescript": "~5.9.2"
+  },
+  "dependencies": {
+    "@octokit/rest": "^22.0.1",
+    "@replit/connectors-sdk": "^0.3.0"
   }
 }
