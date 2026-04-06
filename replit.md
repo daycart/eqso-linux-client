@@ -52,13 +52,30 @@ Cadena: `MediaStream → micGain(×8) → WaveShaperNode(tanh soft-clip) → Ana
 
 Audio uses GSM 06.10 (libgsm) codec: 198 bytes / 120ms / 8 kHz mono.
 
-**Implementation**: `artifacts/api-server/src/eqso/ffmpeg-gsm.ts`
-- `FfmpegGsmDecoder`: streaming ffmpeg process (GSM → PCM). Pre-started at connection, ~500ms startup, <10ms per packet.
-- `FfmpegGsmEncoder`: streaming ffmpeg process (PCM → GSM). Same timing.
-- The old TypeScript hand-rolled implementation (`gsm610.ts`) was 55x too quiet and had 0 dB SNR encoder. Replaced by ffmpeg/libgsm via piped child processes.
-- ffmpeg command decode: `ffmpeg -probesize 32 -f gsm -ar 8000 -i pipe:0 -f s16le -ar 8000 pipe:1`
-- ffmpeg command encode: `ffmpeg -probesize 32 -f s16le -ar 8000 -ac 1 -i pipe:0 -f gsm -ar 8000 pipe:1`
-- Round-trip SNR: 20.1 dB. Decoder peak: 3568/32768 (~-19 dBFS). Browser gain node: 3x → ~-9 dBFS comfortable listening.
+**TX Encoder**: `TsGsmEncoder` (`gsm610.ts` + `ffmpeg-gsm.ts`)
+- Pure TypeScript, synchronous per-frame encoding using the `GsmEncoder` class.
+- Emits `"gsm"` event immediately (no buffering). Critical for real-time TX.
+- `FfmpegGsmEncoder` was abandoned: ffmpeg internal pipe requires ~50+ packets before flushing — unusable for real-time audio.
+
+**RX Decoder**: `FfmpegGsmDecoder` (`ffmpeg-gsm.ts`)
+- Streaming ffmpeg process (GSM → PCM Int16). Pre-started at connection.
+- Peaks 2000–7480 (healthy speech levels). Pure-TS decoder had bugs (silent audio).
+- ffmpeg command: `ffmpeg -probesize 32 -f gsm -ar 8000 -i pipe:0 -f s16le -ar 8000 pipe:1`
+
+## PTT Race Condition Fix
+
+`pttPendingRef` + `pendingAudioRef` (max 8 chunks) in `useEqsoClient.ts`:
+- Audio chunks arriving before `ptt_granted` are buffered (not dropped).
+- On `ptt_granted`: buffered chunks are flushed in order, then normal streaming continues.
+- Buffer cleared on `ptt_released`, `ptt_denied`, disconnect, WS `onclose`.
+
+## Production Deployment
+
+- **API server**: Replit — `wss://code-translator-linux.replit.app/ws`
+- **Web client**: GitHub Pages — `https://daycart.github.io/eqso-linux-client/`
+  - Deployed via GitHub Actions CI/CD on push to `daycart/eqso-linux-client` main branch.
+  - Client changes must be pushed via GitHub API (bash, not code_execution).
+  - Build requires `PORT` and `BASE_PATH` env vars (handled by CI).
 
 ## Key Commands
 

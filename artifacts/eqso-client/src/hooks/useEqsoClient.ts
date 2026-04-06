@@ -112,6 +112,8 @@ export function useEqsoClient(
   const [activeSpeaker, setActiveSpeaker] = useState<string | null>(null);
   const [pttGranted, setPttGranted] = useState(false);
   const pttGrantedRef = useRef(false);
+  const pttPendingRef = useRef(false);        // ptt_start sent, waiting for ptt_granted
+  const pendingAudioRef = useRef<ArrayBuffer[]>([]); // audio buffered before ptt_granted
   const [channelBusy, setChannelBusy] = useState(false);
   const [selectedServer, setSelectedServer] = useState<EqsoServer>(KNOWN_SERVERS[0]);
   const selectedServerRef = useRef<EqsoServer>(KNOWN_SERVERS[0]);
@@ -157,6 +159,8 @@ export function useEqsoClient(
         break;
 
       case "ptt_released":
+        pttPendingRef.current = false;
+        pendingAudioRef.current = [];
         pttGrantedRef.current = false;
         setPttGranted(false);
         break;
@@ -166,13 +170,32 @@ export function useEqsoClient(
         setChannelBusy(false);
         break;
 
-      case "ptt_granted":
+      case "ptt_granted": {
+        pttPendingRef.current = false;
         pttGrantedRef.current = true;
         setPttGranted(true);
         setChannelBusy(false);
+        // Flush audio buffered while waiting for grant
+        const queued = pendingAudioRef.current.splice(0);
+        if (queued.length > 0) {
+          const ws = wsRef.current;
+          const isRemote = selectedServerRef.current.mode === "remote";
+          const opcode = isRemote ? WS_PCM_TX : WS_AUDIO_LOCAL;
+          for (const data of queued) {
+            const payload = new Uint8Array(data);
+            const pkt = new Uint8Array(1 + payload.length);
+            pkt[0] = opcode;
+            pkt.set(payload, 1);
+            if (ws && ws.readyState === WebSocket.OPEN) ws.send(pkt.buffer);
+          }
+          console.debug("[eqso] ptt_granted: flushed", queued.length, "buffered audio chunks");
+        }
         break;
+      }
 
       case "ptt_denied":
+        pttPendingRef.current = false;
+        pendingAudioRef.current = [];
         pttGrantedRef.current = false;
         setPttGranted(false);
         setChannelBusy(true);
@@ -281,6 +304,8 @@ export function useEqsoClient(
     setCurrentName(null);
     setMembers([]);
     setActiveSpeaker(null);
+    pttPendingRef.current = false;
+    pendingAudioRef.current = [];
     pttGrantedRef.current = false;
     setPttGranted(false);
 
@@ -318,6 +343,8 @@ export function useEqsoClient(
       setCurrentName(null);
       setMembers([]);
       setActiveSpeaker(null);
+      pttPendingRef.current = false;
+      pendingAudioRef.current = [];
       pttGrantedRef.current = false;
       setPttGranted(false);
     };
@@ -335,6 +362,8 @@ export function useEqsoClient(
     setCurrentRoom(null);
     setCurrentName(null);
     setMembers([]);
+    pttPendingRef.current = false;
+    pendingAudioRef.current = [];
     pttGrantedRef.current = false;
     setPttGranted(false);
     pendingJoinRef.current = null;
@@ -350,25 +379,39 @@ export function useEqsoClient(
   const pttStart = useCallback(() => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    pttPendingRef.current = true;
+    pendingAudioRef.current = [];
     ws.send(JSON.stringify({ type: "ptt_start" }));
   }, []);
 
   const pttEnd = useCallback(() => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    pttPendingRef.current = false;
+    pendingAudioRef.current = [];
     ws.send(JSON.stringify({ type: "ptt_end" }));
   }, []);
 
   const sendAudio = useCallback((data: ArrayBuffer) => {
     const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN || !pttGrantedRef.current) {
-      console.debug("[eqso] sendAudio dropped — ws:", ws?.readyState, "pttGranted:", pttGrantedRef.current);
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      console.debug("[eqso] sendAudio dropped — ws:", ws?.readyState);
+      return;
+    }
+
+    // Buffer audio while waiting for ptt_granted (max 8 chunks = ~1 second)
+    if (!pttGrantedRef.current) {
+      if (pttPendingRef.current) {
+        if (pendingAudioRef.current.length < 8) {
+          pendingAudioRef.current.push(data.slice(0));
+        }
+      } else {
+        console.debug("[eqso] sendAudio dropped — pttGranted: false");
+      }
       return;
     }
 
     const isRemote = selectedServerRef.current.mode === "remote";
-    // Remote: [0x05][Int16 PCM] — server will GSM-encode and relay
-    // Local:  [0x01][Uint8 PCM] — server relays as-is
     const opcode = isRemote ? WS_PCM_TX : WS_AUDIO_LOCAL;
     const payload = new Uint8Array(data);
     const pkt = new Uint8Array(1 + payload.length);

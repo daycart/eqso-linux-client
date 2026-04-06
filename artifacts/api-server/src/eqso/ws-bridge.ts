@@ -17,7 +17,7 @@ import {
 import { EqsoProxy, ProxyEvent } from "./eqso-proxy";
 import {
   FfmpegGsmDecoder,
-  FfmpegGsmEncoder,
+  TsGsmEncoder,
   GSM_FRAME_SAMPLES,
   FRAMES_PER_PACKET,
   GSM_PACKET_BYTES,
@@ -207,9 +207,9 @@ function handleRemoteMode(
   // PCM accumulation buffer for TX: browser sends Int16 PCM chunks
   let pcmAccum = new Int16Array(0);
 
-  // ── FFmpeg GSM codec instances (per connection) ─────────────────────────────
+  // ── GSM codec instances (per connection) ───────────────────────────────────
   const decoder = new FfmpegGsmDecoder();
-  const encoder = new FfmpegGsmEncoder();
+  const encoder = new TsGsmEncoder();
   decoder.start();
   encoder.start();
 
