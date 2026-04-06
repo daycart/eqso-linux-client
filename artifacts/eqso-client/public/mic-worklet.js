@@ -1,29 +1,33 @@
 /**
- * MicProcessor v13 — AGC sin portadora, maxGain=80, gain no se resetea al iniciar PTT.
+ * MicProcessor v14 — AGC + portadora 200 Hz al 5% con clamp a ±1.0.
  *
  * ── Diagnóstico ───────────────────────────────────────────────────────────
  * El micrófono del usuario produce ~0.003 RMS FS (muy silencioso).
- * Con maxGain=12 (v11), la salida era solo 3-4% FS — insuficiente para
- * mantener el VOX del enlace radio de ASORAPA activo.
- * Con maxGain=80 (v10), el gain llegaba a 58-67 y el tanh saturaba, pero
- * el PROBLEMA REAL era la portadora de 200 Hz: portadora(8%) + tanh(~96%)
- * superaba 1.0 → hard clip → distorsión de cuadrado → GSM = ruido.
+ * maxGain=80 amplifica la voz hasta 15-25% RMS FS.
  *
- * ── Solución v12 ─────────────────────────────────────────────────────────
- * maxGain=80, SIN portadora. tanh nunca puede superar ±1.0 (asíntota),
- * así que es IMPOSIBLE el hard clip independientemente del gain aplicado.
- * El VOX del enlace radio recibirá señal de 15-25% RMS FS → se mantiene
- * activo durante toda la transmisión.
+ * ── Por qué la portadora es necesaria ─────────────────────────────────────
+ * Sin portadora (v12/v13), durante los silencios entre palabras el nivel de
+ * salida cae a ~2-5% FS — por debajo del umbral VOX de ASORAPA — y el
+ * transmisor de radio se desactiva. La portadora mantiene un nivel mínimo de
+ * señal (~5% FS) en todo momento para que el VOX no se suelte.
+ *
+ * ── Por qué la portadora causaba ruido en v10 ─────────────────────────────
+ * En v10: `ds[i] = Math.tanh(g * ds[i]) + 0.08 * sin(...)`.
+ * Con tanh saturado a ~0.97, sumando 0.08 = 1.05 → EXCEDE ±1.0 → hard clip
+ * → onda cuadrada → GSM codifica artefactos → ruido audible.
+ *
+ * ── Solución v14 ──────────────────────────────────────────────────────────
+ * `ds[i] = clamp(Math.tanh(g * ds[i]) + 0.05 * sin(...), -1.0, 1.0)`.
+ * El clamp garantiza que el total nunca excede ±1.0. La portadora al 5%
+ * mantiene el VOX durante silencios. La voz no distorsiona porque el tanh
+ * peak típico es 0.85-0.95 → suma 0.05 = 0.90-1.00 → dentro del rango.
  *
  * ── AGC ──────────────────────────────────────────────────────────────────
- * Attack:   10 ms — muy rápido: baja el gain en un frame cuando llega voz
- * Release: 300 ms — sube lento para no dispararse en pausas entre palabras
- * Target:  0.22 RMS (22% FS) — nivel óptimo para VOX y claridad de voz
- * Max gain:  80  — necesario para micrófonos silenciosos (RMS ~ 0.003 FS)
- * Min gain: 0.3  — atenúa micrófonos muy calientes
- *
- * ── Warmup ────────────────────────────────────────────────────────────────
- * Los primeros 80 ms se descartan para absorber el pop/click de inicio.
+ * Attack:   10 ms  — baja el gain rápido cuando llega voz fuerte
+ * Release: 300 ms  — sube lento para no amplificar pausa->voz
+ * Target:  0.22 RMS (22% FS)
+ * Max gain:  80    — necesario para micrófonos muy silenciosos (~0.003 RMS)
+ * Min gain: 0.3    — atenúa micrófonos muy calientes
  */
 class MicProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -46,17 +50,24 @@ class MicProcessor extends AudioWorkletProcessor {
     this._pendingEmit   = null;
 
     // ── AGC parameters ────────────────────────────────────────────────────
-    // blockMs: duration in ms of each AudioWorklet block (128 samples / nativeRate)
     const blockMs        = (128 / nativeRate) * 1000;
     this._agcTarget  = 0.22;
     this._agcMaxGain = 80.0;
     this._agcMinGain = 0.3;
-    this._agcAttack  = Math.exp(-blockMs / 10);    // 10 ms attack  (muy rapido — evita saturacion en primeros frames)
-    this._agcRelease = Math.exp(-blockMs / 300);   // 300 ms release — sube lentamente para no amplificar pausa->voz
-    // Arrancar con gain maximo y rmsEst correspondiente — para micros silenciosos
-    // el gain debe estar en 80 desde el primer frame, no en 4 (que tarda 640ms en subir).
+    this._agcAttack  = Math.exp(-blockMs / 10);
+    this._agcRelease = Math.exp(-blockMs / 300);
+    // Arrancar con gain máximo para que el primer frame ya tenga nivel suficiente
     this._agcGain = this._agcMaxGain;
     this._rmsEst  = this._agcTarget / this._agcMaxGain; // = 0.00275
+
+    // ── Carrier 200 Hz ───────────────────────────────────────────────────
+    // Mantiene el VOX de ASORAPA activo durante los silencios entre palabras.
+    // Amplitud 5% (0.05) — suficiente para VOX, imperceptible bajo el ruido
+    // de radio. Clamp a ±1.0 después de sumar, evita hard clip.
+    this._carrierAmp   = 0.05;
+    this._carrierFreq  = 200; // Hz
+    this._carrierPhase = 0;
+    this._carrierStep  = (2 * Math.PI * this._carrierFreq) / (nativeRate / this._iRatio);
 
     // ── Level logging ─────────────────────────────────────────────────────
     this._logEvery  = Math.round(nativeRate / 128);
@@ -68,11 +79,9 @@ class MicProcessor extends AudioWorkletProcessor {
     this.port.onmessage = (ev) => {
       if (ev.data?.type === 'emit') {
         if (ev.data.emitting) {
-          // Solo limpiar los buffers de audio — NO resetear el gain ni el rmsEst.
-          // El AGC acumula gain=80 durante el silencio pre-PTT. Resetearlo
-          // a 4.0 causaría 640ms de audio silencioso al inicio de cada TX,
-          // haciendo que el VOX de ASORAPA suelte el transmisor antes de que
-          // llegue voz con nivel suficiente.
+          // Solo limpiar buffers — NO resetear gain ni rmsEst.
+          // El AGC mantiene gain=80 durante el silencio pre-PTT; resetearlo
+          // causaría 640ms de audio silencioso al inicio de cada TX.
           this._carry = new Float32Array(0);
           this._accum = new Float32Array(0);
         }
@@ -105,7 +114,6 @@ class MicProcessor extends AudioWorkletProcessor {
     }
 
     // ── Step 1: Box-filter downsample a 8 kHz ─────────────────────────────
-    // Con AudioContext a 8 kHz, iRatio=1 → pass-through, sin decimación.
     const iRatio   = this._iRatio;
     const combined = new Float32Array(this._carry.length + input.length);
     combined.set(this._carry);
@@ -131,21 +139,28 @@ class MicProcessor extends AudioWorkletProcessor {
 
     const neededGain = this._agcTarget / this._rmsEst;
     if (neededGain < this._agcGain) {
-      // Señal más fuerte → bajar gain rápido (attack)
       this._agcGain = this._agcGain * this._agcAttack + neededGain * (1 - this._agcAttack);
     } else {
-      // Señal más débil → subir gain lento (release)
       this._agcGain = this._agcGain * this._agcRelease + neededGain * (1 - this._agcRelease);
     }
     this._agcGain = Math.max(this._agcMinGain, Math.min(this._agcMaxGain, this._agcGain));
 
-    // ── Step 3: Aplicar AGC + tanh soft clip ─────────────────────────────
-    // Con maxGain=12, tanh nunca produce hard-clip (tanh(12*1.0) = 0.9999).
-    // Sin portadora, el output siempre está en (-1.0, 1.0) — nunca se satura.
-    const g = this._agcGain;
+    // ── Step 3: AGC + tanh + portadora + clamp a ±1.0 ───────────────────
+    // Orden de operaciones:
+    //   1. tanh(gain × muestra) → soft-clip, rango (-1, 1)
+    //   2. + portadora 200 Hz 5% → puede exceder ±1.0 levemente
+    //   3. clamp a [-1.0, 1.0]  → evita hard-clip que genera distorsión
+    const g    = this._agcGain;
+    const amp  = this._carrierAmp;
+    const step = this._carrierStep;
+    let phase  = this._carrierPhase;
     for (let i = 0; i < outLen; i++) {
-      ds[i] = Math.tanh(g * ds[i]);
+      const v = Math.tanh(g * ds[i]) + amp * Math.sin(phase);
+      ds[i]   = v > 1.0 ? 1.0 : v < -1.0 ? -1.0 : v;
+      phase  += step;
+      if (phase > 2 * Math.PI) phase -= 2 * Math.PI;
     }
+    this._carrierPhase = phase;
 
     // ── Step 4: Log de nivel (una vez por segundo) ───────────────────────
     if (this._emitting) {
@@ -173,7 +188,6 @@ class MicProcessor extends AudioWorkletProcessor {
     if (!this._emitting) return true;
 
     // ── Step 5: Acumular y emitir chunks de chunkSamples (Float32) ───────
-    // useAudio.ts convierte Float32 → Int16 antes de enviar por WS.
     const merged = new Float32Array(this._accum.length + outLen);
     merged.set(this._accum);
     merged.set(ds, this._accum.length);
@@ -189,4 +203,4 @@ class MicProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('mic-processor-v13', MicProcessor);
+registerProcessor('mic-processor-v14', MicProcessor);
