@@ -167,4 +167,4 @@ class MicProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('mic-processor', MicProcessor);
+registerProcessor('mic-processor-v4', MicProcessor);

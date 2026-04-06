@@ -123,12 +123,13 @@ export function useAudio(): UseAudioReturn {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             channelCount: 1,
-            // Let the OS normalise the mic level (autoGainControl=true).
-            // The OS brings the mic to ~15–25 % FS; our worklet then applies
-            // a fixed gain×3 + tanh to reach 50–80 % FS — ideal for GSM.
-            // echoCancellation/noiseSuppression off: radio audio is half-duplex,
-            // no acoustic feedback path to suppress.
-            autoGainControl: true,
+            // autoGainControl OFF: AGC crushes the noise floor to ~0 during
+            // speech pauses, making the signal intermittent (5% RMS, 27% peak).
+            // This causes VOX-controlled radios to drop PTT between words even
+            // though the average level looks acceptable.  With AGC off the mic
+            // ambient noise is stable (~2-5 % FS raw); our worklet gain×6 + tanh
+            // brings it to ~11-17 % FS — consistently above any VOX threshold.
+            autoGainControl: false,
             echoCancellation: false,
             noiseSuppression: false,
           },
@@ -160,7 +161,7 @@ export function useAudio(): UseAudioReturn {
 
         // Version suffix forces the browser to bypass the service-worker / HTTP
         // cache and fetch the latest worklet whenever this constant is bumped.
-        const WORKLET_VERSION = "3";
+        const WORKLET_VERSION = "4";
         const workletUrl = import.meta.env.BASE_URL + "mic-worklet.js?v=" + WORKLET_VERSION;
         try {
           await ctx.audioWorklet.addModule(workletUrl);
@@ -169,7 +170,7 @@ export function useAudio(): UseAudioReturn {
         }
 
         const warmupBlocks = Math.round(TX_WARMUP_SECONDS * nativeRate / 128);
-        const workletNode = new AudioWorkletNode(ctx, "mic-processor", {
+        const workletNode = new AudioWorkletNode(ctx, "mic-processor-v4", {
           processorOptions: {
             nativeRate,
             targetRate:   GSM_RATE,
