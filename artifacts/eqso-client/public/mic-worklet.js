@@ -14,15 +14,15 @@
  * ── Gain tuning ──────────────────────────────────────────────────────────
  * autoGainControl=true in getUserMedia lets the OS normalise the mic to a
  * consistent level (typically 15–25 % FS for this hardware).  Our fixed
- * gain×3 brings it to 50–96 % FS before GSM encoding.  The tanh soft-clip
- * prevents true saturation and adds mild CB-style compression that improves
- * intelligibility over noise.  Lower gains (<2) leave radio VOX thresholds
- * unsatisfied when the soundcard output at the remote end is uncalibrated.
+ * gain×6 brings voice peaks to 85–96 % FS before GSM encoding.  More
+ * importantly, it lifts the mic silence floor (~1.6 % FS raw) to ~9 % FS
+ * after tanh — enough to hold a VOX-controlled radio keyed between words.
+ * At gain×3 the silence floor was ~4.7 % FS (below most VOX thresholds).
  *
- *   OS-normalised mic peak ~0.18: tanh(3×0.18)=tanh(0.54)=0.514 → 51 %
- *   OS-normalised mic peak ~0.25: tanh(3×0.25)=tanh(0.75)=0.635 → 64 %
- *   OS-normalised mic peak ~0.40: tanh(3×0.40)=tanh(1.20)=0.834 → 83 %
- *   OS-normalised mic peak ~0.67: tanh(3×0.67)=tanh(2.01)=0.965 → 96 %
+ *   OS-normalised mic peak ~0.18: tanh(6×0.18)=tanh(1.08)=0.793 → 79 %
+ *   OS-normalised mic peak ~0.25: tanh(6×0.25)=tanh(1.50)=0.905 → 90 %
+ *   OS-normalised mic peak ~0.40: tanh(6×0.40)=tanh(2.40)=0.984 → 98 %
+ *   Silence floor  raw ~0.016:    tanh(6×0.016)=tanh(0.10)=0.099 →  9.9%
  *
  * ── Warmup ────────────────────────────────────────────────────────────────
  * The first 80 ms of mic audio is discarded to absorb the hardware startup
@@ -52,11 +52,12 @@ class MicProcessor extends AudioWorkletProcessor {
     this._accum         = new Float32Array(0);
     this._pendingEmit   = null;
 
-    // gain=3: brings OS-normalised mic (15–25 % FS) to 51–65 % FS, loud voice
-    // to 83–96 % FS.  tanh soft-clips peaks without hard distortion.  Levels
-    // below ~50 % FS often fail to hold the VOX at remote radio links where
-    // the soundcard output is uncalibrated (confirmed with ffmpeg libgsm encoder).
-    this._gain = 3;
+    // gain=6: brings OS-normalised mic silence (~1.6 % FS raw) to ~9 % FS
+    // after tanh, which keeps VOX-controlled radios keyed during speech pauses.
+    // At gain=3 the silence floor was ~4.7 % FS — below most VOX thresholds,
+    // causing the radio to drop PTT between words.
+    // Voice peaks saturate gently at tanh: raw 0.25 FS → tanh(6×0.25)=0.905=90 %.
+    this._gain = 6;
 
     // Level logging: once per second at 8 kHz
     this._logEvery  = Math.round(nativeRate / 128); // ~375 process blocks/s
