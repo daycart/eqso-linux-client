@@ -322,15 +322,20 @@ export function useAudio(): UseAudioReturn {
    * Call muteRx(true) when PTT starts to prevent acoustic feedback:
    * the mic would otherwise pick up the speaker output and create a loop.
    * Call muteRx(false) when PTT ends to restore normal RX volume.
+   *
+   * Calls getOrCreateCtx() to ensure the GainNode exists even if no RX audio
+   * has played yet — without this, the first muteRx(true) call would be a no-op
+   * because gainNodeRef.current is null until the first playAudio() call.
    */
   const muteRx = useCallback((muted: boolean) => {
+    // Ensure GainNode exists (safe to call from a PTT button-click gesture)
+    const ctx = getOrCreateCtx();
     if (!gainNodeRef.current) return;
     // Smooth ramp (10 ms) to avoid clicks on sudden mute/unmute
-    const ctx = gainNodeRef.current.context;
     const now = ctx.currentTime;
     gainNodeRef.current.gain.cancelScheduledValues(now);
     gainNodeRef.current.gain.setTargetAtTime(muted ? 0 : 3, now, 0.01);
-  }, []);
+  }, [getOrCreateCtx]);
 
   useEffect(() => {
     return () => {
