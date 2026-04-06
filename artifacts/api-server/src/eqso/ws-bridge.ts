@@ -205,13 +205,7 @@ function handleRemoteMode(
   let pttReleasedAt = 0;          // timestamp of last PTT release
   const PTT_MUTE_TAIL_MS = 1500;  // silence RX for 1.5 s after TX ends
 
-  // PTT debounce: absorb rapid tap-release patterns so ASORAPA channel stays
-  // open between short PTT presses (e.g. between words, or mouse/touch bounce).
-  // When browser sends ptt_end, we wait PTT_DEBOUNCE_MS before releasing.
-  // If a new ptt_start arrives within that window, we cancel the release and
-  // continue transmitting seamlessly.  Silence GSM frames are injected during
-  // the hold window to keep the ASORAPA channel alive.
-  const PTT_DEBOUNCE_MS = 3000;
+  // Guard timer: prevents duplicate ptt_end processing within a short window.
   let pttDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   let pttSilenceTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -221,17 +215,15 @@ function handleRemoteMode(
   // PCM accumulation buffer for TX: browser sends Int16 PCM chunks
   let pcmAccum = new Int16Array(0);
 
-  // Perform the actual ASORAPA PTT release after the debounce window expires.
-  // NOTE: the browser is already told ptt_released when ptt_end first arrives
-  // (so the UI resets immediately).  This function only handles the server-side
-  // and eQSO-protocol release.
+  // Release the ASORAPA PTT channel immediately.
+  // Browser is told ptt_released when ptt_end arrives so the UI resets right away.
   const doActualPttRelease = (): void => {
     if (pttSilenceTimer) { clearInterval(pttSilenceTimer); pttSilenceTimer = null; }
     pttGranted = false;
     pttReleasedAt = Date.now();
     pcmAccum = new Int16Array(0);
     proxy.sendPttEnd();
-    logger.info({ name: currentName, muteTailMs: PTT_MUTE_TAIL_MS }, "Remote TX: PTT end (debounce expired) — RX muted for tail window");
+    logger.info({ name: currentName, muteTailMs: PTT_MUTE_TAIL_MS }, "Remote TX: PTT released — RX muted for tail window");
   };
 
   // ── GSM codec instances (per connection) ───────────────────────────────────
@@ -412,12 +404,10 @@ function handleRemoteMode(
           break;
         }
         case "ptt_start":
-          // Cancel any pending debounce release — user re-pressed before the
-          // debounce window expired.  Continue TX seamlessly without sending 0x0d.
+          // Clear guard timer if still ticking from a rapid previous ptt_end.
           if (pttDebounceTimer) {
             clearTimeout(pttDebounceTimer);
             pttDebounceTimer = null;
-            logger.info({ name: currentName }, "Remote TX: PTT re-start during debounce — channel held");
           }
           if (pttSilenceTimer) {
             clearInterval(pttSilenceTimer);
@@ -432,24 +422,16 @@ function handleRemoteMode(
           logger.info({ name: currentName, room: currentRoom }, "Remote TX: PTT start (first voice frame will open channel)");
           break;
         case "ptt_end":
-          // Debounce: delay ASORAPA channel release by PTT_DEBOUNCE_MS.
-          // During the hold window, inject GSM silence frames every 120 ms to
-          // keep ASORAPA from releasing the channel on its own timeout.
-          // If ptt_start arrives within the window, doActualPttRelease is never called.
-          if (pttDebounceTimer) break; // already debouncing — ignore duplicate ptt_end
+          // Release ASORAPA immediately — no silence injection.
+          // Silence frames were causing VOX-controlled radios to drop PTT during
+          // the debounce window because the radio receives silence instead of voice.
+          // Debounce timer still guards against duplicate ptt_end from the browser.
+          if (pttDebounceTimer) break; // already releasing — ignore duplicate
           pttDebounceTimer = setTimeout(() => {
             pttDebounceTimer = null;
-            doActualPttRelease();
-          }, PTT_DEBOUNCE_MS);
-          // Inject silence frames during the debounce window
-          pttSilenceTimer = setInterval(() => {
-            if (pttGranted) {
-              encoder.encode(new Int16Array(PCM_CHUNK_SAMPLES)); // all-zero = silence
-            }
-          }, 120);
-          logger.info({ name: currentName, debounceMs: PTT_DEBOUNCE_MS }, "Remote TX: PTT end debounce started");
-          // Tell the browser PTT is released so its UI resets immediately.
-          // The server keeps pttGranted=true internally until the debounce fires.
+          }, 500); // short guard window only
+          doActualPttRelease();
+          logger.info({ name: currentName }, "Remote TX: PTT end — ASORAPA channel released immediately");
           sendJson(ws, { type: "ptt_released" });
           break;
         case "ping":
