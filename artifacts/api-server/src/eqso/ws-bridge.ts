@@ -14,51 +14,14 @@ import {
   buildServerInfo,
   AUDIO_PAYLOAD_SIZE,
 } from "./protocol";
-import { EventEmitter } from "events";
 import { EqsoProxy, ProxyEvent } from "./eqso-proxy";
 import {
-  GsmEncoder,
-  GsmDecoder,
-  GSM_FRAME_BYTES,
+  FfmpegGsmDecoder,
+  FfmpegGsmEncoder,
   GSM_FRAME_SAMPLES,
   FRAMES_PER_PACKET,
   GSM_PACKET_BYTES,
-} from "./gsm610";
-
-// ── Pure-TS GSM codec wrappers (drop-in replacements for FfmpegGsmDecoder/Encoder) ──
-
-class PureGsmDecoder extends EventEmitter {
-  private dec: GsmDecoder | null = null;
-
-  start(): void { this.dec = new GsmDecoder(); }
-  stop(): void  { this.dec = null; }
-
-  decode(gsmPacket: Buffer): void {
-    if (!this.dec) return;
-    const out = new Int16Array(GSM_FRAME_SAMPLES * FRAMES_PER_PACKET);
-    for (let f = 0; f < FRAMES_PER_PACKET; f++) {
-      const slice = new Uint8Array(gsmPacket.buffer, gsmPacket.byteOffset + f * GSM_FRAME_BYTES, GSM_FRAME_BYTES);
-      out.set(this.dec.decodeFrame(slice), f * GSM_FRAME_SAMPLES);
-    }
-    this.emit("pcm", out);
-  }
-}
-
-class PureGsmEncoder extends EventEmitter {
-  private enc: GsmEncoder | null = null;
-
-  start(): void { this.enc = new GsmEncoder(); }
-  stop(): void  { this.enc = null; }
-
-  encode(pcmPacket: Int16Array): void {
-    if (!this.enc) return;
-    const out = new Uint8Array(GSM_FRAME_BYTES * FRAMES_PER_PACKET);
-    for (let f = 0; f < FRAMES_PER_PACKET; f++) {
-      out.set(this.enc.encodeFrame(pcmPacket.slice(f * GSM_FRAME_SAMPLES, (f + 1) * GSM_FRAME_SAMPLES)), f * GSM_FRAME_BYTES);
-    }
-    this.emit("gsm", Buffer.from(out));
-  }
-}
+} from "./ffmpeg-gsm";
 
 // Binary opcodes for browser ↔ server WebSocket protocol
 const WS_AUDIO_LOCAL  = 0x01; // local relay: Uint8 unsigned PCM
@@ -244,9 +207,9 @@ function handleRemoteMode(
   // PCM accumulation buffer for TX: browser sends Int16 PCM chunks
   let pcmAccum = new Int16Array(0);
 
-  // ── Pure-TS GSM codec instances (per connection) ────────────────────────────
-  const decoder = new PureGsmDecoder();
-  const encoder = new PureGsmEncoder();
+  // ── FFmpeg GSM codec instances (per connection) ─────────────────────────────
+  const decoder = new FfmpegGsmDecoder();
+  const encoder = new FfmpegGsmEncoder();
   decoder.start();
   encoder.start();
 

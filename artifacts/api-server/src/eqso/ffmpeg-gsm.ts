@@ -12,6 +12,11 @@
 import { spawn, ChildProcessWithoutNullStreams } from "child_process";
 import { EventEmitter } from "events";
 import { logger } from "../lib/logger";
+import ffmpegStaticPath from "ffmpeg-static";
+
+// Use the static ffmpeg binary bundled by ffmpeg-static (works in all environments
+// including production containers that don't have a system ffmpeg in PATH).
+const FFMPEG_BIN: string = ffmpegStaticPath ?? "ffmpeg";
 
 export const GSM_FRAME_BYTES    = 33;
 export const GSM_FRAME_SAMPLES  = 160;
@@ -32,7 +37,7 @@ export class FfmpegGsmDecoder extends EventEmitter {
   start(): void {
     if (this.proc) return;
 
-    this.proc = spawn("ffmpeg", [
+    this.proc = spawn(FFMPEG_BIN, [
       "-hide_banner", "-loglevel", "quiet",
       "-probesize", "32", "-analyzeduration", "0",
       "-f", "gsm", "-ar", "8000",
@@ -116,7 +121,7 @@ export class FfmpegGsmEncoder extends EventEmitter {
   start(): void {
     if (this.proc) return;
 
-    this.proc = spawn("ffmpeg", [
+    this.proc = spawn(FFMPEG_BIN, [
       "-hide_banner", "-loglevel", "quiet",
       "-probesize", "32", "-analyzeduration", "0",
       "-f", "s16le", "-ar", "8000", "-ac", "1",
