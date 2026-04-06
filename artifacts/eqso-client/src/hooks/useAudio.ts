@@ -186,7 +186,7 @@ export function useAudio(): UseAudioReturn {
 
           if (msg.type === "level") {
             console.debug(
-              `[audio] TX mic (gain×${msg.gain?.toFixed(2)})`,
+              `[audio] TX mic AGC×${(msg as any).agcGain?.toFixed(1)}`,
               `rms8k=${msg.rms?.toFixed(4)} peak8k=${msg.peak?.toFixed(4)} rate=${nativeRate}`
             );
             return;
