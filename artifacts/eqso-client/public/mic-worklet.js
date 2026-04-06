@@ -3,23 +3,30 @@
  *
  * ── Signal chain ──────────────────────────────────────────────────────────
  *   input (48 kHz) → box-filter decimation (48→8 kHz, raw signal)
- *   → fixed gain × tanh soft-clip (at 8 kHz)
+ *   → gain×3 + soft-knee limiter (at 8 kHz)
  *   → accumulate 960 samples → emit chunk (when emitting=true)
  *
- * ── Why downsample BEFORE tanh ───────────────────────────────────────────
- * tanh applied at 48 kHz generates harmonics above 4 kHz; the box-filter
- * then folds them back into the 0–4 kHz band (aliasing distortion).
- * Downsampling first keeps tanh harmonics above the GSM Nyquist (4 kHz).
+ * ── Why downsample BEFORE limiting ───────────────────────────────────────
+ * Applying nonlinear limiting at 48 kHz generates harmonics above 4 kHz;
+ * the box-filter then folds them back into the 0–4 kHz band (aliasing).
+ * Downsampling first confines any limiter harmonics above GSM Nyquist (4 kHz).
  *
- * ── Gain tuning ──────────────────────────────────────────────────────────
- * autoGainControl=true in getUserMedia lets the OS normalise the mic to a
- * consistent level (typically 15–25 % FS for this hardware).  Our fixed
- * gain×3 then brings it to 45–75 % FS — ideal for GSM 06.10.  At loud
- * speech the tanh soft-clips gracefully without pumping artefacts.
+ * ── Gain + soft-knee limiter ─────────────────────────────────────────────
+ * autoGainControl=true normalises the mic to ~15–25 % FS.  gain×3 brings
+ * it to 45–75 % FS — ideal for GSM 06.10 and for activating radio VOX gates.
  *
- *   OS-normalised mic peak ~0.18: tanh(3×0.18)=tanh(0.54)=0.514 → 51 %
- *   OS-normalised mic peak ~0.25: tanh(3×0.25)=tanh(0.75)=0.635 → 64 %
- *   OS-normalised mic peak ~0.40: tanh(3×0.40)=tanh(1.20)=0.834 → 83 %
+ * The soft-knee limiter is LINEAR below 0.50 FS (no distortion at all) and
+ * compresses smoothly above 0.50 FS, asymptotically approaching 0.80 FS.
+ * This is better than tanh(3x) which compressed to 87 % FS at loud speech
+ * (perceptible artefacts).
+ *
+ *   knee = 0.50, cap = 0.80, range = 0.30
+ *   output = sign × (0.50 + 0.30 × (1 − exp(−(|gain·x|−0.50)/0.30)))
+ *                          for |gain·x| > 0.50
+ *
+ *   normal speech  (gain·raw ≈ 0.54): output ≈ 0.54 (linear, no compression)
+ *   loud speech    (gain·raw ≈ 1.30): output ≈ 0.78 (vs tanh→0.86 before)
+ *   very loud      (gain·raw ≥ 2.00): output → 0.80 asymptote
  *
  * ── Warmup ────────────────────────────────────────────────────────────────
  * The first 80 ms of mic audio is discarded to absorb the hardware startup
@@ -49,13 +56,10 @@ class MicProcessor extends AudioWorkletProcessor {
     this._accum         = new Float32Array(0);
     this._pendingEmit   = null;
 
-    // Fixed gain applied at 8 kHz (after downsampling).
-    // Works best when getUserMedia uses autoGainControl:true so the OS
-    // normalises the mic before we apply our boost.
-    // gain=2: with OS AGC bringing mic to ~14–25% FS, our ×2 gives 28–50% FS
-    // for normal speech and 60–70% FS at loud levels — no audible tanh clipping.
-    // (gain=3 was causing tanh input ~1.3 at loud speech → 87% FS → distortion)
-    this._gain = 2;
+    // gain=3: brings OS-normalised mic (15–25 % FS) to 45–75 % FS.
+    // The soft-knee limiter below keeps the output below 0.80 FS even at
+    // very loud speech, avoiding the 87 % FS tanh compression from before.
+    this._gain = 3;
 
     // Level logging: once per second at 8 kHz
     this._logEvery  = Math.round(nativeRate / 128); // ~375 process blocks/s
@@ -116,10 +120,22 @@ class MicProcessor extends AudioWorkletProcessor {
     }
     this._carry = combined.slice(outLen * iRatio);
 
-    // ── Step 2: Apply fixed gain + tanh at 8 kHz ─────────────────────────
-    const g = this._gain;
+    // ── Step 2: Apply gain×3 + soft-knee limiter at 8 kHz ────────────────
+    // Linear zone: |gain·x| ≤ knee  → output = gain·x  (no distortion)
+    // Knee zone:   |gain·x| >  knee → output = sign×(knee + range×(1−e^(−excess/range)))
+    //              asymptote at knee+range = 0.80 FS
+    const g     = this._gain;
+    const knee  = 0.50;
+    const range = 0.30;   // cap = knee + range = 0.80
     for (let i = 0; i < outLen; i++) {
-      ds[i] = Math.tanh(g * ds[i]);
+      const s   = g * ds[i];
+      const abs = Math.abs(s);
+      if (abs <= knee) {
+        ds[i] = s;
+      } else {
+        const sign = s < 0 ? -1 : 1;
+        ds[i] = sign * (knee + range * (1 - Math.exp(-(abs - knee) / range)));
+      }
     }
 
     // ── Level log (once per second at 48 kHz process-block rate) ─────────
