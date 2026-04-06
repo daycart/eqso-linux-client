@@ -322,30 +322,15 @@ function handleRemoteMode(
           newSamples[i] = view.getInt16(i * 2, true); // little-endian
         }
 
-        // Server-side TX boost: push from ~89% FS → 100% FS to guarantee VOX activation.
-        // Browser soft-knee caps at 0.90 FS; ×1.125 brings 0.90 → 1.0125 → clamp to 32767.
-        // Hard-clip distortion is minimal (only top ~1% of samples clip).
-        const TX_BOOST = 1.125;
-        let peakBefore = 0;
-        let peakAfter  = 0;
-        for (let i = 0; i < newSamples.length; i++) {
-          const before = Math.abs(newSamples[i]);
-          if (before > peakBefore) peakBefore = before;
-          const boosted = Math.round(newSamples[i] * TX_BOOST);
-          newSamples[i] = Math.max(-32768, Math.min(32767, boosted));
-          const after = Math.abs(newSamples[i]);
-          if (after > peakAfter) peakAfter = after;
+        // Log PCM peak for diagnostics
+        {
+          let peak = 0;
+          for (let i = 0; i < newSamples.length; i++) {
+            const a = Math.abs(newSamples[i]);
+            if (a > peak) peak = a;
+          }
+          logger.debug({ samples: newSamples.length, peak, peakPct: ((peak / 32767) * 100).toFixed(1) + "%" }, "Remote TX: PCM from browser");
         }
-        logger.info(
-          {
-            samples: newSamples.length,
-            peakIn:  peakBefore,
-            peakOut: peakAfter,
-            pctIn:   ((peakBefore / 32767) * 100).toFixed(1) + "%",
-            pctOut:  ((peakAfter  / 32767) * 100).toFixed(1) + "%",
-          },
-          "Remote TX: PCM boost applied",
-        );
 
         // Merge into accumulation buffer
         const merged = new Int16Array(pcmAccum.length + newSamples.length);
