@@ -17,11 +17,12 @@ import {
 import { EqsoProxy, ProxyEvent } from "./eqso-proxy";
 import {
   FfmpegGsmDecoder,
-  FfmpegGsmEncoder,
+  TsGsmEncoder,
   GSM_FRAME_SAMPLES,
   FRAMES_PER_PACKET,
   GSM_PACKET_BYTES,
 } from "./ffmpeg-gsm";
+import { gsmDecodePacket } from "./gsm610";
 
 // Binary opcodes for browser ↔ server WebSocket protocol
 const WS_AUDIO_LOCAL  = 0x01; // local relay: Uint8 unsigned PCM
@@ -211,7 +212,7 @@ function handleRemoteMode(
 
   // ── GSM codec instances (per connection) ───────────────────────────────────
   const decoder = new FfmpegGsmDecoder();
-  const encoder = new FfmpegGsmEncoder();
+  const encoder = new TsGsmEncoder();
   decoder.start();
   encoder.start();
 
@@ -241,10 +242,25 @@ function handleRemoteMode(
   });
 
   // When encoder produces a GSM packet, forward it to the eQSO server
+  // and send a decoded copy back to the browser as a TX self-monitor.
+  // The self-monitor lets the user hear exactly what reaches the remote radio.
   encoder.on("gsm", (gsm: Buffer) => {
     if (!pttGranted) return; // discard if PTT released mid-frame
     proxy.sendAudio(gsm);
     logger.info({ bytes: gsm.length }, "Remote TX: sent GSM packet");
+
+    // TX self-monitor: decode our outgoing GSM and play it in the browser.
+    // This confirms whether the codec is producing intelligible audio.
+    try {
+      const monPcm = gsmDecodePacket(new Uint8Array(gsm.buffer, gsm.byteOffset, gsm.byteLength));
+      const float32 = new Float32Array(monPcm.length);
+      for (let i = 0; i < monPcm.length; i++) float32[i] = monPcm[i] / 32768;
+      const hdr = Buffer.alloc(1);
+      hdr[0] = WS_AUDIO_REMOTE;
+      sendBin(ws, Buffer.concat([hdr, Buffer.from(float32.buffer)]));
+    } catch (err) {
+      logger.warn({ err }, "Remote TX: self-monitor decode error");
+    }
   });
 
   proxy.on("event", (ev: ProxyEvent) => {
