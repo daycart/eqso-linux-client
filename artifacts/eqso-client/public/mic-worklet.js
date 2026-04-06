@@ -52,7 +52,10 @@ class MicProcessor extends AudioWorkletProcessor {
     // Fixed gain applied at 8 kHz (after downsampling).
     // Works best when getUserMedia uses autoGainControl:true so the OS
     // normalises the mic before we apply our boost.
-    this._gain = 3;
+    // gain=2: with OS AGC bringing mic to ~14–25% FS, our ×2 gives 28–50% FS
+    // for normal speech and 60–70% FS at loud levels — no audible tanh clipping.
+    // (gain=3 was causing tanh input ~1.3 at loud speech → 87% FS → distortion)
+    this._gain = 2;
 
     // Level logging: once per second at 8 kHz
     this._logEvery  = Math.round(nativeRate / 128); // ~375 process blocks/s
