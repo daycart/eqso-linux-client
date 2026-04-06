@@ -72,35 +72,31 @@ export default function HomePage() {
     };
   }, [eqso]);
 
-  // Keep stable refs to the latest pttStart / pttEnd so keyboard listeners
-  // can be registered ONCE (empty deps) and always call the current callbacks.
-  // This avoids the re-registration race where removing + re-adding listeners
-  // while Space is held could fire onKeyUp with a stale closure.
-  const pttStartRef = useRef(pttStart);
-  const pttEndRef   = useRef(pttEnd);
-  useEffect(() => { pttStartRef.current = pttStart; }, [pttStart]);
-  useEffect(() => { pttEndRef.current   = pttEnd;   }, [pttEnd]);
+  // Stable refs so the keyboard handler (registered once) always calls the
+  // current callbacks without re-registering and risking a keyup race.
+  const pttStartRef  = useRef(pttStart);
+  const pttEndRef    = useRef(pttEnd);
+  const pttActiveRef = useRef(pttActive);
+  useEffect(() => { pttStartRef.current  = pttStart;  }, [pttStart]);
+  useEffect(() => { pttEndRef.current    = pttEnd;    }, [pttEnd]);
+  useEffect(() => { pttActiveRef.current = pttActive; }, [pttActive]);
 
   useEffect(() => {
+    // Space toggles PTT: first keydown (non-repeat) starts TX if idle, stops if active.
+    // Toggle avoids the keyup-on-focus-loss problem that kills hold-to-talk in iframes.
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Space" && !e.repeat) {
         e.preventDefault();
-        pttStartRef.current();
-      }
-    };
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === "Space") {
-        e.preventDefault();
-        pttEndRef.current();
+        if (pttActiveRef.current) {
+          pttEndRef.current();
+        } else {
+          pttStartRef.current();
+        }
       }
     };
     window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-    };
-  }, []); // registered once — refs keep callbacks current
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []); // registered once
 
   const isInRoom = !!eqso.currentRoom;
 

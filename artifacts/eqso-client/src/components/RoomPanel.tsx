@@ -166,19 +166,12 @@ export function RoomPanel({
           <div className="flex flex-col items-center gap-6">
             <div className="relative">
               <button
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  e.currentTarget.setPointerCapture(e.pointerId);
-                  onPttStart();
-                }}
-                onPointerUp={(e) => {
-                  e.preventDefault();
-                  e.currentTarget.releasePointerCapture(e.pointerId);
-                  onPttEnd();
-                }}
-                onPointerCancel={(e) => {
-                  e.currentTarget.releasePointerCapture(e.pointerId);
-                  onPttEnd();
+                onClick={() => {
+                  if (pttActive) {
+                    onPttEnd();
+                  } else {
+                    onPttStart();
+                  }
                 }}
                 disabled={channelBusy && !pttActive}
                 className={`w-40 h-40 rounded-full flex flex-col items-center justify-center gap-2 transition-all duration-150 select-none touch-none
@@ -220,15 +213,15 @@ export function RoomPanel({
             <div className="text-center">
               <p className="text-gray-500 text-sm">
                 {pttActive && pttGranted
-                  ? "Transmitiendo... suelta para dejar de hablar"
+                  ? "Transmitiendo — pulsa de nuevo para soltar"
                   : pttActive
-                  ? "Esperando..."
+                  ? "Esperando canal..."
                   : channelBusy
                   ? "Canal ocupado"
-                  : "Mantén pulsado para hablar"}
+                  : "Pulsa para hablar"}
               </p>
               <p className="text-gray-600 text-xs mt-1">
-                También puedes usar la barra espaciadora
+                Barra espaciadora tambien activa/desactiva
               </p>
             </div>
           </div>
