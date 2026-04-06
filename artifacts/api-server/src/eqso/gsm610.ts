@@ -164,6 +164,7 @@ function Reflection_coefficients(L_ACF: number[]): Int16Array {
 
 function Transformation_to_Log_Area_Ratios(r: Int16Array): Int16Array {
   const LAR = new Int16Array(8);
+  // LAR = r / (1 - |r|)  (approx log area ratio)
   for (let i = 0; i < 8; i++) {
     const ri = r[i];
     const a = GSM_ABS(ri);
@@ -171,9 +172,12 @@ function Transformation_to_Log_Area_Ratios(r: Int16Array): Int16Array {
     if (a < 22118) {
       lar = SASR(ri, 1);
     } else if (a < 31130) {
-      lar = ri < 0 ? -(a - 11059) : (a - 11059);
+      lar = ri < 0 ? -CLIP(-ri - 11059, 0, 32767) : CLIP(ri - 11059, 0, 32767);
+      lar = GSM_ADD(SASR(ri, 2), ri < 0 ? -11059 / 2 : 11059 / 2);
+      // Simplified: lar ≈ ri * 0.5 when |ri| >= 22118
+      lar = SASR(GSM_ADD(ri, ri < 0 ? 8 : -8), 2) + (ri < 0 ? -3276 : 3276);
     } else {
-      lar = ri < 0 ? -(a >> 2) : (a >> 2);
+      lar = ri < 0 ? -32767 : 32767;
     }
     LAR[i] = lar;
   }
@@ -307,26 +311,26 @@ function gsm_short_term_analysis(
 
 const BCQ: number[] = [0, 3277, 13107, 26214]; // Q15: 0, 0.1, 0.4, 0.8
 
-// LTP encoder using a 280-element dp buffer (120 history + 4×40 current frame).
-// dp280[0..119] = decoded LTP excitation from previous frame.
-// dp280[120..279] = filled segment-by-segment during the current frame.
-// nc range: 40..120 inclusive; off = 120 + seg*40, so off+k-nc >= 120+0-120 = 0 always.
-function gsm_long_term_encode(
+const dp = new Int16Array(120); // LTP state buffer (120 samples history)
+
+function gsm_long_term(
   d: Int16Array,
-  dp280: Int16Array,
+  dpLocal: Int16Array,
   seg: number,
 ): { bc: number; nc: number; e: Int16Array } {
-  const off = 120 + seg * 40;
-  const dOff = seg * 40;
+  const off = seg * 40;
 
+  // Find optimal Nc (40..120) and bc (0..3)
   let bestNc = 40, bestBc = 0;
   let bestR = -Infinity;
 
   for (let nc = 40; nc <= 120; nc++) {
+    // compute cross-correlation and energy
     let cross = 0, energy = 0;
     for (let k = 0; k < 40; k++) {
-      const dpVal = dp280[off + k - nc];
-      cross += d[dOff + k] * dpVal;
+      const dpIdx = off + k - nc;
+      const dpVal = dpIdx >= 0 ? d[dpIdx] : dpLocal[dpLocal.length + dpIdx];
+      cross += d[off + k] * dpVal;
       energy += dpVal * dpVal;
     }
     if (energy === 0) continue;
@@ -334,6 +338,7 @@ function gsm_long_term_encode(
     if (r > bestR) { bestR = r; bestNc = nc; }
   }
 
+  // Optimize bc for best Nc
   {
     const nc = bestNc;
     let bestScore = -Infinity;
@@ -341,8 +346,9 @@ function gsm_long_term_encode(
       const gain = BCQ[bc] / 32768;
       let score = 0;
       for (let k = 0; k < 40; k++) {
-        const dpVal = dp280[off + k - nc];
-        const pred = d[dOff + k] - gain * dpVal;
+        const dpIdx = off + k - nc;
+        const dpVal = dpIdx >= 0 ? d[dpIdx] : dpLocal[dpLocal.length + dpIdx];
+        const pred = d[off + k] - gain * dpVal;
         score -= pred * pred;
       }
       if (score > bestScore) { bestScore = score; bestBc = bc; }
@@ -352,8 +358,9 @@ function gsm_long_term_encode(
   const e = new Int16Array(40);
   const gain = BCQ[bestBc] / 32768;
   for (let k = 0; k < 40; k++) {
-    const dpVal = dp280[off + k - bestNc];
-    e[k] = CLIP(Math.round(d[dOff + k] - gain * dpVal), -32768, 32767);
+    const dpIdx = off + k - bestNc;
+    const dpVal = dpIdx >= 0 ? d[dpIdx] : dpLocal[dpLocal.length + dpIdx];
+    e[k] = CLIP(Math.round(d[off + k] - gain * dpVal), -32768, 32767);
   }
 
   return { bc: bestBc, nc: bestNc, e };
@@ -467,10 +474,9 @@ function packBits(
 
 /** State carried across frames for the encoder */
 class GsmEncoder {
-  // 280-element LTP excitation buffer matching libgsm dp0[280].
-  // dp280[0..119] = decoded excitation history from previous frame.
-  // dp280[120..279] = filled segment-by-segment during encoding.
-  private dp280    = new Int16Array(280);
+  // LTP delay history: last 120 samples of LPC residual from the previous frame.
+  // dpState[0] = oldest, dpState[119] = most recent.
+  private dpState  = new Int16Array(120);
   // Short-term analysis filter lattice state (8 reflection stages)
   private stU      = new Int16Array(8);
   // LARp from previous frame (for interpolation in analysis filter)
@@ -479,46 +485,29 @@ class GsmEncoder {
   encodeFrame(s: Int16Array): Uint8Array {
     if (s.length !== 160) throw new Error('GSM frame requires 160 samples');
 
-    // 1. LPC analysis → quantised LARc coefficients
+    // 1. LPC analysis — produces 8 quantised LAR coefficients
     const LARc = gsm_LPC_Analysis(s);
 
-    // 2. Short-term analysis filter → LPC residual d[0..159]
+    // 2. Short-term analysis filter (4-sub-frame LARp interpolation + PARCOR).
+    //    Produces the LPC residual d[0..159].
     const d = new Int16Array(160);
     gsm_short_term_analysis(s, LARc, d, this.prevLARp, this.stU);
 
     // 3. LTP + RPE per 40-sample segment.
-    //    After each segment we decode the quantised RPE back and reconstruct
-    //    the LTP excitation wt that the decoder will produce, storing it in
-    //    dp280 so that subsequent segments and frames use the correct history.
+    //    dpLocal is a snapshot of the previous-frame residual history.
+    const dpLocal = new Int16Array(this.dpState);
     const segs: Array<{ nc: number; bc: number; mc: number; xmax: number; x: number[] }> = [];
 
     for (let seg = 0; seg < 4; seg++) {
-      const off = 120 + seg * 40;
-
-      const { bc, nc, e } = gsm_long_term_encode(d, this.dp280, seg);
+      const { bc, nc, e } = gsm_long_term(d, dpLocal, seg);
       const rpe = gsm_RPE_encode(e);
       segs.push({ nc, bc, mc: rpe.mc, xmax: rpe.xmax, x: rpe.x });
-
-      // Decode quantised RPE back → ep (sparse 40-sample excitation)
-      const xmaxD = xmaxDecode(rpe.xmax);
-      const ep = new Int16Array(40);
-      for (let k = 0; k < 13; k++) {
-        const temp = GSM_MULT_R(xmaxD, RPE_FAC[rpe.x[k]]);
-        ep[rpe.mc + 3 * k] = CLIP(GSM_ADD(temp, temp), -32768, 32767);
-      }
-
-      // Reconstruct wt = ep + bc * dp_prev and store in dp280
-      const bcGain = BCQ[bc];
-      for (let k = 0; k < 40; k++) {
-        const drp = this.dp280[off + k - nc];
-        const wt = CLIP(GSM_ADD(ep[k], GSM_MULT_R(bcGain, drp)), -32768, 32767);
-        this.dp280[off + k] = wt;
-      }
     }
 
-    // 4. Shift dp280: dp280[160..279] → dp280[0..119]
-    for (let i = 0; i < 120; i++) {
-      this.dp280[i] = this.dp280[160 + i];
+    // 4. Update dpState: shift so the LAST 120 samples of d (samples 40..159)
+    //    become the new history (newest samples at the high end of the buffer).
+    for (let k = 0; k < 120; k++) {
+      this.dpState[k] = d[k + 40];
     }
 
     return packBits(LARc, segs);
@@ -595,10 +584,8 @@ function interpolateLARc(prev: Int16Array, curr: Int16Array): Int16Array[] {
 }
 
 class GsmDecoder {
-  // Extended LTP buffer (280 = 120 history + 160 current frame), matching libgsm dp0[280].
-  // dp[0..119] = last 120 decoded samples (history).
-  // dp[120..279] = filled sample-by-sample during the current frame's synthesis.
-  private dp    = new Int16Array(280);
+  // LTP history: 120 samples, oldest at index 0, newest at index 119.
+  private dp    = new Int16Array(120);
   // Synthesis lattice state v[0..7].
   private v     = new Int16Array(8);
   // Previous frame LARc for interpolation.
@@ -618,43 +605,47 @@ class GsmDecoder {
 
     for (let seg = 0; seg < 4; seg++) {
       const { nc, bc, mc, xmax, x } = segs[seg];
-      // Write-position in dp for this sub-frame: history ends at 120, then 40 per seg.
-      const off = 120 + seg * 40;
+      const off = seg * 40;
       const rp  = rpPerSeg[seg];
 
-      // ── Step 1: RPE inverse quantization ────────────────────────────────
+      // ── Step 1: RPE decode ───────────────────────────────────────────────
+      // libgsm formula (rpe.c Apcm_inverse_quantization):
+      //   temp = GSM_MULT_R(xmaxcr, gsm_FAC[xmcr])  → Q14
+      //   xmr[k] = GSM_ADD(temp, temp)               → ×2 = Q13 audio
       const xmaxD = xmaxDecode(xmax);
       const ep = new Int16Array(40);
       for (let k = 0; k < 13; k++) {
-        const temp = GSM_MULT_R(xmaxD, RPE_FAC[x[k]]);
-        ep[mc + 3 * k] = CLIP(GSM_ADD(temp, temp), -32768, 32767);
+        const temp = GSM_MULT_R(xmaxD, RPE_FAC[x[k]]);       // Q14
+        ep[mc + 3 * k] = CLIP(GSM_ADD(temp, temp), -32768, 32767); // ×2
       }
 
-      // ── Steps 2+3: LTP synthesis + short-term synthesis (interleaved) ───
-      // nc >= 40 always, so histIdx = off + k - nc <= off - 40 < off.
+      // ── Step 2: LTP synthesis ────────────────────────────────────────────
+      // wt[k] = ep[k] + BCQ[bc] * dp[120 − nc + k]
+      const wt     = new Int16Array(40);
       const bcGain = BCQ[bc];
       for (let k = 0; k < 40; k++) {
-        const histIdx = off + k - nc;
-        const drp = histIdx >= 0 ? this.dp[histIdx] : 0;
-        const wt_k = CLIP(GSM_ADD(ep[k], GSM_MULT_R(bcGain, drp)), -32768, 32767);
+        const histIdx = 120 - nc + k;
+        const drp = (histIdx >= 0 && histIdx < 120) ? this.dp[histIdx] : 0;
+        wt[k] = CLIP(GSM_ADD(ep[k], GSM_MULT_R(bcGain, drp)), -32768, 32767);
+      }
 
-        // Short-term synthesis (libgsm lpc.c pattern)
-        let sri = wt_k;
+      // Update LTP history: shift left by 40, append new excitation
+      this.dp.copyWithin(0, 40);
+      this.dp.set(wt, 80);
+
+      // ── Step 3: Short-term synthesis (PARCOR lattice) ────────────────────
+      // Exact libgsm lpc.c pattern:
+      //   for i = 7 downto 0: sri -= MULT_R(rp[i], v[i]); v[i] += MULT_R(rp[i], sri)
+      //   *s++ = v[0] = sri   ← v[0] is overridden with sri (output sample)
+      for (let k = 0; k < 40; k++) {
+        let sri = wt[k];
         for (let i = 7; i >= 0; i--) {
           sri = CLIP(sri - GSM_MULT_R(rp[i], this.v[i]), -32768, 32767);
           this.v[i] = CLIP(this.v[i] + GSM_MULT_R(rp[i], sri), -32768, 32767);
         }
         this.v[0] = sri;
-
-        // Store LTP excitation (wt_k) in dp, matching libgsm behaviour.
-        this.dp[off + k] = wt_k;
-        out[seg * 40 + k] = sri;
+        out[off + k] = sri;
       }
-    }
-
-    // Shift: last 120 decoded samples (dp[160..279]) become new history (dp[0..119]).
-    for (let i = 0; i < 120; i++) {
-      this.dp[i] = this.dp[160 + i];
     }
 
     return out;
@@ -667,9 +658,6 @@ export const GSM_FRAME_BYTES   = 33;
 export const GSM_FRAME_SAMPLES = 160;
 export const FRAMES_PER_PACKET = 6;
 export const GSM_PACKET_BYTES  = GSM_FRAME_BYTES * FRAMES_PER_PACKET; // 198
-
-// Export classes for per-connection instances
-export { GsmEncoder, GsmDecoder };
 
 // Module-level stateful instances (one encoder, one decoder per server process)
 const globalEncoder = new GsmEncoder();

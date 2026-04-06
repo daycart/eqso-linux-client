@@ -24,7 +24,6 @@ export interface ProxyEvent {
   type:
     | "connected"
     | "disconnected"
-    | "reconnecting"
     | "error"
     | "room_list"
     | "server_info"
@@ -217,10 +216,6 @@ class EqsoPacketParser {
 // The server uses these to detect that a client is "ready" (not transmitting).
 // Without them, the server may ignore PTT requests.
 const SILENCE_INTERVAL_MS = 150;
-// Auto-reconnect: wait this many ms before retrying after a drop.
-// Start at 2 s, back off to 30 s max.
-const RECONNECT_BASE_MS  = 2_000;
-const RECONNECT_MAX_MS   = 30_000;
 
 export class EqsoProxy extends EventEmitter {
   private socket: net.Socket | null = null;
@@ -231,10 +226,6 @@ export class EqsoProxy extends EventEmitter {
   private connected = false;
   private silenceTimer: ReturnType<typeof setInterval> | null = null;
   private transmitting = false;
-  private destroyed = false;           // set by disconnect() — no more reconnects
-  private sessionReady = false;        // true only after handshake confirmed — gate for audio writes
-  private reconnectAttempt = 0;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(host: string, port: number) {
     super();
@@ -261,24 +252,15 @@ export class EqsoProxy extends EventEmitter {
   }
 
   connect(): void {
-    if (this.destroyed) return;
-
-    // Reset parser state for fresh connection
-    this.parser = new EqsoPacketParser();
-    this.handshakeDone = false;
-    this.sessionReady = false;
-    this.transmitting = false;
-
     const sock = new net.Socket();
     this.socket = sock;
 
     sock.connect(this.port, this.host, () => {
-      if (this.destroyed) { sock.destroy(); return; }
-      logger.info({ host: this.host, port: this.port, attempt: this.reconnectAttempt }, "eQSO proxy TCP connected");
+      logger.info({ host: this.host, port: this.port }, "eQSO proxy TCP connected");
       this.connected = true;
-      this.reconnectAttempt = 0;
       sock.write(HANDSHAKE_CLIENT);
       logger.debug("eQSO proxy: sent handshake");
+      // Silence heartbeat starts after handshake confirms (see 0x0a handler)
     });
 
     sock.on("data", (data: Buffer) => {
@@ -292,52 +274,23 @@ export class EqsoProxy extends EventEmitter {
 
     sock.on("close", () => {
       this.connected = false;
-      this.sessionReady = false;
       this.stopSilenceFrames();
+      this.emit("event", { type: "disconnected" } as ProxyEvent);
       logger.info({ host: this.host }, "eQSO proxy TCP closed");
-      this.scheduleReconnect();
     });
 
     sock.on("error", (err) => {
       this.connected = false;
-      this.sessionReady = false;
       this.stopSilenceFrames();
+      this.emit("event", { type: "error", data: (err as Error).message } as ProxyEvent);
       logger.warn({ err, host: this.host }, "eQSO proxy TCP error");
-      // The "close" event fires after "error" so reconnect is handled there.
     });
 
     sock.setTimeout(90_000);
     sock.on("timeout", () => sock.destroy());
   }
 
-  /** Schedule an auto-reconnect with exponential back-off. */
-  private scheduleReconnect(): void {
-    if (this.destroyed) {
-      this.emit("event", { type: "disconnected" } as ProxyEvent);
-      return;
-    }
-    this.reconnectAttempt++;
-    const delay = Math.min(
-      RECONNECT_BASE_MS * Math.pow(2, this.reconnectAttempt - 1),
-      RECONNECT_MAX_MS
-    );
-    logger.info(
-      { host: this.host, attempt: this.reconnectAttempt, delayMs: delay },
-      "eQSO proxy: scheduling reconnect"
-    );
-    this.emit("event", { type: "reconnecting", data: { attempt: this.reconnectAttempt, delayMs: delay } } as ProxyEvent);
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      if (!this.destroyed) this.connect();
-    }, delay);
-  }
-
   disconnect(): void {
-    this.destroyed = true;
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
     this.stopSilenceFrames();
     this.socket?.destroy();
     this.socket = null;
@@ -369,22 +322,13 @@ export class EqsoProxy extends EventEmitter {
     this.socketWrite(Buffer.from([0x0d]));
   }
 
-  /**
-   * Send one GSM audio packet (198 bytes = 6 frames) to the eQSO server.
-   * eQSO protocol: [0x01][198 bytes] per packet.
-   * ASORAPA expects exactly 198 bytes after 0x01 — sending 33 bytes
-   * corrupts the parser and causes ECONNRESET within seconds.
-   */
   sendAudio(data: Buffer): void {
-    if (!this.sessionReady) {
-      logger.debug("sendAudio: dropped — session not ready (handshake pending)");
-      return;
+    if (data.length < AUDIO_PAYLOAD_SIZE) {
+      const padded = Buffer.alloc(AUDIO_PAYLOAD_SIZE);
+      data.copy(padded);
+      data = padded;
     }
-    const AUDIO_BYTES = 198;
-    const frameData = data.length >= AUDIO_BYTES
-      ? data.slice(0, AUDIO_BYTES)
-      : Buffer.concat([data, Buffer.alloc(AUDIO_BYTES - data.length)]);
-    const pkt = Buffer.concat([Buffer.from([0x01]), frameData]);
+    const pkt = Buffer.concat([Buffer.from([0x01]), data.slice(0, AUDIO_PAYLOAD_SIZE)]);
     this.socketWrite(pkt);
   }
 
@@ -436,7 +380,6 @@ export class EqsoProxy extends EventEmitter {
       case 0x0a:
         if (!this.handshakeDone) {
           this.handshakeDone = true;
-          this.sessionReady = true;   // ungate audio writes — session is now valid
           logger.info({ hex: pkt.toString("hex") }, "eQSO proxy: handshake from server");
           this.emit("event", { type: "connected" } as ProxyEvent);
           // Start sending 0x02 silence heartbeats now that handshake is done

@@ -59,11 +59,8 @@ export default function HomePage() {
     audio.stopRecording();
     eqso.pttEnd();
     setPttActive(false);
-    // Keep RX muted for 400 ms after releasing PTT so the repeater tail
-    // (the RF signal the repeater keeps emitting after carrier drops) does
-    // not play through the speakers and get picked up by the mic on the
-    // next PTT press, which would create an echo loop.
-    setTimeout(() => audio.muteRx(false), 400);
+    // Restore RX audio after releasing PTT
+    audio.muteRx(false);
   }, [pttActive, audio, eqso]);
 
   useEffect(() => {
@@ -72,31 +69,26 @@ export default function HomePage() {
     };
   }, [eqso]);
 
-  // Stable refs so the keyboard handler (registered once) always calls the
-  // current callbacks without re-registering and risking a keyup race.
-  const pttStartRef  = useRef(pttStart);
-  const pttEndRef    = useRef(pttEnd);
-  const pttActiveRef = useRef(pttActive);
-  useEffect(() => { pttStartRef.current  = pttStart;  }, [pttStart]);
-  useEffect(() => { pttEndRef.current    = pttEnd;    }, [pttEnd]);
-  useEffect(() => { pttActiveRef.current = pttActive; }, [pttActive]);
-
   useEffect(() => {
-    // Space toggles PTT: first keydown (non-repeat) starts TX if idle, stops if active.
-    // Toggle avoids the keyup-on-focus-loss problem that kills hold-to-talk in iframes.
-    const onKeyDown = (e: KeyboardEvent) => {
+    const onKey = (e: KeyboardEvent) => {
       if (e.code === "Space" && !e.repeat) {
         e.preventDefault();
-        if (pttActiveRef.current) {
-          pttEndRef.current();
-        } else {
-          pttStartRef.current();
-        }
+        pttStart();
       }
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []); // registered once
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        pttEnd();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, [pttStart, pttEnd]);
 
   const isInRoom = !!eqso.currentRoom;
 
@@ -123,12 +115,6 @@ export default function HomePage() {
             <span className="flex items-center gap-1.5 text-xs text-yellow-400">
               <span className="w-2 h-2 rounded-full bg-yellow-400" />
               Conectando...
-            </span>
-          )}
-          {eqso.status === "reconnecting" && (
-            <span className="flex items-center gap-1.5 text-xs text-orange-400">
-              <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
-              Reconectando...
             </span>
           )}
           {(eqso.status === "disconnected" || eqso.status === "error") && (

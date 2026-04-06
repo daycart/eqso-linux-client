@@ -22,7 +22,6 @@ import {
   FRAMES_PER_PACKET,
   GSM_PACKET_BYTES,
 } from "./ffmpeg-gsm";
-import { gsmDecodePacket } from "./gsm610";
 
 // Binary opcodes for browser ↔ server WebSocket protocol
 const WS_AUDIO_LOCAL  = 0x01; // local relay: Uint8 unsigned PCM
@@ -202,47 +201,20 @@ function handleRemoteMode(
 } {
   const proxy = new EqsoProxy(host, port);
   let pttGranted = false;
-  let pttReleasedAt = 0;          // timestamp of last PTT release
-  const PTT_MUTE_TAIL_MS = 1500;  // silence RX for 1.5 s after TX ends
-
-  // Guard timer: prevents duplicate ptt_end processing within a short window.
-  let pttDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-  let pttSilenceTimer: ReturnType<typeof setInterval> | null = null;
-
   let currentName = "";
   let currentRoom = "";
 
   // PCM accumulation buffer for TX: browser sends Int16 PCM chunks
   let pcmAccum = new Int16Array(0);
 
-  // Release the ASORAPA PTT channel immediately.
-  // Browser is told ptt_released when ptt_end arrives so the UI resets right away.
-  const doActualPttRelease = (): void => {
-    if (pttSilenceTimer) { clearInterval(pttSilenceTimer); pttSilenceTimer = null; }
-    pttGranted = false;
-    pttReleasedAt = Date.now();
-    pcmAccum = new Int16Array(0);
-    proxy.sendPttEnd();
-    logger.info({ name: currentName, muteTailMs: PTT_MUTE_TAIL_MS }, "Remote TX: PTT released — RX muted for tail window");
-  };
-
-  // ── GSM codec instances (per connection) ───────────────────────────────────
+  // ── FFmpeg codec instances (pre-warmed at connection time) ──────────────────
   const decoder = new FfmpegGsmDecoder();
   const encoder = new FfmpegGsmEncoder();
   decoder.start();
   encoder.start();
 
-  // When decoder produces a decoded PCM packet, send it to browser.
-  // IMPORTANT: suppress RX output while we are transmitting (PTT active).
-  // eQSO is half-duplex; ASORAPA relays our own TX audio back to us.
-  // If we play that back through the speaker while PTT is held, the mic
-  // picks it up again → infinite echo feedback loop.
+  // When decoder produces a decoded PCM packet, send it to browser
   decoder.on("pcm", (pcm: Int16Array) => {
-    // Half-duplex: mute speaker during TX AND for 1.5 s after releasing PTT.
-    // ASORAPA relays our own audio back ~0.5–1.5 s after we stop transmitting.
-    // Without the tail, the speaker plays our echo → mic picks it up → VOX
-    // re-triggers → infinite echo loop.
-    if (pttGranted || (Date.now() - pttReleasedAt) < PTT_MUTE_TAIL_MS) return;
     let peak = 0;
     const float32 = new Float32Array(pcm.length);
     for (let i = 0; i < pcm.length; i++) {
@@ -258,75 +230,25 @@ function handleRemoteMode(
   });
 
   // When encoder produces a GSM packet, forward it to the eQSO server
-  // and send a decoded copy back to the browser as a TX self-monitor.
-  // The self-monitor lets the user hear exactly what reaches the remote radio.
   encoder.on("gsm", (gsm: Buffer) => {
     if (!pttGranted) return; // discard if PTT released mid-frame
     proxy.sendAudio(gsm);
     logger.info({ bytes: gsm.length }, "Remote TX: sent GSM packet");
-
-    // TX self-monitor: decode our outgoing GSM and play it in the browser.
-    // This confirms whether the codec is producing intelligible audio.
-    try {
-      const monPcm = gsmDecodePacket(new Uint8Array(gsm.buffer, gsm.byteOffset, gsm.byteLength));
-      let monPeak = 0;
-      const float32 = new Float32Array(monPcm.length);
-      for (let i = 0; i < monPcm.length; i++) {
-        float32[i] = monPcm[i] / 32768;
-        if (Math.abs(monPcm[i]) > monPeak) monPeak = Math.abs(monPcm[i]);
-      }
-      logger.info({ monPeak }, "Remote TX: self-monitor decoded peak");
-      const hdr = Buffer.alloc(1);
-      hdr[0] = WS_AUDIO_REMOTE;
-      sendBin(ws, Buffer.concat([hdr, Buffer.from(float32.buffer)]));
-    } catch (err) {
-      logger.warn({ err }, "Remote TX: self-monitor decode error");
-    }
   });
-
-  // Session parameters saved so we can auto-re-join on reconnect.
-  let joinParams: { name: string; room: string; message: string; password: string } | null = null;
-  let sessionEstablished = false; // true once we've successfully joined a room
 
   proxy.on("event", (ev: ProxyEvent) => {
     switch (ev.type) {
       case "connected":
-        if (sessionEstablished && joinParams) {
-          // Reconnected after a drop — silently re-join the room.
-          logger.info({ name: joinParams.name, room: joinParams.room }, "eQSO proxy: reconnected — re-joining room");
-          proxy.sendJoin(joinParams.name, joinParams.room, joinParams.message, joinParams.password);
-          sendJson(ws, { type: "reconnected", message: `Reconectado a ${host}:${port}` });
-        } else {
-          sendJson(ws, { type: "server_info", message: `Conectado a ${host}:${port}` });
-        }
+        sendJson(ws, { type: "server_info", message: `Conectado a ${host}:${port}` });
         break;
       case "server_info":
         sendJson(ws, { type: "error", message: String(ev.data) });
         break;
-      case "reconnecting": {
-        const d = ev.data as { attempt: number; delayMs: number };
-        sendJson(ws, {
-          type: "reconnecting",
-          message: `Reconectando... (intento ${d.attempt})`,
-          delayMs: d.delayMs,
-        });
-        // Abort any in-progress PTT when connection drops.
-        if (pttGranted) {
-          pttGranted = false;
-          pcmAccum = new Int16Array(0);
-          sendJson(ws, { type: "ptt_released" });
-        }
-        break;
-      }
       case "disconnected":
         sendJson(ws, { type: "disconnected", message: "Servidor desconectado" });
         break;
       case "error":
-        // Errors are handled by scheduleReconnect() in the proxy.
-        // Only surface them to the browser if we've never connected (initial failure).
-        if (!sessionEstablished) {
-          sendJson(ws, { type: "error", message: `Error de conexión: ${ev.data}` });
-        }
+        sendJson(ws, { type: "error", message: `Error de conexión: ${ev.data}` });
         break;
       case "room_list":
         sendJson(ws, { type: "room_list", rooms: ev.data as string[] });
@@ -352,11 +274,15 @@ function handleRemoteMode(
         sendJson(ws, { type: "ptt_released_remote", ...(ev.data as object) });
         break;
       case "audio": {
-        // Incoming GSM packet from remote eQSO server: [0x01][198 bytes = 6 frames]
-        // Feed all 198 bytes to the decoder; it accumulates and emits per-frame PCM.
+        // Incoming GSM packet from remote eQSO server: [0x01][198 bytes GSM]
         const pkt = ev.data as Buffer;
-        if (pkt.length < 2) break;
-        const gsmBuf = Buffer.from(pkt.buffer, pkt.byteOffset + 1, pkt.length - 1);
+        if (pkt.length < 1 + AUDIO_PAYLOAD_SIZE) break;
+        // Feed 198-byte GSM payload into the streaming decoder
+        const gsmBuf = Buffer.from(
+          pkt.buffer,
+          pkt.byteOffset + 1,
+          Math.min(AUDIO_PAYLOAD_SIZE, GSM_PACKET_BYTES)
+        );
         decoder.decode(gsmBuf);
         break;
       }
@@ -385,14 +311,14 @@ function handleRemoteMode(
           newSamples[i] = view.getInt16(i * 2, true); // little-endian
         }
 
-        // Log PCM peak for diagnostics
-        {
+        // Log PCM peak to detect silence vs speech (once every ~10 packets)
+        if (Math.random() < 0.1) {
           let peak = 0;
           for (let i = 0; i < newSamples.length; i++) {
             const a = Math.abs(newSamples[i]);
             if (a > peak) peak = a;
           }
-          logger.debug({ samples: newSamples.length, peak, peakPct: ((peak / 32767) * 100).toFixed(1) + "%" }, "Remote TX: PCM from browser");
+          logger.info({ samples: newSamples.length, peak }, "Remote TX: PCM from browser");
         }
 
         // Merge into accumulation buffer
@@ -423,9 +349,6 @@ function handleRemoteMode(
           const password = (msg.password ?? "").trim();
           currentName = name;
           currentRoom = room;
-          // Save join params for auto-reconnect
-          joinParams = { name, room, message, password };
-          sessionEstablished = true;
           logger.info({ id, name, room, host, port }, "Remote proxy: join requested");
           proxy.sendJoin(name, room, message, password);
           sendJson(ws, { type: "joined", room, name, members: [] });
@@ -433,34 +356,19 @@ function handleRemoteMode(
           break;
         }
         case "ptt_start":
-          // Clear guard timer if still ticking from a rapid previous ptt_end.
-          if (pttDebounceTimer) {
-            clearTimeout(pttDebounceTimer);
-            pttDebounceTimer = null;
-          }
-          if (pttSilenceTimer) {
-            clearInterval(pttSilenceTimer);
-            pttSilenceTimer = null;
-          }
           pttGranted = true;
-          pcmAccum = new Int16Array(0); // reset accumulator for fresh audio
+          pcmAccum = new Int16Array(0); // reset accumulator
           // No separate PTT-announce packet in eQSO — the first [0x01][198 GSM] frame
-          // announces PTT implicitly.  Silence heartbeat is paused while transmitting.
+          // announces PTT implicitly. Just stop the silence heartbeat.
           proxy.startTransmitting();
           sendJson(ws, { type: "ptt_granted" });
           logger.info({ name: currentName, room: currentRoom }, "Remote TX: PTT start (first voice frame will open channel)");
           break;
         case "ptt_end":
-          // Release ASORAPA immediately — no silence injection.
-          // Silence frames were causing VOX-controlled radios to drop PTT during
-          // the debounce window because the radio receives silence instead of voice.
-          // Debounce timer still guards against duplicate ptt_end from the browser.
-          if (pttDebounceTimer) break; // already releasing — ignore duplicate
-          pttDebounceTimer = setTimeout(() => {
-            pttDebounceTimer = null;
-          }, 500); // short guard window only
-          doActualPttRelease();
-          logger.info({ name: currentName }, "Remote TX: PTT end — ASORAPA channel released immediately");
+          pttGranted = false;
+          pcmAccum = new Int16Array(0); // discard leftover
+          proxy.sendPttEnd(); // send [0x0d] to remote eQSO server to release the channel
+          logger.info({ name: currentName }, "Remote TX: PTT end sent to eQSO server");
           sendJson(ws, { type: "ptt_released" });
           break;
         case "ping":
@@ -470,8 +378,6 @@ function handleRemoteMode(
     },
 
     onClose: () => {
-      if (pttDebounceTimer) { clearTimeout(pttDebounceTimer); pttDebounceTimer = null; }
-      if (pttSilenceTimer) { clearInterval(pttSilenceTimer); pttSilenceTimer = null; }
       if (pttGranted) {
         proxy.sendPttEnd(); // release channel before disconnecting
       }

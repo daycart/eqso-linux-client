@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type ConnectionStatus = "disconnected" | "connecting" | "connected" | "reconnecting" | "error";
+export type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error";
 
 export interface RoomMember {
   name: string;
@@ -82,13 +82,6 @@ const WS_AUDIO_REMOTE = 0x11; // remote RX:   Float32 PCM decoded from GSM
 const WS_PCM_TX       = 0x05; // remote TX:   Int16 signed PCM → GSM encode on server
 
 function getWsUrl(): string {
-  // Build-time override: set the VITE_API_WS_URL secret in GitHub Actions
-  // (or any CI) to point the GitHub Pages build at your deployed API server.
-  // Example: wss://mi-servidor.example.com/ws
-  if (import.meta.env.VITE_API_WS_URL) {
-    return import.meta.env.VITE_API_WS_URL as string;
-  }
-  // Default: same host + base path (works in Replit and self-hosted setups)
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   const host = window.location.host;
   const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
@@ -112,8 +105,6 @@ export function useEqsoClient(
   const [activeSpeaker, setActiveSpeaker] = useState<string | null>(null);
   const [pttGranted, setPttGranted] = useState(false);
   const pttGrantedRef = useRef(false);
-  const pttPendingRef = useRef(false);        // ptt_start sent, waiting for ptt_granted
-  const pendingAudioRef = useRef<ArrayBuffer[]>([]); // audio buffered before ptt_granted
   const [channelBusy, setChannelBusy] = useState(false);
   const [selectedServer, setSelectedServer] = useState<EqsoServer>(KNOWN_SERVERS[0]);
   const selectedServerRef = useRef<EqsoServer>(KNOWN_SERVERS[0]);
@@ -159,8 +150,6 @@ export function useEqsoClient(
         break;
 
       case "ptt_released":
-        pttPendingRef.current = false;
-        pendingAudioRef.current = [];
         pttGrantedRef.current = false;
         setPttGranted(false);
         break;
@@ -170,52 +159,17 @@ export function useEqsoClient(
         setChannelBusy(false);
         break;
 
-      case "ptt_granted": {
-        pttPendingRef.current = false;
+      case "ptt_granted":
         pttGrantedRef.current = true;
         setPttGranted(true);
         setChannelBusy(false);
-        // Flush audio buffered while waiting for grant
-        const queued = pendingAudioRef.current.splice(0);
-        if (queued.length > 0) {
-          const ws = wsRef.current;
-          const isRemote = selectedServerRef.current.mode === "remote";
-          const opcode = isRemote ? WS_PCM_TX : WS_AUDIO_LOCAL;
-          for (const data of queued) {
-            const payload = new Uint8Array(data);
-            const pkt = new Uint8Array(1 + payload.length);
-            pkt[0] = opcode;
-            pkt.set(payload, 1);
-            if (ws && ws.readyState === WebSocket.OPEN) ws.send(pkt.buffer);
-          }
-          console.debug("[eqso] ptt_granted: flushed", queued.length, "buffered audio chunks");
-        }
         break;
-      }
 
       case "ptt_denied":
-        pttPendingRef.current = false;
-        pendingAudioRef.current = [];
         pttGrantedRef.current = false;
         setPttGranted(false);
         setChannelBusy(true);
         setTimeout(() => setChannelBusy(false), 2000);
-        break;
-
-      case "reconnecting":
-        // Server is auto-reconnecting — stay in connected view but show status.
-        setStatus("reconnecting");
-        setActiveSpeaker(null);
-        setPttGranted(false);
-        pttGrantedRef.current = false;
-        pttPendingRef.current = false;
-        pendingAudioRef.current = [];
-        break;
-
-      case "reconnected":
-        // Reconnected successfully — resume session.
-        setStatus("connected");
-        setError(null);
         break;
 
       case "disconnected":
@@ -320,8 +274,6 @@ export function useEqsoClient(
     setCurrentName(null);
     setMembers([]);
     setActiveSpeaker(null);
-    pttPendingRef.current = false;
-    pendingAudioRef.current = [];
     pttGrantedRef.current = false;
     setPttGranted(false);
 
@@ -359,8 +311,6 @@ export function useEqsoClient(
       setCurrentName(null);
       setMembers([]);
       setActiveSpeaker(null);
-      pttPendingRef.current = false;
-      pendingAudioRef.current = [];
       pttGrantedRef.current = false;
       setPttGranted(false);
     };
@@ -378,8 +328,6 @@ export function useEqsoClient(
     setCurrentRoom(null);
     setCurrentName(null);
     setMembers([]);
-    pttPendingRef.current = false;
-    pendingAudioRef.current = [];
     pttGrantedRef.current = false;
     setPttGranted(false);
     pendingJoinRef.current = null;
@@ -395,39 +343,25 @@ export function useEqsoClient(
   const pttStart = useCallback(() => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    pttPendingRef.current = true;
-    pendingAudioRef.current = [];
     ws.send(JSON.stringify({ type: "ptt_start" }));
   }, []);
 
   const pttEnd = useCallback(() => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    pttPendingRef.current = false;
-    pendingAudioRef.current = [];
     ws.send(JSON.stringify({ type: "ptt_end" }));
   }, []);
 
   const sendAudio = useCallback((data: ArrayBuffer) => {
     const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-      console.debug("[eqso] sendAudio dropped — ws:", ws?.readyState);
-      return;
-    }
-
-    // Buffer audio while waiting for ptt_granted (max 8 chunks = ~1 second)
-    if (!pttGrantedRef.current) {
-      if (pttPendingRef.current) {
-        if (pendingAudioRef.current.length < 8) {
-          pendingAudioRef.current.push(data.slice(0));
-        }
-      } else {
-        console.debug("[eqso] sendAudio dropped — pttGranted: false");
-      }
+    if (!ws || ws.readyState !== WebSocket.OPEN || !pttGrantedRef.current) {
+      console.debug("[eqso] sendAudio dropped — ws:", ws?.readyState, "pttGranted:", pttGrantedRef.current);
       return;
     }
 
     const isRemote = selectedServerRef.current.mode === "remote";
+    // Remote: [0x05][Int16 PCM] — server will GSM-encode and relay
+    // Local:  [0x01][Uint8 PCM] — server relays as-is
     const opcode = isRemote ? WS_PCM_TX : WS_AUDIO_LOCAL;
     const payload = new Uint8Array(data);
     const pkt = new Uint8Array(1 + payload.length);

@@ -12,55 +12,77 @@ export interface UseAudioReturn {
   muteRx: (muted: boolean) => void;
 }
 
-// Remote mode: Int16 signed PCM, 960 samples (6 GSM frames × 160) per chunk = 1920 bytes.
-// eQSO protocol: [0x01][198 bytes = 6 GSM frames] per packet — ASORAPA requires exactly 198 bytes.
-// Sending individual 33-byte frames corrupts ASORAPA's protocol state → ECONNRESET.
+// Remote mode: Int16 signed PCM, 960 samples (6 GSM frames × 160) per chunk = 1920 bytes
 const REMOTE_CHUNK_SAMPLES = 960;
 // Local mode: Uint8 unsigned PCM, 160 bytes per chunk
 const LOCAL_CHUNK_BYTES = 160;
 // Target sample rate for GSM encoding
 const GSM_RATE = 8000;
 
+/**
+ * Linear-interpolation downsampler.
+ * Only used when the AudioContext native rate ≠ 8000 Hz.
+ */
+function downsampleFloat32(input: Float32Array, fromRate: number, toRate: number): Float32Array {
+  if (fromRate === toRate) return input;
+  const ratio = fromRate / toRate;
+  const outLen = Math.floor(input.length / ratio);
+  const out = new Float32Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const pos = i * ratio;
+    const j = Math.floor(pos);
+    const frac = pos - j;
+    const a = input[j] ?? 0;
+    const b = input[Math.min(j + 1, input.length - 1)];
+    out[i] = a + frac * (b - a);
+  }
+  return out;
+}
+
 // Maximum seconds we allow the scheduler to fall behind before resetting.
+// If the browser pauses (tab hidden, slow CPU) we don't want a huge backlog.
 const MAX_QUEUE_AHEAD_SEC = 1.5;
 
-// Warmup: discard the first 80 ms of mic audio to absorb hardware startup pop.
-// 80 ms is enough; 500 ms was wasting ~400 ms of every PTT press.
-const TX_WARMUP_SECONDS = 0.08;
+// Gain applied to mic input before encoding. Mic sensitivity is typically very
+// low (~0.004 peak Float32), so we boost by this factor before GSM encoding.
+// GSM codec needs at least -25 dBFS (~0.06 peak) for intelligible speech.
+// Software gain on top of mic input. With autoGainControl enabled (below)
+// the browser already normalises the signal. Keep at 1 (no extra boost)
+// unless the mic is known to be weak after AGC. Increase only if the
+// post-gain peak reported in the console is below 0.05.
+const MIC_BOOST_GAIN = 2;
 
 export function useAudio(): UseAudioReturn {
   const ctxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const processorRef = useRef<AudioWorkletNode | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const micGainRef = useRef<GainNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const levelTimerRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
   const accumLocalRef = useRef<Uint8Array>(new Uint8Array(0));
   const accumRemoteRef = useRef<Int16Array>(new Int16Array(0));
+  // Tracks the AudioContext time at which the next buffer should start.
+  // Buffers are chained end-to-end so they play without gaps or overlaps.
   const nextPlayTimeRef = useRef<number>(0);
+  // GainNode shared across all playback — amplifies decoded GSM which is quiet.
   const gainNodeRef = useRef<GainNode | null>(null);
-
-  // The chunk callback and mode are stored in refs so they can be updated on
-  // each PTT press without recreating the worklet message handler.
-  const onChunkRef = useRef<((data: ArrayBuffer) => void) | null>(null);
-  const modeRef = useRef<"local" | "remote">("remote");
-
-  // Mic initialization state: prevents opening the mic multiple times.
-  const micInitializedRef = useRef(false);
-  const micInitPromiseRef = useRef<Promise<void> | null>(null);
-  // Guards against emitting audio if PTT is released before getUserMedia resolves.
-  const pttActiveRef = useRef(false);
 
   const [isRecording, setIsRecording] = useState(false);
   const [isMicAllowed, setIsMicAllowed] = useState<boolean | null>(null);
   const [inputLevel, setInputLevel] = useState(0);
 
+  /**
+   * Get or create the AudioContext and the shared GainNode.
+   * Always uses the browser's preferred native sample rate.
+   */
   const getOrCreateCtx = useCallback((): AudioContext => {
     if (!ctxRef.current) {
       ctxRef.current = new AudioContext();
       const gain = ctxRef.current.createGain();
-      // GSM 06.10 decoded via ffmpeg: typical speech peaks at ~3500/32768
-      // (~-19 dBFS). 3× gain brings typical speech to ~-9 dBFS.
+      // GSM 06.10 decoded via libgsm/ffmpeg: typical speech peaks at ~3500/32768
+      // (~-19 dBFS). 3x gain brings typical speech to ~-9 dBFS — comfortable
+      // listening level with headroom for loud stations.
       gain.gain.value = 3;
       gain.connect(ctxRef.current.destination);
       gainNodeRef.current = gain;
@@ -72,6 +94,10 @@ export function useAudio(): UseAudioReturn {
     return ctxRef.current;
   }, []);
 
+  /**
+   * Call this from a user-gesture handler (button click, keydown) so the
+   * browser allows audio playback via the autoplay policy.
+   */
   const resumeContext = useCallback(() => {
     const ctx = getOrCreateCtx();
     if (ctx.state !== "running") {
@@ -79,280 +105,167 @@ export function useAudio(): UseAudioReturn {
     }
   }, [getOrCreateCtx]);
 
-  /**
-   * Tear down the mic chain (source → analyser → worklet → silentSink).
-   * Called when the mic track ends (device disconnected/switched) so the next
-   * PTT press runs getUserMedia again against the new hardware.
-   */
-  const releaseMic = useCallback(() => {
-    if (levelTimerRef.current !== null) {
-      cancelAnimationFrame(levelTimerRef.current);
-      levelTimerRef.current = null;
-    }
-    try { processorRef.current?.port.postMessage({ type: "emit", emitting: false }); } catch { /* ignore */ }
-    try { processorRef.current?.disconnect(); } catch { /* ignore */ }
-    try { analyserRef.current?.disconnect(); } catch { /* ignore */ }
-    try { sourceRef.current?.disconnect(); } catch { /* ignore */ }
-    streamRef.current?.getTracks().forEach(t => t.stop());
-    processorRef.current  = null;
-    analyserRef.current   = null;
-    sourceRef.current     = null;
-    streamRef.current     = null;
-    micInitializedRef.current  = false;
-    micInitPromiseRef.current  = null;
-    setInputLevel(0);
-    console.debug("[audio] mic released — will re-init on next PTT");
-  }, []);
-
-  /**
-   * Initialize the microphone and audio worklet chain ONCE per session.
-   * The worklet runs continuously in "silent" mode (emitting=false) between
-   * PTT presses — no getUserMedia delay on subsequent presses.
-   *
-   * If the user plugs/unplugs headphones the track fires onended → releaseMic()
-   * resets all refs → the very next PTT call runs getUserMedia against the new
-   * hardware automatically.
-   */
-  const initMicOnce = useCallback(async (mode: "local" | "remote"): Promise<void> => {
-    if (micInitializedRef.current) return;
-
-    // Deduplicate concurrent init calls (e.g. very fast double-click)
-    if (micInitPromiseRef.current) return micInitPromiseRef.current;
-
-    const doInit = async () => {
-      try {
-        console.debug(`[audio] initMic: requesting mic (mode=${mode})`);
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            channelCount: 1,
-            // autoGainControl OFF: AGC crushes the noise floor to ~0 during
-            // speech pauses, making the signal intermittent (5% RMS, 27% peak).
-            // This causes VOX-controlled radios to drop PTT between words even
-            // though the average level looks acceptable.  With AGC off the mic
-            // ambient noise is stable (~2-5 % FS raw); our worklet gain×6 + tanh
-            // brings it to ~11-17 % FS — consistently above any VOX threshold.
-            autoGainControl: false,
-            echoCancellation: false,
-            noiseSuppression: false,
-          },
-          video: false,
-        });
-        const tracks = stream.getAudioTracks();
-        console.debug(`[audio] mic granted: ${tracks.length} track(s)`, tracks.map(t => t.label));
-        setIsMicAllowed(true);
-        streamRef.current = stream;
-
-        // When the OS switches the audio device (e.g. user plugs in headphones)
-        // the active track fires "ended" and its samples become all-zeros.
-        // Release the dead chain so the next PTT calls getUserMedia afresh.
-        tracks.forEach(track => {
-          track.onended = () => releaseMic();
-        });
-
-        const ctx = getOrCreateCtx();
-        if (ctx.state === "suspended") ctx.resume().catch(() => {});
-        const nativeRate = ctx.sampleRate;
-
-        const source = ctx.createMediaStreamSource(stream);
-        sourceRef.current = source;
-
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 256;
-        analyserRef.current = analyser;
-        source.connect(analyser);
-
-        // Version suffix forces the browser to bypass the service-worker / HTTP
-        // cache and fetch the latest worklet whenever this constant is bumped.
-        const WORKLET_VERSION = "8";
-        const workletUrl = import.meta.env.BASE_URL + "mic-worklet.js?v=" + WORKLET_VERSION;
-        try {
-          await ctx.audioWorklet.addModule(workletUrl);
-        } catch {
-          // Already registered — safe to ignore.
-        }
-
-        const warmupBlocks = Math.round(TX_WARMUP_SECONDS * nativeRate / 128);
-        const workletNode = new AudioWorkletNode(ctx, "mic-processor-v8", {
-          processorOptions: {
-            nativeRate,
-            targetRate:   GSM_RATE,
-            chunkSamples: REMOTE_CHUNK_SAMPLES,
-            warmupBlocks,
-          },
-          numberOfOutputs: 1,
-        });
-        processorRef.current = workletNode;
-
-        workletNode.port.onmessage = (ev) => {
-          const msg = ev.data as { type: string; data?: Float32Array; rms?: number; peak?: number; gain?: number };
-
-          if (msg.type === "ready") {
-            console.debug("[audio] worklet warmup complete — ready for PTT");
-            return;
-          }
-
-          if (msg.type === "level") {
-            console.debug(
-              `[audio] TX mic AGC gain=${msg.gain?.toFixed(1)}`,
-              `rms8k=${msg.rms?.toFixed(4)} peak8k=${msg.peak?.toFixed(4)} rate=${nativeRate}`
-            );
-            return;
-          }
-
-          if (msg.type !== "chunk") return;
-          const float32 = msg.data as Float32Array;
-          const onChunk = onChunkRef.current;
-          if (!onChunk) return;
-
-          if (modeRef.current === "local") {
-            const pcm8 = new Uint8Array(float32.length);
-            for (let i = 0; i < float32.length; i++) {
-              const s = Math.max(-1, Math.min(1, float32[i]));
-              pcm8[i] = Math.round((s + 1) * 127.5);
-            }
-            const merged = new Uint8Array(accumLocalRef.current.length + pcm8.length);
-            merged.set(accumLocalRef.current);
-            merged.set(pcm8, accumLocalRef.current.length);
-            accumLocalRef.current = merged;
-            while (accumLocalRef.current.length >= LOCAL_CHUNK_BYTES) {
-              onChunk(accumLocalRef.current.slice(0, LOCAL_CHUNK_BYTES).buffer);
-              accumLocalRef.current = accumLocalRef.current.slice(LOCAL_CHUNK_BYTES);
-            }
-          } else {
-            const pcm16 = new Int16Array(float32.length);
-            for (let i = 0; i < float32.length; i++) {
-              const s = Math.max(-1, Math.min(1, float32[i]));
-              pcm16[i] = s < 0 ? Math.round(s * 32768) : Math.round(s * 32767);
-            }
-            console.debug("[ptt] audio chunk:", pcm16.byteLength, "bytes");
-            onChunk(pcm16.buffer);
-          }
-        };
-
-        // The worklet must be connected to something for Chrome to keep the
-        // audio graph alive, but we MUST NOT connect it to ctx.destination —
-        // that would play the raw mic audio through the speakers and create
-        // an acoustic echo/feedback loop.  A muted GainNode acts as a silent
-        // sink that satisfies the Web Audio engine without any audible output.
-        const silentSink = ctx.createGain();
-        silentSink.gain.value = 0;
-        silentSink.connect(ctx.destination);
-
-        analyser.connect(workletNode);
-        workletNode.connect(silentSink);
-
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        const updateLevel = () => {
-          analyser.getByteFrequencyData(dataArray);
-          const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-          setInputLevel(avg / 255);
-          levelTimerRef.current = requestAnimationFrame(updateLevel);
-        };
-        levelTimerRef.current = requestAnimationFrame(updateLevel);
-
-        micInitializedRef.current = true;
-        console.debug("[audio] mic chain initialized, worklet running");
-      } catch (err) {
-        console.error("[audio] mic init error:", err);
-        setIsMicAllowed(false);
-        micInitPromiseRef.current = null;
-      }
-    };
-
-    micInitPromiseRef.current = doInit();
-    return micInitPromiseRef.current;
-  }, [getOrCreateCtx, releaseMic]);
-
-  /**
-   * Start recording — open the mic (first call only) then signal the worklet
-   * to begin emitting audio chunks.  On subsequent PTT presses the mic is
-   * already warm, so audio starts within a single 128-sample worklet block
-   * (~2.7 ms at 48 kHz) with no getUserMedia round-trip.
-   */
   const startRecording = useCallback(async (
     onChunk: (data: ArrayBuffer) => void,
     mode: "local" | "remote" = "local"
   ) => {
-    // Update the chunk handler and mode for this PTT press
-    onChunkRef.current = onChunk;
-    modeRef.current = mode;
-    pttActiveRef.current = true;
-    accumLocalRef.current = new Uint8Array(0);
-    accumRemoteRef.current = new Int16Array(0);
+    try {
+      console.debug(`[audio] startRecording: requesting mic (mode=${mode})`);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: false,
+          autoGainControl: true,
+        },
+        video: false,
+      });
+      const tracks = stream.getAudioTracks();
+      console.debug(`[audio] mic granted: ${tracks.length} track(s)`, tracks.map(t => t.label));
+      setIsMicAllowed(true);
+      streamRef.current = stream;
+      accumLocalRef.current = new Uint8Array(0);
+      accumRemoteRef.current = new Int16Array(0);
 
-    // If the mic was already open but the track ended (e.g. user plugged in
-    // headphones after the first PTT), the stream produces all-zeros.  Detect
-    // this before signalling the worklet and force a re-init with the new device.
-    if (micInitializedRef.current && streamRef.current) {
-      const dead = streamRef.current.getAudioTracks().some(t => t.readyState === "ended");
-      if (dead) {
-        console.debug("[audio] mic track ended — releasing for re-init");
-        releaseMic();
+      const ctx = getOrCreateCtx();
+      // Resume during this user-gesture context (PTT press)
+      if (ctx.state === "suspended") {
+        ctx.resume().catch(() => {});
       }
+      const nativeRate = ctx.sampleRate;
+
+      const source = ctx.createMediaStreamSource(stream);
+      sourceRef.current = source;
+
+      // Boost mic gain: typical laptop/webcam mics output ~0.004 peak (Float32).
+      // GSM codec needs at least 0.06 peak for intelligible speech.
+      // Route: source → micGain → analyser/processor
+      const micGain = ctx.createGain();
+      micGain.gain.value = MIC_BOOST_GAIN;
+      micGainRef.current = micGain;
+      source.connect(micGain);
+
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyserRef.current = analyser;
+      micGain.connect(analyser);
+
+      const BUFFER_SIZE = 4096;
+      const processor = ctx.createScriptProcessor(BUFFER_SIZE, 1, 1);
+      processorRef.current = processor;
+
+      let txCallbackCount = 0;
+      processor.onaudioprocess = (ev) => {
+        // inputBuffer is at nativeRate (e.g. 44100 or 48000 Hz)
+        const rawInput = ev.inputBuffer.getChannelData(0);
+
+        // Chrome: write a tiny inaudible value to keep onaudioprocess firing.
+        // Without this, the callback may silently stop when output stays at zero.
+        const outBuf = ev.outputBuffer.getChannelData(0);
+        outBuf[0] = 1e-10;
+
+        // Log mic level every ~40 callbacks (~3 s) to diagnose silence issues
+        txCallbackCount++;
+        if (txCallbackCount % 40 === 1) {
+          let peak = 0;
+          let sumSq = 0;
+          for (let i = 0; i < rawInput.length; i++) {
+            const a = Math.abs(rawInput[i]);
+            if (a > peak) peak = a;
+            sumSq += rawInput[i] * rawInput[i];
+          }
+          const rms = Math.sqrt(sumSq / rawInput.length);
+          console.debug(`[audio] TX mic (post-gain×${MIC_BOOST_GAIN}) rms=${rms.toFixed(4)} peak=${peak.toFixed(4)} rate=${nativeRate}`);
+        }
+
+        if (mode === "local") {
+          // Downsample to 8000 Hz then convert to Uint8
+          const resampled = downsampleFloat32(rawInput, nativeRate, GSM_RATE);
+          const pcm8 = new Uint8Array(resampled.length);
+          for (let i = 0; i < resampled.length; i++) {
+            const s = Math.max(-1, Math.min(1, resampled[i]));
+            pcm8[i] = Math.round((s + 1) * 127.5);
+          }
+          const merged = new Uint8Array(accumLocalRef.current.length + pcm8.length);
+          merged.set(accumLocalRef.current);
+          merged.set(pcm8, accumLocalRef.current.length);
+          accumLocalRef.current = merged;
+
+          while (accumLocalRef.current.length >= LOCAL_CHUNK_BYTES) {
+            onChunk(accumLocalRef.current.slice(0, LOCAL_CHUNK_BYTES).buffer);
+            accumLocalRef.current = accumLocalRef.current.slice(LOCAL_CHUNK_BYTES);
+          }
+        } else {
+          // Downsample to 8000 Hz then convert to Int16 for GSM encoding on server
+          const resampled = downsampleFloat32(rawInput, nativeRate, GSM_RATE);
+          const pcm16 = new Int16Array(resampled.length);
+          for (let i = 0; i < resampled.length; i++) {
+            const s = Math.max(-1, Math.min(1, resampled[i]));
+            pcm16[i] = s < 0 ? Math.round(s * 32768) : Math.round(s * 32767);
+          }
+          const merged = new Int16Array(accumRemoteRef.current.length + pcm16.length);
+          merged.set(accumRemoteRef.current);
+          merged.set(pcm16, accumRemoteRef.current.length);
+          accumRemoteRef.current = merged;
+
+          while (accumRemoteRef.current.length >= REMOTE_CHUNK_SAMPLES) {
+            const chunk = accumRemoteRef.current.slice(0, REMOTE_CHUNK_SAMPLES);
+            accumRemoteRef.current = accumRemoteRef.current.slice(REMOTE_CHUNK_SAMPLES);
+            onChunk(chunk.buffer);
+          }
+        }
+      };
+
+      micGain.connect(processor);
+      // Must connect to destination for onaudioprocess to fire;
+      // outBuf[0] = 1e-10 keeps Chrome from silencing the callback.
+      processor.connect(ctx.destination);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const updateLevel = () => {
+        analyser.getByteFrequencyData(dataArray);
+        const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+        setInputLevel(avg / 255);
+        levelTimerRef.current = requestAnimationFrame(updateLevel);
+      };
+      levelTimerRef.current = requestAnimationFrame(updateLevel);
+
+      setIsRecording(true);
+    } catch (err) {
+      console.error("[audio] mic error:", err);
+      setIsMicAllowed(false);
+      setIsRecording(false);
     }
+  }, [getOrCreateCtx]);
 
-    // Initialize mic if not done yet (first PTT only; subsequent calls are instant)
-    await initMicOnce(mode);
-
-    // Guard: PTT might have been released while getUserMedia was pending
-    if (!pttActiveRef.current) {
-      console.debug("[audio] PTT released during mic init — not emitting");
-      return;
-    }
-
-    // Signal the worklet to start emitting chunks
-    if (processorRef.current) {
-      processorRef.current.port.postMessage({ type: "emit", emitting: true });
-    }
-
-    setIsRecording(true);
-  }, [initMicOnce, releaseMic]);
-
-  /**
-   * Stop recording — signal the worklet to stop emitting.
-   * The mic stream and audio chain stay alive for the next PTT press.
-   */
   const stopRecording = useCallback(() => {
-    pttActiveRef.current = false;
-    if (processorRef.current) {
-      processorRef.current.port.postMessage({ type: "emit", emitting: false });
-    }
-    onChunkRef.current = null;
-    accumLocalRef.current = new Uint8Array(0);
-    accumRemoteRef.current = new Int16Array(0);
-    setIsRecording(false);
-    setInputLevel(0);
-  }, []);
-
-  /**
-   * Full teardown — called on component unmount.
-   * Closes the mic stream and AudioContext.
-   */
-  const teardown = useCallback(() => {
     if (levelTimerRef.current) {
       cancelAnimationFrame(levelTimerRef.current);
       levelTimerRef.current = null;
     }
-    if (processorRef.current) {
-      processorRef.current.port.postMessage({ type: "emit", emitting: false });
-      processorRef.current.port.onmessage = null;
-      processorRef.current.disconnect();
-      processorRef.current = null;
-    }
+    processorRef.current?.disconnect();
+    processorRef.current = null;
+    micGainRef.current?.disconnect();
+    micGainRef.current = null;
     sourceRef.current?.disconnect();
     sourceRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
-    micInitializedRef.current = false;
-    micInitPromiseRef.current = null;
-    pttActiveRef.current = false;
-    onChunkRef.current = null;
     accumLocalRef.current = new Uint8Array(0);
     accumRemoteRef.current = new Int16Array(0);
     setIsRecording(false);
     setInputLevel(0);
   }, []);
 
+  /**
+   * Play received audio using a sequential scheduler.
+   * Each buffer is chained to start exactly when the previous one ends,
+   * preventing overlapping playback when packets arrive in bursts.
+   *
+   * @param data      Raw bytes (without the opcode header byte).
+   * @param isFloat32 true = Float32 PCM at 8000 Hz (remote GSM decoded);
+   *                  false = Uint8 unsigned PCM at 8000 Hz (local relay).
+   */
   const playAudio = useCallback((data: ArrayBuffer, isFloat32 = false) => {
     try {
       const ctx = getOrCreateCtx();
@@ -363,7 +276,8 @@ export function useAudio(): UseAudioReturn {
       let float32: Float32Array;
 
       if (isFloat32) {
-        float32 = new Float32Array(data.slice(0));
+        const copy = data.slice(0);
+        float32 = new Float32Array(copy);
       } else {
         const pcm8 = new Uint8Array(data);
         float32 = new Float32Array(pcm8.length);
@@ -377,13 +291,19 @@ export function useAudio(): UseAudioReturn {
         return;
       }
 
+      // Audio data is at 8000 Hz; browser resamples automatically when
+      // the buffer sampleRate differs from the context sampleRate.
       const buffer = ctx.createBuffer(1, float32.length, GSM_RATE);
       buffer.getChannelData(0).set(float32);
 
       const source = ctx.createBufferSource();
       source.buffer = buffer;
+      // Route through the shared gain node for volume amplification.
       source.connect(gainNodeRef.current ?? ctx.destination);
 
+      // ── Sequential scheduling ─────────────────────────────────────────────
+      // If the scheduler has fallen far behind (e.g. long silence, tab hidden),
+      // reset nextPlayTime to "now" so we don't queue a massive backlog.
       const now = ctx.currentTime;
       if (nextPlayTimeRef.current < now || nextPlayTimeRef.current > now + MAX_QUEUE_AHEAD_SEC) {
         nextPlayTimeRef.current = now;
@@ -397,36 +317,27 @@ export function useAudio(): UseAudioReturn {
     }
   }, [getOrCreateCtx]);
 
+  /**
+   * Mute or unmute the RX (speaker) playback gain.
+   * Call muteRx(true) when PTT starts to prevent acoustic feedback:
+   * the mic would otherwise pick up the speaker output and create a loop.
+   * Call muteRx(false) when PTT ends to restore normal RX volume.
+   */
   const muteRx = useCallback((muted: boolean) => {
-    const ctx = getOrCreateCtx();
     if (!gainNodeRef.current) return;
+    // Smooth ramp (10 ms) to avoid clicks on sudden mute/unmute
+    const ctx = gainNodeRef.current.context;
     const now = ctx.currentTime;
     gainNodeRef.current.gain.cancelScheduledValues(now);
     gainNodeRef.current.gain.setTargetAtTime(muted ? 0 : 3, now, 0.01);
-  }, [getOrCreateCtx]);
+  }, []);
 
   useEffect(() => {
     return () => {
-      teardown();
+      stopRecording();
       ctxRef.current?.close();
     };
-  }, [teardown]);
-
-  // When the user plugs or unplugs headphones/speakers the browser fires
-  // devicechange.  Release the old mic chain so the next PTT press captures
-  // audio from the newly selected default device.  Without this, the stream
-  // keeps pointing at the stale (possibly ended) track and delivers silence.
-  useEffect(() => {
-    const onDeviceChange = () => {
-      if (!micInitializedRef.current) return;
-      console.debug("[audio] devicechange — releasing mic for re-init");
-      releaseMic();
-    };
-    navigator.mediaDevices.addEventListener("devicechange", onDeviceChange);
-    return () => {
-      navigator.mediaDevices.removeEventListener("devicechange", onDeviceChange);
-    };
-  }, [releaseMic]);
+  }, [stopRecording]);
 
   return {
     isRecording,
