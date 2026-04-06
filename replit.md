@@ -23,7 +23,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - React + Vite web app at `/`
 - Web client for eQSO radio linking over internet
 - Connects to eQSO server via WebSocket at `/ws`
-- Push-to-talk (PTT) with Web Audio API (8kHz PCM)
+- Push-to-talk (PTT) with Web Audio API (AudioWorklet, 8kHz PCM, ~122ms/chunk)
 - Room management and user list
 
 ### API Server (`artifacts/api-server`)
@@ -38,6 +38,15 @@ The eQSO server implements the binary protocol reverse-engineered from OSQe:
 - `0x0a` handshake, `0x1a` join room, `0x01` + 198 bytes audio, `0x0d` PTT release
 - `0x16` user list updates, `0x14` room list, `0x0c` keepalive
 - TCP Windows clients and WebSocket Linux clients share the same room/audio bus
+
+## TX Audio Pipeline (Browser)
+
+Cadena: `MediaStream → micGain(×8) → DynamicsCompressor → AnalyserNode → AudioWorkletNode(mic-processor)`
+
+- **AudioWorklet** (`public/mic-worklet.js`): procesa bloques de 128 muestras en el hilo de audio (2.67ms@48kHz). Submuestrea a 8kHz y acumula hasta 960 muestras → emite chunk cada ~122ms ≈ real-time. Reemplaza ScriptProcessorNode que entregaba chunks cada 255–340ms (solo 47% de velocidad real), causando que ASORAPA vaciara el buffer de audio en 2s.
+- **Warmup**: 0.5s descartado en el worklet (≈188 bloques) para que el hardware del micrófono se estabilice.
+- **DynamicsCompressor**: threshold=-30dBFS, ratio=8, attack=3ms, release=150ms. Normaliza niveles variables para mantener el squelch de la radio receptora abierto.
+- **Cadena de timing**: PTT start → worklet warmup 500ms → chunks cada 122ms → servidor encode GSM → ASORAPA recibe audio a tiempo real.
 
 ## GSM 06.10 Codec
 

@@ -50,15 +50,14 @@ const MAX_QUEUE_AHEAD_SEC = 1.5;
 // ×8 puts typical speech at ~0.03–0.06 peak; loud speech stays below 0.3.
 const MIC_BOOST_GAIN = 8;
 
-// Number of ScriptProcessor callbacks to discard at PTT start before sending
-// audio. Gives time for the mic hardware to open and the GainNode to stabilise.
-// At 4096 frames / 48 kHz ≈ 85 ms per callback → 6 callbacks ≈ 510 ms warmup.
-const TX_WARMUP_CALLBACKS = 6;
+// Warmup duration in seconds: let mic hardware open before sending audio.
+// The MicProcessor AudioWorklet converts this to blocks (128 samples each).
+const TX_WARMUP_SECONDS = 0.5;
 
 export function useAudio(): UseAudioReturn {
   const ctxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const processorRef = useRef<AudioWorkletNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const micGainRef = useRef<GainNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -154,10 +153,7 @@ export function useAudio(): UseAudioReturn {
 
       // DynamicsCompressor: normalises wildly varying mic levels so GSM frames
       // stay consistently above the squelch threshold at the radio receiver.
-      // Runs on the audio thread with <3 ms latency (no buffering unlike ffmpeg).
-      // threshold=-30 dBFS: all speech above -30 dBFS is compressed.
-      // ratio=8: heavy compression → consistent output level.
-      // attack=3 ms, release=150 ms: catches loud transients quickly.
+      // threshold=-30 dBFS, ratio=8, attack=3 ms, release=150 ms.
       const compressor = ctx.createDynamicsCompressor();
       compressor.threshold.value = -30;
       compressor.knee.value      =   6;
@@ -171,83 +167,74 @@ export function useAudio(): UseAudioReturn {
       analyserRef.current = analyser;
       compressor.connect(analyser);
 
-      const BUFFER_SIZE = 4096;
-      const processor = ctx.createScriptProcessor(BUFFER_SIZE, 1, 1);
-      processorRef.current = processor;
+      // ── AudioWorklet — replaces deprecated ScriptProcessorNode ─────────────
+      // ScriptProcessorNode ran every ~255–340 ms (3–4 callbacks of 85 ms) and
+      // only produced one 120 ms GSM chunk per 255 ms, i.e. ~47 % real-time.
+      // AudioWorklet fires every 128 samples (2.67 ms at 48 kHz), accumulating
+      // 960 samples in ~46 blocks = 122 ms — essentially 1:1 real-time.
+      const workletUrl = import.meta.env.BASE_URL + "mic-worklet.js";
+      try {
+        await ctx.audioWorklet.addModule(workletUrl);
+      } catch {
+        // Already registered in this AudioContext — safe to ignore.
+      }
 
-      let txCallbackCount = 0;
-      processor.onaudioprocess = (ev) => {
-        // inputBuffer is at nativeRate (e.g. 44100 or 48000 Hz)
-        const rawInput = ev.inputBuffer.getChannelData(0);
+      const warmupBlocks = Math.round(TX_WARMUP_SECONDS * nativeRate / 128);
+      const workletNode = new AudioWorkletNode(ctx, "mic-processor", {
+        processorOptions: {
+          nativeRate,
+          targetRate:   GSM_RATE,
+          chunkSamples: REMOTE_CHUNK_SAMPLES, // 960 samples = 1 GSM packet
+          warmupBlocks,
+        },
+        numberOfOutputs: 1,
+      });
+      processorRef.current = workletNode;
 
-        // Chrome: write a tiny inaudible value to keep onaudioprocess firing.
-        // Without this, the callback may silently stop when output stays at zero.
-        const outBuf = ev.outputBuffer.getChannelData(0);
-        outBuf[0] = 1e-10;
+      workletNode.port.onmessage = (ev) => {
+        const { type } = ev.data as { type: string; data?: Float32Array; rms?: number; peak?: number };
 
-        txCallbackCount++;
-
-        // Discard the first TX_WARMUP_CALLBACKS callbacks so the mic hardware
-        // has time to open and stabilise. Without this, the first ~500 ms of
-        // audio is near-silence which wastes the radio channel and confuses ASORAPA.
-        if (txCallbackCount <= TX_WARMUP_CALLBACKS) return;
-
-        // Log mic level every ~40 callbacks (~3 s) to diagnose silence issues
-        if (txCallbackCount % 40 === 1) {
-          let peak = 0;
-          let sumSq = 0;
-          for (let i = 0; i < rawInput.length; i++) {
-            const a = Math.abs(rawInput[i]);
-            if (a > peak) peak = a;
-            sumSq += rawInput[i] * rawInput[i];
-          }
-          const rms = Math.sqrt(sumSq / rawInput.length);
-          console.debug(`[audio] TX mic (gain×${MIC_BOOST_GAIN}+compressor) rms=${rms.toFixed(4)} peak=${peak.toFixed(4)} rate=${nativeRate}`);
+        if (type === "level") {
+          console.debug(
+            `[audio] TX mic (gain×${MIC_BOOST_GAIN}+compressor)`,
+            `rms=${ev.data.rms.toFixed(4)} peak=${ev.data.peak.toFixed(4)} rate=${nativeRate}`
+          );
+          return;
         }
 
+        if (type !== "chunk") return;
+        const float32 = ev.data.data as Float32Array; // 960 samples at 8 kHz
+
         if (mode === "local") {
-          // Downsample to 8000 Hz then convert to Uint8
-          const resampled = downsampleFloat32(rawInput, nativeRate, GSM_RATE);
-          const pcm8 = new Uint8Array(resampled.length);
-          for (let i = 0; i < resampled.length; i++) {
-            const s = Math.max(-1, Math.min(1, resampled[i]));
+          // Convert Float32 → Uint8 for local relay
+          const pcm8 = new Uint8Array(float32.length);
+          for (let i = 0; i < float32.length; i++) {
+            const s = Math.max(-1, Math.min(1, float32[i]));
             pcm8[i] = Math.round((s + 1) * 127.5);
           }
           const merged = new Uint8Array(accumLocalRef.current.length + pcm8.length);
           merged.set(accumLocalRef.current);
           merged.set(pcm8, accumLocalRef.current.length);
           accumLocalRef.current = merged;
-
           while (accumLocalRef.current.length >= LOCAL_CHUNK_BYTES) {
             onChunk(accumLocalRef.current.slice(0, LOCAL_CHUNK_BYTES).buffer);
             accumLocalRef.current = accumLocalRef.current.slice(LOCAL_CHUNK_BYTES);
           }
         } else {
-          // Downsample to 8000 Hz then convert to Int16 for GSM encoding on server
-          const resampled = downsampleFloat32(rawInput, nativeRate, GSM_RATE);
-          const pcm16 = new Int16Array(resampled.length);
-          for (let i = 0; i < resampled.length; i++) {
-            const s = Math.max(-1, Math.min(1, resampled[i]));
+          // Convert Float32 → Int16 for GSM encoding on server.
+          // Each worklet chunk = exactly 960 samples = 1 GSM packet (120 ms).
+          const pcm16 = new Int16Array(float32.length);
+          for (let i = 0; i < float32.length; i++) {
+            const s = Math.max(-1, Math.min(1, float32[i]));
             pcm16[i] = s < 0 ? Math.round(s * 32768) : Math.round(s * 32767);
           }
-          const merged = new Int16Array(accumRemoteRef.current.length + pcm16.length);
-          merged.set(accumRemoteRef.current);
-          merged.set(pcm16, accumRemoteRef.current.length);
-          accumRemoteRef.current = merged;
-
-          while (accumRemoteRef.current.length >= REMOTE_CHUNK_SAMPLES) {
-            const chunk = accumRemoteRef.current.slice(0, REMOTE_CHUNK_SAMPLES);
-            accumRemoteRef.current = accumRemoteRef.current.slice(REMOTE_CHUNK_SAMPLES);
-            onChunk(chunk.buffer);
-          }
+          console.debug("[ptt] audio chunk:", pcm16.byteLength, "bytes");
+          onChunk(pcm16.buffer);
         }
       };
 
-      // processor receives the compressed signal (after compressor+analyser).
-      analyser.connect(processor);
-      // Must connect to destination for onaudioprocess to fire;
-      // outBuf[0] = 1e-10 keeps Chrome from silencing the callback.
-      processor.connect(ctx.destination);
+      analyser.connect(workletNode);
+      workletNode.connect(ctx.destination);
 
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
       const updateLevel = () => {
@@ -271,8 +258,11 @@ export function useAudio(): UseAudioReturn {
       cancelAnimationFrame(levelTimerRef.current);
       levelTimerRef.current = null;
     }
-    processorRef.current?.disconnect();
-    processorRef.current = null;
+    if (processorRef.current) {
+      processorRef.current.port.onmessage = null;
+      processorRef.current.disconnect();
+      processorRef.current = null;
+    }
     micGainRef.current?.disconnect();
     micGainRef.current = null;
     sourceRef.current?.disconnect();
