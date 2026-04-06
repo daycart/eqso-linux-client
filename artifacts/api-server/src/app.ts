@@ -41,7 +41,8 @@ if (process.env.NODE_ENV === "production") {
   if (existsSync(publicDir)) {
     app.use(express.static(publicDir));
     // SPA fallback: all unmatched routes return index.html
-    app.get("*", (_req, res) => {
+    // Use regex instead of "*" — path-to-regexp v8 removed wildcard support
+    app.get(/.*/, (_req, res) => {
       res.sendFile(path.join(publicDir, "index.html"));
     });
     logger.info({ publicDir }, "Serving React client from static files");
