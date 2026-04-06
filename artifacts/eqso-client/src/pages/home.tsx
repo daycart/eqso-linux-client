@@ -72,26 +72,35 @@ export default function HomePage() {
     };
   }, [eqso]);
 
+  // Keep stable refs to the latest pttStart / pttEnd so keyboard listeners
+  // can be registered ONCE (empty deps) and always call the current callbacks.
+  // This avoids the re-registration race where removing + re-adding listeners
+  // while Space is held could fire onKeyUp with a stale closure.
+  const pttStartRef = useRef(pttStart);
+  const pttEndRef   = useRef(pttEnd);
+  useEffect(() => { pttStartRef.current = pttStart; }, [pttStart]);
+  useEffect(() => { pttEndRef.current   = pttEnd;   }, [pttEnd]);
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
+    const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Space" && !e.repeat) {
         e.preventDefault();
-        pttStart();
+        pttStartRef.current();
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.code === "Space") {
         e.preventDefault();
-        pttEnd();
+        pttEndRef.current();
       }
     };
-    window.addEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     return () => {
-      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [pttStart, pttEnd]);
+  }, []); // registered once — refs keep callbacks current
 
   const isInRoom = !!eqso.currentRoom;
 
