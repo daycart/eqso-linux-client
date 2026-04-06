@@ -144,18 +144,32 @@ export function useAudio(): UseAudioReturn {
       const source = ctx.createMediaStreamSource(stream);
       sourceRef.current = source;
 
-      // Boost mic gain: typical laptop/webcam mics output ~0.004 peak (Float32).
-      // GSM codec needs at least 0.06 peak for intelligible speech.
-      // Route: source → micGain → analyser/processor
+      // Boost mic gain: raw mic (no AGC) is ~0.003–0.008 peak Float32.
+      // GSM codec needs at least -25 dBFS (~0.06 peak) for intelligible speech.
+      // Route: source → micGain → compressor → analyser → processor
       const micGain = ctx.createGain();
       micGain.gain.value = MIC_BOOST_GAIN;
       micGainRef.current = micGain;
       source.connect(micGain);
 
+      // DynamicsCompressor: normalises wildly varying mic levels so GSM frames
+      // stay consistently above the squelch threshold at the radio receiver.
+      // Runs on the audio thread with <3 ms latency (no buffering unlike ffmpeg).
+      // threshold=-30 dBFS: all speech above -30 dBFS is compressed.
+      // ratio=8: heavy compression → consistent output level.
+      // attack=3 ms, release=150 ms: catches loud transients quickly.
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.value = -30;
+      compressor.knee.value      =   6;
+      compressor.ratio.value     =   8;
+      compressor.attack.value    =   0.003;
+      compressor.release.value   =   0.15;
+      micGain.connect(compressor);
+
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
       analyserRef.current = analyser;
-      micGain.connect(analyser);
+      compressor.connect(analyser);
 
       const BUFFER_SIZE = 4096;
       const processor = ctx.createScriptProcessor(BUFFER_SIZE, 1, 1);
@@ -188,7 +202,7 @@ export function useAudio(): UseAudioReturn {
             sumSq += rawInput[i] * rawInput[i];
           }
           const rms = Math.sqrt(sumSq / rawInput.length);
-          console.debug(`[audio] TX mic (post-gain×${MIC_BOOST_GAIN}) rms=${rms.toFixed(4)} peak=${peak.toFixed(4)} rate=${nativeRate}`);
+          console.debug(`[audio] TX mic (gain×${MIC_BOOST_GAIN}+compressor) rms=${rms.toFixed(4)} peak=${peak.toFixed(4)} rate=${nativeRate}`);
         }
 
         if (mode === "local") {
@@ -229,7 +243,8 @@ export function useAudio(): UseAudioReturn {
         }
       };
 
-      micGain.connect(processor);
+      // processor receives the compressed signal (after compressor+analyser).
+      analyser.connect(processor);
       // Must connect to destination for onaudioprocess to fire;
       // outBuf[0] = 1e-10 keeps Chrome from silencing the callback.
       processor.connect(ctx.destination);
