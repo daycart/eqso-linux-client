@@ -43,14 +43,17 @@ function downsampleFloat32(input: Float32Array, fromRate: number, toRate: number
 // If the browser pauses (tab hidden, slow CPU) we don't want a huge backlog.
 const MAX_QUEUE_AHEAD_SEC = 1.5;
 
-// Gain applied to mic input before encoding. Mic sensitivity is typically very
-// low (~0.004 peak Float32), so we boost by this factor before GSM encoding.
+// Gain applied to mic input before encoding.
+// autoGainControl is disabled (see getUserMedia below) so we apply gain here.
+// Raw mic output (no AGC) is typically ~0.003–0.008 peak Float32.
 // GSM codec needs at least -25 dBFS (~0.06 peak) for intelligible speech.
-// Software gain on top of mic input. With autoGainControl enabled (below)
-// the browser already normalises the signal. Keep at 1 (no extra boost)
-// unless the mic is known to be weak after AGC. Increase only if the
-// post-gain peak reported in the console is below 0.05.
-const MIC_BOOST_GAIN = 2;
+// ×8 puts typical speech at ~0.03–0.06 peak; loud speech stays below 0.3.
+const MIC_BOOST_GAIN = 8;
+
+// Number of ScriptProcessor callbacks to discard at PTT start before sending
+// audio. Gives time for the mic hardware to open and the GainNode to stabilise.
+// At 4096 frames / 48 kHz ≈ 85 ms per callback → 6 callbacks ≈ 510 ms warmup.
+const TX_WARMUP_CALLBACKS = 6;
 
 export function useAudio(): UseAudioReturn {
   const ctxRef = useRef<AudioContext | null>(null);
@@ -114,9 +117,13 @@ export function useAudio(): UseAudioReturn {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
-          echoCancellation: true,
+          // Disable AGC: it needs 2–3 s to calibrate during which the mic
+          // captures near-silence. We apply a fixed gain (MIC_BOOST_GAIN)
+          // instead. echoCancellation is disabled too because we mute the
+          // speaker during TX — there is nothing to cancel.
+          echoCancellation: false,
           noiseSuppression: false,
-          autoGainControl: true,
+          autoGainControl: false,
         },
         video: false,
       });
@@ -164,8 +171,14 @@ export function useAudio(): UseAudioReturn {
         const outBuf = ev.outputBuffer.getChannelData(0);
         outBuf[0] = 1e-10;
 
-        // Log mic level every ~40 callbacks (~3 s) to diagnose silence issues
         txCallbackCount++;
+
+        // Discard the first TX_WARMUP_CALLBACKS callbacks so the mic hardware
+        // has time to open and stabilise. Without this, the first ~500 ms of
+        // audio is near-silence which wastes the radio channel and confuses ASORAPA.
+        if (txCallbackCount <= TX_WARMUP_CALLBACKS) return;
+
+        // Log mic level every ~40 callbacks (~3 s) to diagnose silence issues
         if (txCallbackCount % 40 === 1) {
           let peak = 0;
           let sumSq = 0;

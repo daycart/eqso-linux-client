@@ -121,9 +121,10 @@ export class FfmpegGsmEncoder extends EventEmitter {
       "-probesize", "32", "-analyzeduration", "0",
       "-f", "s16le", "-ar", "8000", "-ac", "1",
       "-i", "pipe:0",
-      // Telephony bandpass: 80 Hz HPF removes rumble, 3400 Hz LPF removes HF
-      // noise outside GSM's intelligibility range. Compressor normalises level.
-      "-af", "highpass=f=80,lowpass=f=3400,acompressor=threshold=-18dB:ratio=3:attack=5:release=50:makeup=2dB",
+      // Telephony bandpass: 300–3400 Hz is the GSM/PSTN intelligibility window.
+      // Removed acompressor: it adds ~200 ms of buffering latency and causes
+      // pumping artifacts. Gain is now applied client-side (MIC_BOOST_GAIN).
+      "-af", "highpass=f=300,lowpass=f=3400",
       "-f", "gsm", "-ar", "8000",
       "pipe:1",
     ], { stdio: ["pipe", "pipe", "pipe"] });
