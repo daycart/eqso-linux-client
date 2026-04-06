@@ -1,27 +1,25 @@
 /**
- * MicProcessor v11 — AGC sin portadora de confort.
+ * MicProcessor v12 — AGC sin portadora de confort, maxGain restaurado a 80.
  *
- * ── Signal chain ──────────────────────────────────────────────────────────
- *   input (8 kHz — AudioContext creado a GSM_RATE, el navegador hace el
- *   resampling del mic desde 48 kHz usando su filtro anti-aliasing propio)
- *   → identity pass-through (iRatio=1, box-filter no-op)
- *   → AGC (adaptive gain, attack 40ms / release 80ms)
- *   → tanh soft clip
- *   → emit
+ * ── Diagnóstico ───────────────────────────────────────────────────────────
+ * El micrófono del usuario produce ~0.003 RMS FS (muy silencioso).
+ * Con maxGain=12 (v11), la salida era solo 3-4% FS — insuficiente para
+ * mantener el VOX del enlace radio de ASORAPA activo.
+ * Con maxGain=80 (v10), el gain llegaba a 58-67 y el tanh saturaba, pero
+ * el PROBLEMA REAL era la portadora de 200 Hz: portadora(8%) + tanh(~96%)
+ * superaba 1.0 → hard clip → distorsión de cuadrado → GSM = ruido.
  *
- * ── Sin portadora de confort ──────────────────────────────────────────────
- * La portadora de 200 Hz fue eliminada porque:
- * 1. La radio la escucha como un tono puro (zumbido) = "ruido" audible.
- * 2. Al sumarse a la voz comprimida por tanh, supera ±1.0 → clipping duro
- *    → distorsión de cuadrado → GSM codifica ruido de banda ancha.
- * El tiempo de hold del VOX del enlace radio (0.5–2 s) mantiene el canal
- * activo durante las pausas naturales entre palabras.
+ * ── Solución v12 ─────────────────────────────────────────────────────────
+ * maxGain=80, SIN portadora. tanh nunca puede superar ±1.0 (asíntota),
+ * así que es IMPOSIBLE el hard clip independientemente del gain aplicado.
+ * El VOX del enlace radio recibirá señal de 15-25% RMS FS → se mantiene
+ * activo durante toda la transmisión.
  *
  * ── AGC ──────────────────────────────────────────────────────────────────
- * Attack:   40 ms — rápido para bajar el gain al detectar voz fuerte
- * Release:  80 ms — sube el gain gradualmente en los silencios
- * Target:  0.22 RMS (22% FS) — bien por encima del umbral típico de VOX
- * Max gain:  12  — tanh con g=12 nunca produce hard clip (max = tanh(∞) = 1.0)
+ * Attack:   10 ms — muy rápido: baja el gain en un frame cuando llega voz
+ * Release: 300 ms — sube lento para no dispararse en pausas entre palabras
+ * Target:  0.22 RMS (22% FS) — nivel óptimo para VOX y claridad de voz
+ * Max gain:  80  — necesario para micrófonos silenciosos (RMS ~ 0.003 FS)
  * Min gain: 0.3  — atenúa micrófonos muy calientes
  *
  * ── Warmup ────────────────────────────────────────────────────────────────
@@ -52,7 +50,7 @@ class MicProcessor extends AudioWorkletProcessor {
     const blockMs        = (128 / nativeRate) * 1000;
     this._agcGain    = 4.0;
     this._agcTarget  = 0.22;
-    this._agcMaxGain = 12.0;
+    this._agcMaxGain = 80.0;
     this._agcMinGain = 0.3;
     this._agcAttack  = Math.exp(-blockMs / 10);    // 10 ms attack  (muy rapido — evita saturacion en primeros frames)
     this._agcRelease = Math.exp(-blockMs / 300);   // 300 ms release — sube lentamente para no amplificar pausa->voz
@@ -186,4 +184,4 @@ class MicProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('mic-processor-v11', MicProcessor);
+registerProcessor('mic-processor-v12', MicProcessor);
