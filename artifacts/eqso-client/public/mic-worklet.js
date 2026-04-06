@@ -16,17 +16,17 @@
  * it to 45–75 % FS — ideal for GSM 06.10 and for activating radio VOX gates.
  *
  * The soft-knee limiter is LINEAR below 0.50 FS (no distortion at all) and
- * compresses smoothly above 0.50 FS, asymptotically approaching 0.80 FS.
- * This is better than tanh(3x) which compressed to 87 % FS at loud speech
- * (perceptible artefacts).
+ * compresses smoothly above 0.50 FS, asymptotically approaching 0.90 FS.
+ * Normal speech stays in the linear zone; loud speech reaches 84–88 % FS,
+ * enough to activate the physical radio VOX gate (threshold ~85 % FS).
  *
- *   knee = 0.50, cap = 0.80, range = 0.30
- *   output = sign × (0.50 + 0.30 × (1 − exp(−(|gain·x|−0.50)/0.30)))
+ *   knee = 0.50, cap = 0.90, range = 0.40
+ *   output = sign × (0.50 + 0.40 × (1 − exp(−(|gain·x|−0.50)/0.40)))
  *                          for |gain·x| > 0.50
  *
- *   normal speech  (gain·raw ≈ 0.54): output ≈ 0.54 (linear, no compression)
- *   loud speech    (gain·raw ≈ 1.30): output ≈ 0.78 (vs tanh→0.86 before)
- *   very loud      (gain·raw ≥ 2.00): output → 0.80 asymptote
+ *   normal speech  (gain·raw ≈ 0.54): output ≈ 0.54 (linear, no distortion)
+ *   loud speech    (gain·raw ≈ 1.30): output ≈ 0.85 (VOX activates ✓)
+ *   very loud      (gain·raw ≥ 2.00): output → 0.90 asymptote
  *
  * ── Warmup ────────────────────────────────────────────────────────────────
  * The first 80 ms of mic audio is discarded to absorb the hardware startup
@@ -57,8 +57,8 @@ class MicProcessor extends AudioWorkletProcessor {
     this._pendingEmit   = null;
 
     // gain=3: brings OS-normalised mic (15–25 % FS) to 45–75 % FS.
-    // The soft-knee limiter below keeps the output below 0.80 FS even at
-    // very loud speech, avoiding the 87 % FS tanh compression from before.
+    // The soft-knee limiter below keeps the output below 0.90 FS even at
+    // very loud speech. Loud speech reaches ~85 % FS → activates radio VOX.
     this._gain = 3;
 
     // Level logging: once per second at 8 kHz
@@ -123,10 +123,10 @@ class MicProcessor extends AudioWorkletProcessor {
     // ── Step 2: Apply gain×3 + soft-knee limiter at 8 kHz ────────────────
     // Linear zone: |gain·x| ≤ knee  → output = gain·x  (no distortion)
     // Knee zone:   |gain·x| >  knee → output = sign×(knee + range×(1−e^(−excess/range)))
-    //              asymptote at knee+range = 0.80 FS
+    //              asymptote at knee+range = 0.90 FS
     const g     = this._gain;
     const knee  = 0.50;
-    const range = 0.30;   // cap = knee + range = 0.80
+    const range = 0.40;   // cap = knee + range = 0.90
     for (let i = 0; i < outLen; i++) {
       const s   = g * ds[i];
       const abs = Math.abs(s);
