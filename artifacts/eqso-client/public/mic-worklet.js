@@ -7,8 +7,14 @@
  *   { type: 'emit', emitting: false } → stop posting chunks (mic stays open)
  *
  * ── Signal chain ──────────────────────────────────────────────────────────
- *   input (48 kHz) → fixed gain + tanh soft-clip → box-filter decimation
- *   (48→8 kHz) → accumulate 960 samples → emit chunk (when emitting=true)
+ *   input (48 kHz) → box-filter decimation (48→8 kHz) → fixed gain
+ *   + tanh soft-clip (at 8 kHz) → accumulate 960 samples → emit chunk
+ *
+ *   NOTE: tanh is applied AFTER downsampling (at 8 kHz).  If tanh were
+ *   applied at 48 kHz first, the nonlinear clipping would generate harmonics
+ *   above 4 kHz that the box filter then folds back into the audible band
+ *   (aliasing distortion).  Applying tanh at 8 kHz means its harmonics are
+ *   at 8 kHz, 16 kHz, etc. — all beyond the codec Nyquist — so no aliasing.
  *
  * ── Why fixed gain instead of AGC ────────────────────────────────────────
  * An AGC gain follower releases slowly during pauses between words.  After
@@ -52,22 +58,24 @@ class MicProcessor extends AudioWorkletProcessor {
     this._carry         = new Float32Array(0);
     this._accum         = new Float32Array(0);
 
-    // Fixed gain × tanh soft-clip.  autoGainControl=false is used in getUserMedia
-    // so the raw mic arrives at hardware sensitivity (no OS boosting).
+    // Fixed gain × tanh soft-clip applied at 8 kHz (after downsampling).
+    // autoGainControl=false is used in getUserMedia so the raw mic arrives
+    // at hardware sensitivity (no OS boosting).
     // gain=6: good balance for most laptop/headset mics without OS AGC.
-    //   Quiet mic  (raw peak ~0.03): tanh(6×0.03)=tanh(0.18)=0.179 →  5 870 Int16 (18%)
-    //   Normal mic (raw peak ~0.10): tanh(6×0.10)=tanh(0.60)=0.537 → 17 590 Int16 (54%)
-    //   Loud mic   (raw peak ~0.30): tanh(6×0.30)=tanh(1.80)=0.974 → 31 910 Int16 (97%)
+    //   Quiet mic  (raw peak ~0.03): tanh(6×0.03/6)=tanh(0.18)=0.179 →  5 870 Int16 (18%)
+    //   Normal mic (raw peak ~0.10): tanh(6×0.10/6)=tanh(0.60)=0.537 → 17 590 Int16 (54%)
+    //   Loud mic   (raw peak ~0.30): tanh(6×0.30/6)=tanh(1.80)=0.974 → 31 910 Int16 (97%)
     // tanh soft-clips gracefully — no hard clipping artefacts.
     // GSM 06.10 XMAX per-sub-frame normalisation handles 30-100% FS well.
     this._gain = 6;
 
-    // Level logging (posted once per second)
-    this._logEvery  = Math.round(nativeRate / 128);
+    // Level logging (posted once per second, measured at 8 kHz post-tanh)
+    this._logEvery  = Math.round(targetRate / chunkSamples);
     this._logCount  = 0;
     this._logPeak   = 0;
     this._logRmsAcc = 0;
     this._logRmsCnt = 0;
+    this._logChunks = 0;
 
     this.port.onmessage = (ev) => {
       if (ev.data?.type === 'emit') {
@@ -110,57 +118,54 @@ class MicProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // ── Apply fixed gain + tanh soft-clip ────────────────────────────────
-    const gained = new Float32Array(input.length);
-    for (let i = 0; i < input.length; i++) {
-      gained[i] = Math.tanh(this._gain * input[i]);
+    // ── Step 1: Box-filter downsampling (48 kHz → 8 kHz, raw signal) ─────
+    // Apply box filter on the RAW input BEFORE gain+tanh.
+    // This avoids aliasing: tanh harmonics above 4 kHz cannot fold back.
+    const iRatio   = this._iRatio;
+    const combined = new Float32Array(this._carry.length + input.length);
+    combined.set(this._carry);
+    combined.set(input, this._carry.length);
+
+    const outLen = Math.floor(combined.length / iRatio);
+    const ds     = new Float32Array(outLen);
+    for (let i = 0; i < outLen; i++) {
+      let sum = 0;
+      const start = i * iRatio;
+      for (let j = start; j < start + iRatio; j++) sum += combined[j];
+      ds[i] = sum / iRatio;
+    }
+    this._carry = combined.slice(outLen * iRatio);
+
+    // ── Step 2: Apply gain + tanh at 8 kHz ───────────────────────────────
+    const gain = this._gain;
+    for (let i = 0; i < outLen; i++) {
+      ds[i] = Math.tanh(gain * ds[i]);
     }
 
-    // ── Level log: track both 48kHz (gained) and 8kHz (ds) peaks per second
+    // ── Level log (8 kHz, post-tanh) ─────────────────────────────────────
     if (this._emitting) {
-      for (let i = 0; i < gained.length; i++) {
-        const a = Math.abs(gained[i]);
+      for (let i = 0; i < outLen; i++) {
+        const a = Math.abs(ds[i]);
         if (a > this._logPeak) this._logPeak = a;
-        this._logRmsAcc += gained[i] * gained[i];
+        this._logRmsAcc += ds[i] * ds[i];
         this._logRmsCnt++;
       }
-      this._logCount++;
-      if (this._logCount >= this._logEvery) {
+      this._logChunks++;
+      if (this._logChunks >= this._logEvery) {
         this.port.postMessage({
           type: 'level',
-          rms:  Math.sqrt(this._logRmsAcc / this._logRmsCnt),
+          rms:  Math.sqrt(this._logRmsAcc / Math.max(1, this._logRmsCnt)),
           peak: this._logPeak,
-          peak8k: this._logPeak8k || 0,
           gain: this._gain,
         });
-        this._logCount  = 0;
+        this._logChunks = 0;
         this._logPeak   = 0;
-        this._logPeak8k = 0;
         this._logRmsAcc = 0;
         this._logRmsCnt = 0;
       }
     }
 
     if (!this._emitting) return true;
-
-    // ── Box-filter downsampling with carry buffer ─────────────────────────
-    const iRatio   = this._iRatio;
-    const combined = new Float32Array(this._carry.length + gained.length);
-    combined.set(this._carry);
-    combined.set(gained, this._carry.length);
-
-    const outLen = Math.floor(combined.length / iRatio);
-    const ds     = new Float32Array(outLen);
-    for (let i = 0; i < outLen; i++) {
-      const start = i * iRatio;
-      let sum = 0;
-      for (let j = start; j < start + iRatio; j++) sum += combined[j];
-      ds[i] = sum / iRatio;
-      // Track 8 kHz peak for level logging (separate from 48 kHz peak)
-      const a8 = Math.abs(ds[i]);
-      if (a8 > (this._logPeak8k || 0)) this._logPeak8k = a8;
-    }
-    this._carry = combined.slice(outLen * iRatio);
 
     // ── Accumulate 960-sample chunks and emit ────────────────────────────
     const merged = new Float32Array(this._accum.length + outLen);

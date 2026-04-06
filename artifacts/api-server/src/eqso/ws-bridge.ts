@@ -201,6 +201,8 @@ function handleRemoteMode(
 } {
   const proxy = new EqsoProxy(host, port);
   let pttGranted = false;
+  let pttReleasedAt = 0;          // timestamp of last PTT release
+  const PTT_MUTE_TAIL_MS = 1500;  // silence RX for 1.5 s after TX ends
   let currentName = "";
   let currentRoom = "";
 
@@ -219,7 +221,11 @@ function handleRemoteMode(
   // If we play that back through the speaker while PTT is held, the mic
   // picks it up again → infinite echo feedback loop.
   decoder.on("pcm", (pcm: Int16Array) => {
-    if (pttGranted) return; // half-duplex: mute speaker during our own TX
+    // Half-duplex: mute speaker during TX AND for 1.5 s after releasing PTT.
+    // ASORAPA relays our own audio back ~0.5–1.5 s after we stop transmitting.
+    // Without the tail, the speaker plays our echo → mic picks it up → VOX
+    // re-triggers → infinite echo loop.
+    if (pttGranted || (Date.now() - pttReleasedAt) < PTT_MUTE_TAIL_MS) return;
     let peak = 0;
     const float32 = new Float32Array(pcm.length);
     for (let i = 0; i < pcm.length; i++) {
@@ -371,9 +377,10 @@ function handleRemoteMode(
           break;
         case "ptt_end":
           pttGranted = false;
+          pttReleasedAt = Date.now(); // start the RX mute tail window
           pcmAccum = new Int16Array(0); // discard leftover
           proxy.sendPttEnd(); // send [0x0d] to remote eQSO server to release the channel
-          logger.info({ name: currentName }, "Remote TX: PTT end sent to eQSO server");
+          logger.info({ name: currentName, muteTailMs: PTT_MUTE_TAIL_MS }, "Remote TX: PTT end — RX muted for tail window");
           sendJson(ws, { type: "ptt_released" });
           break;
         case "ping":
