@@ -1,5 +1,5 @@
 /**
- * MicProcessor v12 — AGC sin portadora de confort, maxGain restaurado a 80.
+ * MicProcessor v13 — AGC sin portadora, maxGain=80, gain no se resetea al iniciar PTT.
  *
  * ── Diagnóstico ───────────────────────────────────────────────────────────
  * El micrófono del usuario produce ~0.003 RMS FS (muy silencioso).
@@ -48,13 +48,15 @@ class MicProcessor extends AudioWorkletProcessor {
     // ── AGC parameters ────────────────────────────────────────────────────
     // blockMs: duration in ms of each AudioWorklet block (128 samples / nativeRate)
     const blockMs        = (128 / nativeRate) * 1000;
-    this._agcGain    = 4.0;
     this._agcTarget  = 0.22;
     this._agcMaxGain = 80.0;
     this._agcMinGain = 0.3;
     this._agcAttack  = Math.exp(-blockMs / 10);    // 10 ms attack  (muy rapido — evita saturacion en primeros frames)
     this._agcRelease = Math.exp(-blockMs / 300);   // 300 ms release — sube lentamente para no amplificar pausa->voz
-    this._rmsEst     = 0.01;
+    // Arrancar con gain maximo y rmsEst correspondiente — para micros silenciosos
+    // el gain debe estar en 80 desde el primer frame, no en 4 (que tarda 640ms en subir).
+    this._agcGain = this._agcMaxGain;
+    this._rmsEst  = this._agcTarget / this._agcMaxGain; // = 0.00275
 
     // ── Level logging ─────────────────────────────────────────────────────
     this._logEvery  = Math.round(nativeRate / 128);
@@ -66,10 +68,13 @@ class MicProcessor extends AudioWorkletProcessor {
     this.port.onmessage = (ev) => {
       if (ev.data?.type === 'emit') {
         if (ev.data.emitting) {
-          this._carry  = new Float32Array(0);
-          this._accum  = new Float32Array(0);
-          this._rmsEst = 0.01;
-          this._agcGain = 4.0;
+          // Solo limpiar los buffers de audio — NO resetear el gain ni el rmsEst.
+          // El AGC acumula gain=80 durante el silencio pre-PTT. Resetearlo
+          // a 4.0 causaría 640ms de audio silencioso al inicio de cada TX,
+          // haciendo que el VOX de ASORAPA suelte el transmisor antes de que
+          // llegue voz con nivel suficiente.
+          this._carry = new Float32Array(0);
+          this._accum = new Float32Array(0);
         }
         if (this._warmupDone) {
           this._emitting = ev.data.emitting;
@@ -184,4 +189,4 @@ class MicProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('mic-processor-v12', MicProcessor);
+registerProcessor('mic-processor-v13', MicProcessor);
