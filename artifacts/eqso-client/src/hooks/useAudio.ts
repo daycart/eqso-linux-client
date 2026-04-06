@@ -158,7 +158,10 @@ export function useAudio(): UseAudioReturn {
         analyserRef.current = analyser;
         source.connect(analyser);
 
-        const workletUrl = import.meta.env.BASE_URL + "mic-worklet.js";
+        // Version suffix forces the browser to bypass the service-worker / HTTP
+        // cache and fetch the latest worklet whenever this constant is bumped.
+        const WORKLET_VERSION = "3";
+        const workletUrl = import.meta.env.BASE_URL + "mic-worklet.js?v=" + WORKLET_VERSION;
         try {
           await ctx.audioWorklet.addModule(workletUrl);
         } catch {

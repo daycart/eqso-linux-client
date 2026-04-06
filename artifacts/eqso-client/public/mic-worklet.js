@@ -14,13 +14,15 @@
  * ── Gain tuning ──────────────────────────────────────────────────────────
  * autoGainControl=true in getUserMedia lets the OS normalise the mic to a
  * consistent level (typically 15–25 % FS for this hardware).  Our fixed
- * gain×1.5 brings it to 22–38 % FS — clean input for GSM 06.10 without
- * tanh harmonic distortion.  Radio VOX activates reliably at these levels.
+ * gain×3 brings it to 50–96 % FS before GSM encoding.  The tanh soft-clip
+ * prevents true saturation and adds mild CB-style compression that improves
+ * intelligibility over noise.  Lower gains (<2) leave radio VOX thresholds
+ * unsatisfied when the soundcard output at the remote end is uncalibrated.
  *
- *   OS-normalised mic peak ~0.18: tanh(1.5×0.18)=tanh(0.27)=0.263 → 26 %
- *   OS-normalised mic peak ~0.25: tanh(1.5×0.25)=tanh(0.38)=0.363 → 36 %
- *   OS-normalised mic peak ~0.40: tanh(1.5×0.40)=tanh(0.60)=0.537 → 54 %
- *   OS-normalised mic peak ~0.67: tanh(1.5×0.67)=tanh(1.00)=0.762 → 76 %
+ *   OS-normalised mic peak ~0.18: tanh(3×0.18)=tanh(0.54)=0.514 → 51 %
+ *   OS-normalised mic peak ~0.25: tanh(3×0.25)=tanh(0.75)=0.635 → 64 %
+ *   OS-normalised mic peak ~0.40: tanh(3×0.40)=tanh(1.20)=0.834 → 83 %
+ *   OS-normalised mic peak ~0.67: tanh(3×0.67)=tanh(2.01)=0.965 → 96 %
  *
  * ── Warmup ────────────────────────────────────────────────────────────────
  * The first 80 ms of mic audio is discarded to absorb the hardware startup
@@ -50,10 +52,11 @@ class MicProcessor extends AudioWorkletProcessor {
     this._accum         = new Float32Array(0);
     this._pendingEmit   = null;
 
-    // gain=1.5: brings OS-normalised mic (15–25 % FS) to 22–38 % FS.
-    // Lower gain avoids tanh harmonic distortion that makes voice unintelligible;
-    // the codec's VOX threshold is low enough to activate at these levels.
-    this._gain = 1.5;
+    // gain=3: brings OS-normalised mic (15–25 % FS) to 51–65 % FS, loud voice
+    // to 83–96 % FS.  tanh soft-clips peaks without hard distortion.  Levels
+    // below ~50 % FS often fail to hold the VOX at remote radio links where
+    // the soundcard output is uncalibrated (confirmed with ffmpeg libgsm encoder).
+    this._gain = 3;
 
     // Level logging: once per second at 8 kHz
     this._logEvery  = Math.round(nativeRate / 128); // ~375 process blocks/s
