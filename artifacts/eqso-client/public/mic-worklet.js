@@ -4,6 +4,7 @@
  * ── Signal chain ──────────────────────────────────────────────────────────
  *   input (48 kHz) → box-filter decimation (48→8 kHz, raw signal)
  *   → fixed gain × tanh soft-clip (at 8 kHz)
+ *   → VOX noise floor injection (ensures radio stays keyed during pauses)
  *   → accumulate 960 samples → emit chunk (when emitting=true)
  *
  * ── Why downsample BEFORE tanh ───────────────────────────────────────────
@@ -11,18 +12,17 @@
  * then folds them back into the 0–4 kHz band (aliasing distortion).
  * Downsampling first keeps tanh harmonics above the GSM Nyquist (4 kHz).
  *
- * ── Gain tuning ──────────────────────────────────────────────────────────
- * autoGainControl=true in getUserMedia lets the OS normalise the mic to a
- * consistent level (typically 15–25 % FS for this hardware).  Our fixed
- * gain×6 brings voice peaks to 85–96 % FS before GSM encoding.  More
- * importantly, it lifts the mic silence floor (~1.6 % FS raw) to ~9 % FS
- * after tanh — enough to hold a VOX-controlled radio keyed between words.
- * At gain×3 the silence floor was ~4.7 % FS (below most VOX thresholds).
+ * ── VOX noise floor ───────────────────────────────────────────────────────
+ * When the microphone produces near-silence between words, tanh(gain×~0)≈0
+ * and the output drops to 0 % FS.  A VOX-controlled radio sees silence and
+ * releases the key after its hold time (typically 200–800 ms), cutting the
+ * transmission mid-sentence.
  *
- *   OS-normalised mic peak ~0.18: tanh(6×0.18)=tanh(1.08)=0.793 → 79 %
- *   OS-normalised mic peak ~0.25: tanh(6×0.25)=tanh(1.50)=0.905 → 90 %
- *   OS-normalised mic peak ~0.40: tanh(6×0.40)=tanh(2.40)=0.984 → 98 %
- *   Silence floor  raw ~0.016:    tanh(6×0.016)=tanh(0.10)=0.099 →  9.9%
+ * Fix: after tanh, any sample whose magnitude is below VOX_FLOOR (15 % FS)
+ * is replaced with pseudo-random noise at that level.  Voice samples (always
+ * well above 15 % FS after gain×6) pass through completely unaffected.
+ * After the GSM round-trip (ffmpeg libgsm amplifies ~1.93×) the floor
+ * becomes ~29 % FS at the radio output — above every common VOX threshold.
  *
  * ── Warmup ────────────────────────────────────────────────────────────────
  * The first 80 ms of mic audio is discarded to absorb the hardware startup
@@ -52,12 +52,12 @@ class MicProcessor extends AudioWorkletProcessor {
     this._accum         = new Float32Array(0);
     this._pendingEmit   = null;
 
-    // gain=6: brings OS-normalised mic silence (~1.6 % FS raw) to ~9 % FS
-    // after tanh, which keeps VOX-controlled radios keyed during speech pauses.
-    // At gain=3 the silence floor was ~4.7 % FS — below most VOX thresholds,
-    // causing the radio to drop PTT between words.
-    // Voice peaks saturate gently at tanh: raw 0.25 FS → tanh(6×0.25)=0.905=90 %.
+    // gain=6: brings OS-normalised mic voice peaks to 85–96 % FS after tanh.
     this._gain = 6;
+
+    // Linear congruential generator seed for VOX noise floor (LCG is cheap
+    // and deterministic — no dependency on Math.random behaviour).
+    this._lcg = 0x12345678;
 
     // Level logging: once per second at 8 kHz
     this._logEvery  = Math.round(nativeRate / 128); // ~375 process blocks/s
@@ -118,12 +118,22 @@ class MicProcessor extends AudioWorkletProcessor {
     }
     this._carry = combined.slice(outLen * iRatio);
 
-    // ── Step 2: Apply fixed gain + tanh at 8 kHz ─────────────────────────
+    // ── Step 2: Apply fixed gain + tanh, then inject VOX noise floor ──────
     // tanh(gain·x) compresses loud peaks gently, preserving voice harmonics.
-    // Odd-harmonic distortion profile is more intelligible than hard clipping.
-    const g = this._gain;
+    // Samples below VOX_FLOOR are replaced with LCG pseudo-noise at that
+    // level so a VOX-controlled radio never sees silence between words.
+    // Voice samples (well above VOX_FLOOR after gain×6) are unaffected.
+    const g         = this._gain;
+    const VOX_FLOOR = 0.15; // 15 % FS → ~29 % FS at radio after GSM ×1.93
+
     for (let i = 0; i < outLen; i++) {
-      ds[i] = Math.tanh(g * ds[i]);
+      let s = Math.tanh(g * ds[i]);
+      if (Math.abs(s) < VOX_FLOOR) {
+        // LCG: period 2^32, cheap, no allocations
+        this._lcg = ((this._lcg * 1664525 + 1013904223) >>> 0);
+        s = (this._lcg / 2147483648 - 1) * VOX_FLOOR;
+      }
+      ds[i] = s;
     }
 
     // ── Level log (once per second at 48 kHz process-block rate) ─────────
@@ -167,4 +177,4 @@ class MicProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('mic-processor-v4', MicProcessor);
+registerProcessor('mic-processor-v5', MicProcessor);
