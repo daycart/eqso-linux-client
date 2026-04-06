@@ -2,27 +2,20 @@
  * MicProcessor — AudioWorkletProcessor for real-time mic capture.
  *
  * ── Signal chain ──────────────────────────────────────────────────────────
- *   input (48 kHz) → box-filter decimation (48→8 kHz, raw signal)
- *   → fixed gain × tanh soft-clip (at 8 kHz)
- *   → VOX noise floor injection (ensures radio stays keyed during pauses)
- *   → accumulate 960 samples → emit chunk (when emitting=true)
+ *   input (native rate) → box-filter decimation to 8 kHz
+ *   → fixed gain → soft clip at 95 % FS (tanh)
+ *   → accumulate chunks → emit (when emitting=true)
  *
- * ── Why downsample BEFORE tanh ───────────────────────────────────────────
- * tanh applied at 48 kHz generates harmonics above 4 kHz; the box-filter
- * then folds them back into the 0–4 kHz band (aliasing distortion).
- * Downsampling first keeps tanh harmonics above the GSM Nyquist (4 kHz).
+ * ── Why NO VOX noise floor ───────────────────────────────────────────────
+ * Injecting pseudo-random noise during silence makes the GSM LPC encoder
+ * produce wideband excitation vectors that decode as loud noise at the radio.
+ * The Windows eQSO client sends silence between words and the radio VOX hold
+ * timer keeps the channel keyed.  We do the same.
  *
- * ── VOX noise floor ───────────────────────────────────────────────────────
- * When the microphone produces near-silence between words, tanh(gain×~0)≈0
- * and the output drops to 0 % FS.  A VOX-controlled radio sees silence and
- * releases the key after its hold time (typically 200–800 ms), cutting the
- * transmission mid-sentence.
- *
- * Fix: after tanh, any sample whose magnitude is below VOX_FLOOR (15 % FS)
- * is replaced with pseudo-random noise at that level.  Voice samples (always
- * well above 15 % FS after gain×6) pass through completely unaffected.
- * After the GSM round-trip (ffmpeg libgsm amplifies ~1.93×) the floor
- * becomes ~29 % FS at the radio output — above every common VOX threshold.
+ * ── Gain ─────────────────────────────────────────────────────────────────
+ * gain=2: brings typical mic voice (10–30 % FS raw) to 20–55 % FS post-tanh.
+ * This avoids constant clipping that hardens the signal into a square wave.
+ * The user can raise their OS mic volume if the signal is too quiet.
  *
  * ── Warmup ────────────────────────────────────────────────────────────────
  * The first 80 ms of mic audio is discarded to absorb the hardware startup
@@ -30,7 +23,7 @@
  *
  * ── Carry buffer ─────────────────────────────────────────────────────────
  * 128 mod 6 = 2 samples would be discarded per block without this buffer,
- * creating a 375 Hz phase discontinuity.
+ * creating a 375 Hz phase discontinuity at 48 kHz.
  */
 class MicProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -52,15 +45,12 @@ class MicProcessor extends AudioWorkletProcessor {
     this._accum         = new Float32Array(0);
     this._pendingEmit   = null;
 
-    // gain=6: brings OS-normalised mic voice peaks to 85–96 % FS after tanh.
-    this._gain = 6;
+    // gain=2: typical mic voice reaches 20-55 % FS → clean GSM encoding.
+    // Raising to 3-4 increases loudness but adds more harmonic distortion.
+    this._gain = 2;
 
-    // Linear congruential generator seed for VOX noise floor (LCG is cheap
-    // and deterministic — no dependency on Math.random behaviour).
-    this._lcg = 0x12345678;
-
-    // Level logging: once per second at 8 kHz
-    this._logEvery  = Math.round(nativeRate / 128); // ~375 process blocks/s
+    // Level logging: once per second (measured at 48 kHz process-block rate)
+    this._logEvery  = Math.round(nativeRate / 128);
     this._logCount  = 0;
     this._logPeak   = 0;
     this._logRmsAcc = 0;
@@ -101,8 +91,7 @@ class MicProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // ── Step 1: Box-filter downsample 48 kHz → 8 kHz (raw signal) ────────
-    // Downsample BEFORE applying gain+tanh to avoid aliasing of clip harmonics.
+    // ── Step 1: Box-filter downsample to 8 kHz ────────────────────────────
     const iRatio   = this._iRatio;
     const combined = new Float32Array(this._carry.length + input.length);
     combined.set(this._carry);
@@ -118,25 +107,15 @@ class MicProcessor extends AudioWorkletProcessor {
     }
     this._carry = combined.slice(outLen * iRatio);
 
-    // ── Step 2: Apply fixed gain + tanh, then inject VOX noise floor ──────
-    // tanh(gain·x) compresses loud peaks gently, preserving voice harmonics.
-    // Samples below VOX_FLOOR are replaced with LCG pseudo-noise at that
-    // level so a VOX-controlled radio never sees silence between words.
-    // Voice samples (well above VOX_FLOOR after gain×6) are unaffected.
-    const g         = this._gain;
-    const VOX_FLOOR = 0.15; // 15 % FS → ~29 % FS at radio after GSM ×1.93
-
+    // ── Step 2: Apply gain + soft clip (tanh) ────────────────────────────
+    // gain=2 keeps peaks below 97 % FS for normal speech — avoids square-wave
+    // clipping that degrades GSM LPC analysis.
+    const g = this._gain;
     for (let i = 0; i < outLen; i++) {
-      let s = Math.tanh(g * ds[i]);
-      if (Math.abs(s) < VOX_FLOOR) {
-        // LCG: period 2^32, cheap, no allocations
-        this._lcg = ((this._lcg * 1664525 + 1013904223) >>> 0);
-        s = (this._lcg / 2147483648 - 1) * VOX_FLOOR;
-      }
-      ds[i] = s;
+      ds[i] = Math.tanh(g * ds[i]);
     }
 
-    // ── Level log (once per second at 48 kHz process-block rate) ─────────
+    // ── Level log (once per second at the native process-block rate) ──────
     if (this._emitting) {
       for (let i = 0; i < outLen; i++) {
         const a = Math.abs(ds[i]);
@@ -161,7 +140,7 @@ class MicProcessor extends AudioWorkletProcessor {
 
     if (!this._emitting) return true;
 
-    // ── Accumulate 960-sample chunks and emit ────────────────────────────
+    // ── Accumulate chunks and emit ────────────────────────────────────────
     const merged = new Float32Array(this._accum.length + outLen);
     merged.set(this._accum);
     merged.set(ds, this._accum.length);
@@ -177,4 +156,4 @@ class MicProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('mic-processor-v5', MicProcessor);
+registerProcessor('mic-processor-v6', MicProcessor);
