@@ -45,10 +45,27 @@ const MAX_QUEUE_AHEAD_SEC = 1.5;
 
 // Gain applied to mic input before encoding.
 // autoGainControl is disabled (see getUserMedia below) so we apply gain here.
-// Raw mic output (no AGC) is typically ~0.003–0.008 peak Float32.
-// GSM codec needs at least -25 dBFS (~0.06 peak) for intelligible speech.
-// ×8 puts typical speech at ~0.03–0.06 peak; loud speech stays below 0.3.
-const MIC_BOOST_GAIN = 8;
+// Raw mic output (no AGC) is typically 0.003–0.15 peak Float32 depending on
+// hardware.  ×4 is a moderate boost: quiet mics reach ~0.012–0.06 peak; loud
+// mics reach up to ~0.6 — below the soft clipper ceiling (see below).
+// We removed the DynamicsCompressor: Chrome applies automatic make-up gain
+// that can push the output above 1.0 Float32 → hard clipping at the Int16
+// conversion step → severe distortion.  Instead we use a WaveShaperNode with
+// a tanh(2×x)/tanh(2) curve that saturates gracefully around ±0.9.
+const MIC_BOOST_GAIN = 4;
+
+/** Build a 4096-point tanh soft-clipper curve for a WaveShaperNode. */
+function buildSoftClipCurve(): Float32Array {
+  const n = 4096;
+  const curve = new Float32Array(n);
+  const k = 2; // saturation hardness: tanh(k·x)/tanh(k)
+  const norm = Math.tanh(k);
+  for (let i = 0; i < n; i++) {
+    const x = (i * 2) / (n - 1) - 1; // −1 … +1
+    curve[i] = Math.tanh(k * x) / norm;
+  }
+  return curve;
+}
 
 // Warmup duration in seconds: let mic hardware open before sending audio.
 // The MicProcessor AudioWorklet converts this to blocks (128 samples each).
@@ -143,29 +160,26 @@ export function useAudio(): UseAudioReturn {
       const source = ctx.createMediaStreamSource(stream);
       sourceRef.current = source;
 
-      // Boost mic gain: raw mic (no AGC) is ~0.003–0.008 peak Float32.
-      // GSM codec needs at least -25 dBFS (~0.06 peak) for intelligible speech.
-      // Route: source → micGain → compressor → analyser → processor
+      // Route: source → micGain(×4) → softClipper(tanh) → analyser → processor
+      // The DynamicsCompressor was removed: Chrome's implementation applies
+      // automatic make-up gain that can push the output above 1.0 Float32,
+      // causing hard clipping when we convert to Int16 → severe distortion.
+      // A WaveShaperNode with tanh curve clips gracefully at ±1 without
+      // introducing pumping artefacts or level swings.
       const micGain = ctx.createGain();
       micGain.gain.value = MIC_BOOST_GAIN;
       micGainRef.current = micGain;
       source.connect(micGain);
 
-      // DynamicsCompressor: normalises wildly varying mic levels so GSM frames
-      // stay consistently above the squelch threshold at the radio receiver.
-      // threshold=-30 dBFS, ratio=8, attack=3 ms, release=150 ms.
-      const compressor = ctx.createDynamicsCompressor();
-      compressor.threshold.value = -30;
-      compressor.knee.value      =   6;
-      compressor.ratio.value     =   8;
-      compressor.attack.value    =   0.003;
-      compressor.release.value   =   0.15;
-      micGain.connect(compressor);
+      const softClipper = ctx.createWaveShaper();
+      softClipper.curve = buildSoftClipCurve();
+      softClipper.oversample = "4x";   // reduces aliasing within the WaveShaper
+      micGain.connect(softClipper);
 
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
       analyserRef.current = analyser;
-      compressor.connect(analyser);
+      softClipper.connect(analyser);
 
       // ── AudioWorklet — replaces deprecated ScriptProcessorNode ─────────────
       // ScriptProcessorNode ran every ~255–340 ms (3–4 callbacks of 85 ms) and
@@ -196,7 +210,7 @@ export function useAudio(): UseAudioReturn {
 
         if (type === "level") {
           console.debug(
-            `[audio] TX mic (gain×${MIC_BOOST_GAIN}+compressor)`,
+            `[audio] TX mic (gain×${MIC_BOOST_GAIN}+softclip)`,
             `rms=${ev.data.rms.toFixed(4)} peak=${ev.data.peak.toFixed(4)} rate=${nativeRate}`
           );
           return;

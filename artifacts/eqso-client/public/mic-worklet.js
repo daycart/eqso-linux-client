@@ -2,12 +2,15 @@
  * MicProcessor — AudioWorkletProcessor for real-time mic capture.
  *
  * Runs on the audio thread in 128-sample blocks (2.67 ms at 48 kHz).
- * Downsamples to 8 kHz and emits 960-sample (120 ms) chunks so the
- * GSM encoder on the server receives audio at real-time rate.
+ * Downsamples to 8 kHz using a box-filter averager (anti-aliased) and emits
+ * 960-sample (120 ms) chunks so the GSM encoder gets audio at real-time rate.
  *
- * Replaces the deprecated ScriptProcessorNode which fired every ~255–340 ms
- * (3–4 callbacks of 85 ms each), delivering audio at only ~40 % real-time
- * speed and causing ASORAPA's audio buffer to run dry after ~2 s.
+ * Anti-aliasing: nearest-neighbour decimation (taking every 6th sample)
+ * causes severe aliasing — frequencies 4–8 kHz fold back into 0–4 kHz and
+ * add noise/distortion. A box-filter averager (mean of `ratio` consecutive
+ * samples before decimation) acts as a low-pass FIR with cutoff at
+ * ≈ 0.443 × Fs/ratio = 0.443 × 48000/6 ≈ 3 540 Hz — exactly the speech
+ * intelligibility band needed by GSM 06.10.
  */
 class MicProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -19,7 +22,7 @@ class MicProcessor extends AudioWorkletProcessor {
       warmupBlocks,  // blocks to discard while mic hardware opens
     } = options.processorOptions;
 
-    this._ratio        = nativeRate / targetRate;
+    this._ratio        = nativeRate / targetRate;  // e.g. 6.0
     this._chunkSamples = chunkSamples;
     this._warmupBlocks = warmupBlocks;
     this._blockCount   = 0;
@@ -40,7 +43,7 @@ class MicProcessor extends AudioWorkletProcessor {
     // --- Warmup: discard first N blocks so mic hardware stabilises ----------
     if (this._blockCount <= this._warmupBlocks) return true;
 
-    // --- Level tracking (for debug log sent back to main thread) ------------
+    // --- Level tracking -----------------------------------------------------
     for (let i = 0; i < input.length; i++) {
       const a = Math.abs(input[i]);
       if (a > this._peakAccum) this._peakAccum = a;
@@ -58,12 +61,21 @@ class MicProcessor extends AudioWorkletProcessor {
       this._rmsCount   = 0;
     }
 
-    // --- Downsample: nearest-neighbour decimation ---------------------------
+    // --- Anti-aliased downsampling (box-filter averaging + decimation) ------
+    // For each output sample, average `ratio` consecutive input samples.
+    // This is a FIR low-pass with cutoff ≈ Fs/(2*ratio) = 4 000 Hz (at 48 kHz,
+    // ratio=6), preventing aliasing of 4–8 kHz content into the speech band.
     const ratio  = this._ratio;
+    const iRatio = Math.round(ratio);          // integer step (6 for 48→8 kHz)
     const outLen = Math.floor(input.length / ratio);
     const ds     = new Float32Array(outLen);
+
     for (let i = 0; i < outLen; i++) {
-      ds[i] = input[Math.round(i * ratio)];
+      const start = i * iRatio;
+      let sum = 0;
+      const end = Math.min(start + iRatio, input.length);
+      for (let j = start; j < end; j++) sum += input[j];
+      ds[i] = sum / (end - start);
     }
 
     // --- Accumulate ---------------------------------------------------------
@@ -72,11 +84,10 @@ class MicProcessor extends AudioWorkletProcessor {
     merged.set(ds, this._accum.length);
     this._accum = merged;
 
-    // --- Emit complete 960-sample chunks ------------------------------------
+    // --- Emit complete 960-sample chunks (zero-copy transfer) ---------------
     while (this._accum.length >= this._chunkSamples) {
       const chunk = this._accum.slice(0, this._chunkSamples);
       this._accum = this._accum.slice(this._chunkSamples);
-      // Transfer the buffer (zero-copy) to the main thread
       this.port.postMessage({ type: 'chunk', data: chunk }, [chunk.buffer]);
     }
 
