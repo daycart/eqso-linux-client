@@ -191,7 +191,7 @@ export function useAudio(): UseAudioReturn {
         }
 
         const warmupBlocks = Math.round(TX_WARMUP_SECONDS * nativeRate / 128);
-        const workletNode = new AudioWorkletNode(ctx, "mic-processor-v11", {
+        const workletNode = new AudioWorkletNode(ctx, "mic-processor-v12", {
           processorOptions: {
             nativeRate,
             targetRate:   GSM_RATE,
