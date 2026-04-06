@@ -1,8 +1,10 @@
 /**
- * MicProcessor v8 — AGC + Comfort Carrier Tone.
+ * MicProcessor v9 — AGC + Comfort Carrier Tone.
  *
  * ── Signal chain ──────────────────────────────────────────────────────────
- *   input (native rate) → box-filter decimation to 8 kHz
+ *   input (8 kHz — AudioContext created at GSM_RATE, browser resamples mic
+ *   natively from 48 kHz using its polyphase anti-aliasing filter)
+ *   → identity pass-through (iRatio=1, box-filter is a no-op copy)
  *   → AGC (adaptive gain, attack 200ms / release 80ms)
  *   → tanh soft clip
  *   → mix comfort carrier (200 Hz, 4 % FS) → emit
@@ -201,4 +203,4 @@ class MicProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('mic-processor-v8', MicProcessor);
+registerProcessor('mic-processor-v9', MicProcessor);

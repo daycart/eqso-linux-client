@@ -57,7 +57,13 @@ export function useAudio(): UseAudioReturn {
 
   const getOrCreateCtx = useCallback((): AudioContext => {
     if (!ctxRef.current) {
-      ctxRef.current = new AudioContext();
+      // Force 8 kHz AudioContext so the browser resamples the mic from its
+      // native rate (usually 48 kHz) down to 8 kHz using its own high-quality
+      // polyphase anti-aliasing filter.  This replaces the worklet's naive
+      // box-filter decimation which caused aliasing: frequencies above 4 kHz
+      // folded back into the voice band → GSM encoded them as wideband noise
+      // → ASORAPA decoded noise → radio VOX rejected the signal.
+      ctxRef.current = new AudioContext({ sampleRate: GSM_RATE });
       const gain = ctxRef.current.createGain();
       // GSM 06.10 decoded via ffmpeg: typical speech peaks at ~3500/32768
       // (~-19 dBFS). 3× gain brings typical speech to ~-9 dBFS.
@@ -163,7 +169,7 @@ export function useAudio(): UseAudioReturn {
 
         // Version suffix forces the browser to bypass the service-worker / HTTP
         // cache and fetch the latest worklet whenever this constant is bumped.
-        const WORKLET_VERSION = "8";
+        const WORKLET_VERSION = "9";
         const workletUrl = import.meta.env.BASE_URL + "mic-worklet.js?v=" + WORKLET_VERSION;
         try {
           await ctx.audioWorklet.addModule(workletUrl);
@@ -172,7 +178,7 @@ export function useAudio(): UseAudioReturn {
         }
 
         const warmupBlocks = Math.round(TX_WARMUP_SECONDS * nativeRate / 128);
-        const workletNode = new AudioWorkletNode(ctx, "mic-processor-v8", {
+        const workletNode = new AudioWorkletNode(ctx, "mic-processor-v9", {
           processorOptions: {
             nativeRate,
             targetRate:   GSM_RATE,
