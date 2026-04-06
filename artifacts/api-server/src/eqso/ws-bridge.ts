@@ -253,8 +253,13 @@ function handleRemoteMode(
     // This confirms whether the codec is producing intelligible audio.
     try {
       const monPcm = gsmDecodePacket(new Uint8Array(gsm.buffer, gsm.byteOffset, gsm.byteLength));
+      let monPeak = 0;
       const float32 = new Float32Array(monPcm.length);
-      for (let i = 0; i < monPcm.length; i++) float32[i] = monPcm[i] / 32768;
+      for (let i = 0; i < monPcm.length; i++) {
+        float32[i] = monPcm[i] / 32768;
+        if (Math.abs(monPcm[i]) > monPeak) monPeak = Math.abs(monPcm[i]);
+      }
+      logger.info({ monPeak }, "Remote TX: self-monitor decoded peak");
       const hdr = Buffer.alloc(1);
       hdr[0] = WS_AUDIO_REMOTE;
       sendBin(ws, Buffer.concat([hdr, Buffer.from(float32.buffer)]));
