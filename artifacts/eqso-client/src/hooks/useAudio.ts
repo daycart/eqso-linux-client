@@ -43,16 +43,14 @@ function downsampleFloat32(input: Float32Array, fromRate: number, toRate: number
 // If the browser pauses (tab hidden, slow CPU) we don't want a huge backlog.
 const MAX_QUEUE_AHEAD_SEC = 1.5;
 
-// Gain applied to mic input before encoding.
-// autoGainControl is disabled (see getUserMedia below) so we apply gain here.
-// Raw mic output (no AGC) is typically 0.003–0.15 peak Float32 depending on
-// hardware.  ×8 boost: quiet mics (0.003 peak) reach ~0.024 (usable for GSM);
-// typical mics (0.05 peak) reach ~0.40; loud mics clamp via the tanh clipper.
-// We removed the DynamicsCompressor: Chrome applies automatic make-up gain
-// that can push the output above 1.0 Float32 → hard clipping at the Int16
-// conversion step → severe distortion.  Instead we use a WaveShaperNode with
-// a tanh(2×x)/tanh(2) curve that saturates gracefully around ±0.9.
-const MIC_BOOST_GAIN = 8;
+// Gain applied to mic input after browser AGC normalisation.
+// Post-AGC boost.  We let the browser/OS AGC normalise the microphone
+// hardware to ~-12 dBFS (≈25 % Float32 peak).  A ×2 fixed boost then brings
+// speech peaks to ~-6 dBFS (≈50 %) — well within GSM's comfortable range and
+// loud enough for the radio's VOX/COS at the repeater end.
+// (Previous approach: autoGainControl:false + ×4-8 fixed gain → either too
+//  quiet [12–32 %] or over-full-scale [93–97 %] depending on mic hardware.)
+const MIC_BOOST_GAIN = 2;
 
 /** Build a 4096-point tanh soft-clipper curve for a WaveShaperNode. */
 function buildSoftClipCurve(): Float32Array {
@@ -133,13 +131,16 @@ export function useAudio(): UseAudioReturn {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
-          // Disable AGC: it needs 2–3 s to calibrate during which the mic
-          // captures near-silence. We apply a fixed gain (MIC_BOOST_GAIN)
-          // instead. echoCancellation is disabled too because we mute the
-          // speaker during TX — there is nothing to cancel.
+          // Enable browser/OS AGC: it adjusts the HARDWARE microphone gain at
+          // OS level (not the audio signal) to normalise levels to ~-12 dBFS
+          // regardless of mic hardware.  This is safe — it does NOT cause the
+          // pumping/makeup-gain artefacts of the Web Audio DynamicsCompressor.
+          // echoCancellation and noiseSuppression off: we mute the speaker
+          // during TX so there is nothing to cancel, and we want clean audio
+          // for the GSM codec without extra processing.
+          autoGainControl: true,
           echoCancellation: false,
           noiseSuppression: false,
-          autoGainControl: false,
         },
         video: false,
       });
@@ -160,12 +161,10 @@ export function useAudio(): UseAudioReturn {
       const source = ctx.createMediaStreamSource(stream);
       sourceRef.current = source;
 
-      // Route: source → micGain(×4) → softClipper(tanh) → analyser → processor
-      // The DynamicsCompressor was removed: Chrome's implementation applies
-      // automatic make-up gain that can push the output above 1.0 Float32,
-      // causing hard clipping when we convert to Int16 → severe distortion.
-      // A WaveShaperNode with tanh curve clips gracefully at ±1 without
-      // introducing pumping artefacts or level swings.
+      // Route: source → micGain(×2) → softClipper(tanh) → analyser → processor
+      // Browser AGC already normalises the signal to ~-12 dBFS.  ×2 boost
+      // brings it to ~-6 dBFS for the GSM encoder.  The WaveShaperNode
+      // (tanh curve) prevents any rare overshoot from hard-clipping at Int16.
       const micGain = ctx.createGain();
       micGain.gain.value = MIC_BOOST_GAIN;
       micGainRef.current = micGain;
