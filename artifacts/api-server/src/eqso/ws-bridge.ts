@@ -316,14 +316,14 @@ function handleRemoteMode(
           newSamples[i] = view.getInt16(i * 2, true); // little-endian
         }
 
-        // Log PCM peak to detect silence vs speech (once every ~10 packets)
-        if (Math.random() < 0.1) {
+        // Log PCM peak for every chunk (to diagnose level issues)
+        {
           let peak = 0;
           for (let i = 0; i < newSamples.length; i++) {
             const a = Math.abs(newSamples[i]);
             if (a > peak) peak = a;
           }
-          logger.info({ samples: newSamples.length, peak }, "Remote TX: PCM from browser");
+          logger.debug({ samples: newSamples.length, peak }, "Remote TX: PCM from browser");
         }
 
         // Merge into accumulation buffer

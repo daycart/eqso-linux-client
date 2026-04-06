@@ -123,8 +123,11 @@ export function useAudio(): UseAudioReturn {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             channelCount: 1,
-            // OS-level hardware gain normalization — safe, no pumping artefacts.
-            autoGainControl: true,
+            // Disable OS AGC: the worklet applies its own fixed gain×tanh soft-clip.
+            // With autoGainControl=true the OS boosts the mic to near-saturation
+            // before our worklet sees it, causing double-amplification and heavy
+            // tanh clipping → distorted, "crushed" audio at the radio.
+            autoGainControl: false,
             echoCancellation: false,
             noiseSuppression: false,
           },
@@ -184,7 +187,7 @@ export function useAudio(): UseAudioReturn {
           if (msg.type === "level") {
             console.debug(
               `[audio] TX mic (gain×${msg.gain?.toFixed(2)})`,
-              `rms=${msg.rms?.toFixed(4)} peak=${msg.peak?.toFixed(4)} rate=${nativeRate}`
+              `rms=${msg.rms?.toFixed(4)} peak48k=${msg.peak?.toFixed(4)} peak8k=${(msg as any).peak8k?.toFixed(4)} rate=${nativeRate}`
             );
             return;
           }

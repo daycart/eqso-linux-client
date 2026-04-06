@@ -163,12 +163,9 @@ export class FfmpegGsmEncoder extends EventEmitter {
       "pipe:1",
     ], { stdio: ["pipe", "pipe", "pipe"] });
 
-    // Prime the encoder with silence so the ffmpeg pipeline is initialised and
-    // the internal muxer buffer is flushed before any real speech arrives.
-    // These silence GSM packets are discarded by ws-bridge.ts (pttGranted=false).
-    const PRIME_PACKETS = 12; // 12 × 960 samples = 1.44 s worth of 8 kHz silence
-    const silence = Buffer.alloc(PRIME_PACKETS * GSM_FRAME_SAMPLES * FRAMES_PER_PACKET * 2);
-    try { this.proc.stdin.write(silence); } catch { /* ignore if stdin not ready yet */ }
+    // No silence priming: with stdbuf -o0 + -flush_packets 1, ffmpeg emits
+    // each GSM frame immediately.  Priming produced buffered silence frames
+    // that arrived mixed with real speech, causing distorted audio at the radio.
 
     this.proc.stderr.on("data", (d: Buffer) => {
       const msg = d.toString().trim();

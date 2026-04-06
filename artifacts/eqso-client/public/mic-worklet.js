@@ -52,14 +52,15 @@ class MicProcessor extends AudioWorkletProcessor {
     this._carry         = new Float32Array(0);
     this._accum         = new Float32Array(0);
 
-    // Fixed gain × tanh soft-clip.
-    // gain=4: comfortable balance for most microphones.
-    //   Quiet mic (raw peak ~0.05): tanh(4×0.05)=tanh(0.20)=0.20 → ~6 550 Int16 (20%)
-    //   Normal mic (raw peak ~0.13): tanh(4×0.13)=tanh(0.52)=0.48 → ~15 700 Int16 (48%)
-    //   Loud mic  (raw peak ~0.45): tanh(4×0.45)=tanh(1.80)=0.97 → ~31 700 Int16 (97%)
+    // Fixed gain × tanh soft-clip.  autoGainControl=false is used in getUserMedia
+    // so the raw mic arrives at hardware sensitivity (no OS boosting).
+    // gain=6: good balance for most laptop/headset mics without OS AGC.
+    //   Quiet mic  (raw peak ~0.03): tanh(6×0.03)=tanh(0.18)=0.179 →  5 870 Int16 (18%)
+    //   Normal mic (raw peak ~0.10): tanh(6×0.10)=tanh(0.60)=0.537 → 17 590 Int16 (54%)
+    //   Loud mic   (raw peak ~0.30): tanh(6×0.30)=tanh(1.80)=0.974 → 31 910 Int16 (97%)
     // tanh soft-clips gracefully — no hard clipping artefacts.
     // GSM 06.10 XMAX per-sub-frame normalisation handles 30-100% FS well.
-    this._gain = 4;
+    this._gain = 6;
 
     // Level logging (posted once per second)
     this._logEvery  = Math.round(nativeRate / 128);
@@ -115,7 +116,7 @@ class MicProcessor extends AudioWorkletProcessor {
       gained[i] = Math.tanh(this._gain * input[i]);
     }
 
-    // ── Level log (only while emitting, once per second) ─────────────────
+    // ── Level log: track both 48kHz (gained) and 8kHz (ds) peaks per second
     if (this._emitting) {
       for (let i = 0; i < gained.length; i++) {
         const a = Math.abs(gained[i]);
@@ -129,10 +130,12 @@ class MicProcessor extends AudioWorkletProcessor {
           type: 'level',
           rms:  Math.sqrt(this._logRmsAcc / this._logRmsCnt),
           peak: this._logPeak,
+          peak8k: this._logPeak8k || 0,
           gain: this._gain,
         });
         this._logCount  = 0;
         this._logPeak   = 0;
+        this._logPeak8k = 0;
         this._logRmsAcc = 0;
         this._logRmsCnt = 0;
       }
@@ -153,6 +156,9 @@ class MicProcessor extends AudioWorkletProcessor {
       let sum = 0;
       for (let j = start; j < start + iRatio; j++) sum += combined[j];
       ds[i] = sum / iRatio;
+      // Track 8 kHz peak for level logging (separate from 48 kHz peak)
+      const a8 = Math.abs(ds[i]);
+      if (a8 > (this._logPeak8k || 0)) this._logPeak8k = a8;
     }
     this._carry = combined.slice(outLen * iRatio);
 
