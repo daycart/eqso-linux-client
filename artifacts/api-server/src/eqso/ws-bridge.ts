@@ -211,7 +211,7 @@ function handleRemoteMode(
   // If a new ptt_start arrives within that window, we cancel the release and
   // continue transmitting seamlessly.  Silence GSM frames are injected during
   // the hold window to keep the ASORAPA channel alive.
-  const PTT_DEBOUNCE_MS = 1000;
+  const PTT_DEBOUNCE_MS = 3000;
   let pttDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   let pttSilenceTimer: ReturnType<typeof setInterval> | null = null;
 
