@@ -1,34 +1,31 @@
 /**
- * MicProcessor v7 — AudioWorkletProcessor with Automatic Gain Control (AGC).
+ * MicProcessor v8 — AGC + Comfort Carrier Tone.
  *
  * ── Signal chain ──────────────────────────────────────────────────────────
  *   input (native rate) → box-filter decimation to 8 kHz
- *   → AGC (adaptive gain, attack 800ms / release 80ms)
- *   → soft clip at tanh
- *   → accumulate chunks → emit (when emitting=true)
+ *   → AGC (adaptive gain, attack 200ms / release 80ms)
+ *   → tanh soft clip
+ *   → mix comfort carrier (200 Hz, 4 % FS) → emit
  *
- * ── Why AGC ───────────────────────────────────────────────────────────────
- * Fixed gain fails because microphone sensitivity varies enormously between
- * users and devices (factor of 30× observed in tests):
- *   - gain=2  → rms8k=0.012 → too quiet for radio VOX (threshold ~5%)
- *   - gain=6  → rms8k=0.37  → hard clipping → square wave → GSM noise
- * AGC keeps output RMS at a target level regardless of mic sensitivity.
- * tanh prevents hard clipping even if AGC momentarily overshoots.
+ * ── Why a comfort carrier ────────────────────────────────────────────────
+ * Inter-word pauses (100–400 ms) cause the radio VOX to release even though
+ * PTT is still held.  A pure 200 Hz sine at 4 % FS keeps the VOX keyed
+ * without audible noise because GSM 06.10 LPC models a pure tone as a single
+ * resonance pole with near-zero residual excitation.  The decoded output is
+ * a barely-audible 200 Hz hum — not wideband noise.
  *
- * ── AGC parameters ────────────────────────────────────────────────────────
- * Target RMS output: 0.22 (22% FS) — well above typical VOX thresholds
- * Attack:  800 ms — slow gain increase avoids amplifying breath/pops
- * Release: 80  ms — fast gain decrease protects against clipping on loud input
- * Max gain: 80  — for very quiet mics (0.003 FS raw → 0.22 FS output)
- * Min gain: 0.3 — for very loud mics (headset close to mouth)
+ * 4 % FS (−28 dBFS) is inaudible under speech (which is typically −12 dBFS)
+ * and just above the VOX threshold of most radio links (~3 % FS RMS).
+ *
+ * ── AGC ──────────────────────────────────────────────────────────────────
+ * Attack: 200 ms (fast enough to fill inter-word gaps)
+ * Release: 80 ms (quick gain reduction on loud input to prevent clipping)
+ * Target RMS: 0.22 (22 % FS) — well above typical VOX thresholds
+ * Max gain: 80   — amplifies very quiet mics sufficiently
+ * Min gain: 0.3  — attenuates very hot mics
  *
  * ── Warmup ────────────────────────────────────────────────────────────────
- * The first 80 ms of mic audio is discarded to absorb the hardware startup
- * pop/click.  After warmup the worklet posts { type: 'ready' }.
- *
- * ── Carry buffer ─────────────────────────────────────────────────────────
- * 128 mod 6 = 2 samples would be discarded per block without this buffer,
- * creating a 375 Hz phase discontinuity at 48 kHz.
+ * First 80 ms discarded to absorb hardware startup pop/click.
  */
 class MicProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -51,18 +48,24 @@ class MicProcessor extends AudioWorkletProcessor {
     this._pendingEmit   = null;
 
     // ── AGC state ─────────────────────────────────────────────────────────
-    // Process() runs every 128/nativeRate seconds (≈2.67 ms at 48 kHz).
-    // Time constants are expressed as per-block exponential decay coefficients.
     const blockMs = (128 / nativeRate) * 1000;
-    this._agcGain    = 4.0;                             // start at moderate gain
-    this._agcTarget  = 0.22;                            // target RMS output level
+    this._agcGain    = 4.0;
+    this._agcTarget  = 0.22;
     this._agcMaxGain = 80.0;
     this._agcMinGain = 0.3;
-    this._agcAttack  = Math.exp(-blockMs / 800);        // 800 ms attack
-    this._agcRelease = Math.exp(-blockMs / 80);         // 80 ms release
-    this._rmsEst     = 0.01;                            // running RMS estimate
+    this._agcAttack  = Math.exp(-blockMs / 200);   // 200 ms attack
+    this._agcRelease = Math.exp(-blockMs / 80);    // 80 ms release
+    this._rmsEst     = 0.01;
 
-    // Level logging: once per second
+    // ── Comfort carrier: 200 Hz sine at 4 % FS ────────────────────────────
+    // Keeps radio VOX keyed during inter-word pauses without creating noise.
+    // A pure sine is the ideal GSM LPC input (single pole, zero residual).
+    this._carrierPhase = 0;
+    this._carrierFreq  = 200;        // Hz
+    this._carrierAmp   = 0.04;       // 4 % FS (−28 dBFS)
+    this._carrierStep  = (2 * Math.PI * this._carrierFreq) / targetRate;
+
+    // ── Level logging ─────────────────────────────────────────────────────
     this._logEvery  = Math.round(nativeRate / 128);
     this._logCount  = 0;
     this._logPeak   = 0;
@@ -72,12 +75,11 @@ class MicProcessor extends AudioWorkletProcessor {
     this.port.onmessage = (ev) => {
       if (ev.data?.type === 'emit') {
         if (ev.data.emitting) {
-          // Flush stale audio accumulated while PTT was off
           this._carry = new Float32Array(0);
           this._accum = new Float32Array(0);
-          // Reset RMS estimate so AGC starts fresh each PTT press
           this._rmsEst = 0.01;
           this._agcGain = 4.0;
+          this._carrierPhase = 0;
         }
         if (this._warmupDone) {
           this._emitting = ev.data.emitting;
@@ -94,7 +96,7 @@ class MicProcessor extends AudioWorkletProcessor {
 
     this._blockCount++;
 
-    // ── Warmup: discard first 80 ms (mic startup pop) ─────────────────────
+    // ── Warmup: discard first 80 ms ───────────────────────────────────────
     if (this._blockCount <= this._warmupBlocks) {
       if (this._blockCount === this._warmupBlocks) {
         this._warmupDone = true;
@@ -123,33 +125,42 @@ class MicProcessor extends AudioWorkletProcessor {
     }
     this._carry = combined.slice(outLen * iRatio);
 
-    // ── Step 2: AGC — measure block RMS and adjust gain ───────────────────
+    // ── Step 2: AGC ───────────────────────────────────────────────────────
     let sumSq = 0;
     for (let i = 0; i < outLen; i++) sumSq += ds[i] * ds[i];
     const blockRms = outLen > 0 ? Math.sqrt(sumSq / outLen) : 0;
 
-    // Smooth RMS estimate with release time constant to track signal envelope
     this._rmsEst = this._rmsEst * this._agcRelease + blockRms * (1 - this._agcRelease);
-    if (this._rmsEst < 1e-7) this._rmsEst = 1e-7; // avoid divide-by-zero
+    if (this._rmsEst < 1e-7) this._rmsEst = 1e-7;
 
     const neededGain = this._agcTarget / this._rmsEst;
-
     if (neededGain < this._agcGain) {
-      // Signal is louder than target → release (fast): decrease gain
       this._agcGain = this._agcGain * this._agcRelease + neededGain * (1 - this._agcRelease);
     } else {
-      // Signal is quieter than target → attack (slow): increase gain
       this._agcGain = this._agcGain * this._agcAttack + neededGain * (1 - this._agcAttack);
     }
     this._agcGain = Math.max(this._agcMinGain, Math.min(this._agcMaxGain, this._agcGain));
 
-    // ── Step 3: Apply AGC gain + tanh soft clip ───────────────────────────
+    // ── Step 3: Apply AGC + tanh soft clip ────────────────────────────────
     const g = this._agcGain;
     for (let i = 0; i < outLen; i++) {
       ds[i] = Math.tanh(g * ds[i]);
     }
 
-    // ── Level log (once per second at the native process-block rate) ──────
+    // ── Step 4: Mix comfort carrier (200 Hz, 4 % FS) ─────────────────────
+    // Added after tanh so it is never clipped.  Its amplitude (0.04) is
+    // below typical speech (-12 dBFS average) but above VOX threshold.
+    const amp  = this._carrierAmp;
+    const step = this._carrierStep;
+    let   phi  = this._carrierPhase;
+    for (let i = 0; i < outLen; i++) {
+      ds[i] += amp * Math.sin(phi);
+      phi   += step;
+      if (phi > 2 * Math.PI) phi -= 2 * Math.PI;
+    }
+    this._carrierPhase = phi;
+
+    // ── Level log (once per second) ───────────────────────────────────────
     if (this._emitting) {
       for (let i = 0; i < outLen; i++) {
         const a = Math.abs(ds[i]);
@@ -174,7 +185,7 @@ class MicProcessor extends AudioWorkletProcessor {
 
     if (!this._emitting) return true;
 
-    // ── Accumulate chunks and emit ────────────────────────────────────────
+    // ── Accumulate and emit ───────────────────────────────────────────────
     const merged = new Float32Array(this._accum.length + outLen);
     merged.set(this._accum);
     merged.set(ds, this._accum.length);
@@ -190,4 +201,4 @@ class MicProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('mic-processor-v7', MicProcessor);
+registerProcessor('mic-processor-v8', MicProcessor);
