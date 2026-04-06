@@ -1,27 +1,34 @@
 /**
  * MicProcessor — AudioWorkletProcessor for real-time mic capture.
  *
- * Runs on the audio thread in 128-sample blocks (2.67 ms at 48 kHz).
- * Downsamples to 8 kHz using a box-filter averager (anti-aliased) and emits
- * 960-sample (120 ms) chunks so the GSM encoder gets audio at real-time rate.
+ * Signal chain (within this node):
+ *   input (48 kHz Float32) → AGC → box-filter decimation (48→8 kHz) → accum → emit chunk
  *
- * KEY FIX — carry buffer between blocks
- * ──────────────────────────────────────
- * If we naively compute outLen = floor(128 / ratio) and consume outLen*ratio
- * input samples per block, the remaining (128 mod ratio) samples are lost.
- * For ratio=6: 128/6=21.33 → 21 outputs × 6 = 126 consumed, 2 DISCARDED.
- * Discarded samples are replaced by the START of the NEXT block, creating a
- * tiny phase discontinuity every 2.67 ms (375 Hz), which produces an audible
- * artefact at 375 Hz — heard as "metallic / distorted" speech.
+ * ── Automatic Gain Control ────────────────────────────────────────────────────
+ * We cannot know the microphone hardware gain in advance: some devices produce
+ * 0.003 Float32 peak, others 0.6+.  A fixed gain (×2, ×4, ×8) is always wrong
+ * for someone.  Instead we implement a simple one-pole peak follower:
  *
- * Fix: maintain a carry buffer (≤ ratio-1 samples) that is prepended to the
- * next block. This way EVERY input sample is used and the downsampled stream
- * is contiguous, producing exactly 48000/ratio = 8000 samples/sec output.
+ *   peakEnv[n] = max(|x[n]|, alpha * peakEnv[n-1])
  *
- * Anti-aliasing: box-filter averaging (mean of `ratio` consecutive samples)
- * acts as a FIR low-pass with cutoff ≈ 0.443 × Fs/ratio ≈ 3 540 Hz (for
- * 48 kHz, ratio 6). This prevents aliasing of 4–8 kHz content into the
- * speech band — a known problem with plain nearest-neighbour decimation.
+ * where alpha = exp(-1 / (Fs × TC_ATK)) for attack and similarly for release.
+ * The desired gain is TARGET_PEAK / peakEnv, clamped to [GAIN_MIN, GAIN_MAX].
+ * Gain is smoothed with a slow LPF to avoid rapid level swings between words.
+ *
+ * TARGET_PEAK = 0.30 Float32 ≈ −10 dBFS: loud enough for GSM and the radio
+ * VOX, quiet enough to avoid hard-clipping in the 16-bit PCM conversion that
+ * feeds the server encoder.
+ *
+ * ── Anti-aliased downsampling ─────────────────────────────────────────────────
+ * Box-filter averaging (mean of `ratio` consecutive samples) acts as a FIR
+ * low-pass at ≈ 0.443 × Fs/ratio ≈ 3 540 Hz, preventing aliasing of 4–8 kHz
+ * content into the speech band.
+ *
+ * ── Carry buffer ─────────────────────────────────────────────────────────────
+ * Without a carry buffer, 128 mod 6 = 2 samples are discarded per worklet
+ * block, creating a 375 Hz phase discontinuity (audible metallic artefact).
+ * The carry buffer prepends unconsumed samples to the next block so that every
+ * sample is processed and the output rate is exactly 48000/6 = 8000 Hz.
  */
 class MicProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -29,22 +36,38 @@ class MicProcessor extends AudioWorkletProcessor {
     const {
       nativeRate,    // AudioContext sample rate, e.g. 48000
       targetRate,    // GSM rate: 8000
-      chunkSamples,  // samples per chunk to emit: 960
-      warmupBlocks,  // blocks to discard while mic hardware opens
+      chunkSamples,  // output chunk size: 960
+      warmupBlocks,  // blocks to skip while mic hardware opens
     } = options.processorOptions;
 
-    this._ratio        = nativeRate / targetRate;  // e.g. 6.0
-    this._iRatio       = Math.round(this._ratio);  // integer step, e.g. 6
+    this._ratio        = nativeRate / targetRate;   // 6.0
+    this._iRatio       = Math.round(this._ratio);   // 6
     this._chunkSamples = chunkSamples;
     this._warmupBlocks = warmupBlocks;
     this._blockCount   = 0;
-    this._carry        = new Float32Array(0);  // unconsumed samples from prev block
-    this._accum        = new Float32Array(0);  // output accumulator (8 kHz samples)
-    this._logEvery     = Math.round(nativeRate / 128);  // ~1 s worth of blocks
-    this._logCounter   = 0;
-    this._peakAccum    = 0;
-    this._rmsAccum     = 0;
-    this._rmsCount     = 0;
+    this._carry        = new Float32Array(0);
+    this._accum        = new Float32Array(0);
+
+    // ── AGC state ─────────────────────────────────────────────────────────
+    // Peak follower with fast attack, slow release.
+    const ATK_TC      = 0.010;   // attack  time constant: 10 ms
+    const REL_TC      = 0.300;   // release time constant: 300 ms
+    const GAIN_SM_TC  = 0.050;   // gain smoothing:        50 ms
+    this._atkAlpha    = Math.exp(-1 / (nativeRate * ATK_TC));
+    this._relAlpha    = Math.exp(-1 / (nativeRate * REL_TC));
+    this._gsmAlpha    = Math.exp(-1 / (nativeRate * GAIN_SM_TC));
+    this._peakEnv     = 0.01;    // start with small non-zero value
+    this._agcGain     = 4.0;     // initial gain (will converge within warmup)
+    this._targetPeak  = 0.30;    // −10 dBFS: safe for GSM and radio VOX
+    this._gainMin     = 0.05;    // avoid division by zero and excessive boost
+    this._gainMax     = 40.0;    // max boost for very quiet mics
+
+    // ── Level logging ─────────────────────────────────────────────────────
+    this._logEvery    = Math.round(nativeRate / 128);  // ~1 s worth of blocks
+    this._logCounter  = 0;
+    this._logPeak     = 0;
+    this._logRmsAcc   = 0;
+    this._logRmsCnt   = 0;
   }
 
   process(inputs) {
@@ -52,56 +75,74 @@ class MicProcessor extends AudioWorkletProcessor {
     if (!input || input.length === 0) return true;
 
     this._blockCount++;
-
-    // --- Warmup: discard first N blocks so mic hardware stabilises ----------
     if (this._blockCount <= this._warmupBlocks) return true;
 
-    // --- Level tracking (at 48 kHz, before downsampling) -------------------
+    // ── Apply AGC sample-by-sample ──────────────────────────────────────
+    const gained = new Float32Array(input.length);
     for (let i = 0; i < input.length; i++) {
-      const a = Math.abs(input[i]);
-      if (a > this._peakAccum) this._peakAccum = a;
-      this._rmsAccum += input[i] * input[i];
-      this._rmsCount++;
+      const raw = input[i];
+      const absRaw = Math.abs(raw);
+
+      // Peak envelope follower
+      if (absRaw > this._peakEnv) {
+        this._peakEnv = absRaw + this._atkAlpha * (this._peakEnv - absRaw);
+      } else {
+        this._peakEnv = absRaw + this._relAlpha * (this._peakEnv - absRaw);
+      }
+
+      // Desired gain to reach target peak
+      const desired = Math.min(this._gainMax,
+                       Math.max(this._gainMin,
+                         this._targetPeak / Math.max(this._peakEnv, 0.0001)));
+
+      // Smooth the gain to prevent rapid zipper noise
+      this._agcGain = desired + this._gsmAlpha * (this._agcGain - desired);
+
+      // Apply gain and soft-clip at ±1 using tanh
+      const s = this._agcGain * raw;
+      gained[i] = Math.tanh(s);   // tanh naturally saturates at ±1
+    }
+
+    // ── Level log (post-AGC, pre-downsample, at native rate) ───────────
+    for (let i = 0; i < gained.length; i++) {
+      const a = Math.abs(gained[i]);
+      if (a > this._logPeak) this._logPeak = a;
+      this._logRmsAcc += gained[i] * gained[i];
+      this._logRmsCnt++;
     }
     this._logCounter++;
     if (this._logCounter >= this._logEvery) {
-      const rms  = Math.sqrt(this._rmsAccum / this._rmsCount);
-      const peak = this._peakAccum;
-      this.port.postMessage({ type: 'level', rms, peak });
+      const rms  = Math.sqrt(this._logRmsAcc / this._logRmsCnt);
+      this.port.postMessage({ type: 'level', rms, peak: this._logPeak, gain: this._agcGain });
       this._logCounter = 0;
-      this._peakAccum  = 0;
-      this._rmsAccum   = 0;
-      this._rmsCount   = 0;
+      this._logPeak    = 0;
+      this._logRmsAcc  = 0;
+      this._logRmsCnt  = 0;
     }
 
-    // --- Anti-aliased downsampling with carry buffer ------------------------
-    // Prepend leftover samples from the previous block so no sample is lost.
-    const iRatio  = this._iRatio;
-    const combined = new Float32Array(this._carry.length + input.length);
+    // ── Box-filter downsampling with carry buffer ───────────────────────
+    const iRatio   = this._iRatio;
+    const combined = new Float32Array(this._carry.length + gained.length);
     combined.set(this._carry);
-    combined.set(input, this._carry.length);
+    combined.set(gained, this._carry.length);
 
     const outLen = Math.floor(combined.length / iRatio);
     const ds     = new Float32Array(outLen);
-
     for (let i = 0; i < outLen; i++) {
       const start = i * iRatio;
       let sum = 0;
       for (let j = start; j < start + iRatio; j++) sum += combined[j];
       ds[i] = sum / iRatio;
     }
+    const consumed = outLen * iRatio;
+    this._carry    = combined.slice(consumed);
 
-    // Save unconsumed tail for the next block (< iRatio samples)
-    const consumed  = outLen * iRatio;
-    this._carry     = combined.slice(consumed);
-
-    // --- Accumulate output samples -----------------------------------------
+    // ── Accumulate and emit 960-sample chunks ───────────────────────────
     const merged = new Float32Array(this._accum.length + outLen);
     merged.set(this._accum);
     merged.set(ds, this._accum.length);
     this._accum = merged;
 
-    // --- Emit complete 960-sample chunks (zero-copy transfer) ---------------
     while (this._accum.length >= this._chunkSamples) {
       const chunk = this._accum.slice(0, this._chunkSamples);
       this._accum = this._accum.slice(this._chunkSamples);

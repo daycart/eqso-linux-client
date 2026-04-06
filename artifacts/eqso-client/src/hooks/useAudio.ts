@@ -43,27 +43,6 @@ function downsampleFloat32(input: Float32Array, fromRate: number, toRate: number
 // If the browser pauses (tab hidden, slow CPU) we don't want a huge backlog.
 const MAX_QUEUE_AHEAD_SEC = 1.5;
 
-// Gain applied to mic input after browser AGC normalisation.
-// Post-AGC boost.  We let the browser/OS AGC normalise the microphone
-// hardware to ~-12 dBFS (≈25 % Float32 peak).  A ×2 fixed boost then brings
-// speech peaks to ~-6 dBFS (≈50 %) — well within GSM's comfortable range and
-// loud enough for the radio's VOX/COS at the repeater end.
-// (Previous approach: autoGainControl:false + ×4-8 fixed gain → either too
-//  quiet [12–32 %] or over-full-scale [93–97 %] depending on mic hardware.)
-const MIC_BOOST_GAIN = 2;
-
-/** Build a 4096-point tanh soft-clipper curve for a WaveShaperNode. */
-function buildSoftClipCurve(): Float32Array {
-  const n = 4096;
-  const curve = new Float32Array(n);
-  const k = 2; // saturation hardness: tanh(k·x)/tanh(k)
-  const norm = Math.tanh(k);
-  for (let i = 0; i < n; i++) {
-    const x = (i * 2) / (n - 1) - 1; // −1 … +1
-    curve[i] = Math.tanh(k * x) / norm;
-  }
-  return curve;
-}
 
 // Warmup duration in seconds: let mic hardware open before sending audio.
 // The MicProcessor AudioWorklet converts this to blocks (128 samples each).
@@ -161,24 +140,13 @@ export function useAudio(): UseAudioReturn {
       const source = ctx.createMediaStreamSource(stream);
       sourceRef.current = source;
 
-      // Route: source → micGain(×2) → softClipper(tanh) → analyser → processor
-      // Browser AGC already normalises the signal to ~-12 dBFS.  ×2 boost
-      // brings it to ~-6 dBFS for the GSM encoder.  The WaveShaperNode
-      // (tanh curve) prevents any rare overshoot from hard-clipping at Int16.
-      const micGain = ctx.createGain();
-      micGain.gain.value = MIC_BOOST_GAIN;
-      micGainRef.current = micGain;
-      source.connect(micGain);
-
-      const softClipper = ctx.createWaveShaper();
-      softClipper.curve = buildSoftClipCurve();
-      softClipper.oversample = "4x";   // reduces aliasing within the WaveShaper
-      micGain.connect(softClipper);
-
+      // Route: source → analyser → processor
+      // Gain control and soft-clipping are handled inside the worklet (AGC +
+      // tanh saturation).  No fixed gain or WaveShaperNode needed here.
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
       analyserRef.current = analyser;
-      softClipper.connect(analyser);
+      source.connect(analyser);
 
       // ── AudioWorklet — replaces deprecated ScriptProcessorNode ─────────────
       // ScriptProcessorNode ran every ~255–340 ms (3–4 callbacks of 85 ms) and
@@ -209,7 +177,7 @@ export function useAudio(): UseAudioReturn {
 
         if (type === "level") {
           console.debug(
-            `[audio] TX mic (gain×${MIC_BOOST_GAIN}+softclip)`,
+            `[audio] TX mic (agc gain=${ev.data.gain?.toFixed(2)})`,
             `rms=${ev.data.rms.toFixed(4)} peak=${ev.data.peak.toFixed(4)} rate=${nativeRate}`
           );
           return;
