@@ -53,12 +53,13 @@ class MicProcessor extends AudioWorkletProcessor {
     this._accum         = new Float32Array(0);
 
     // Fixed gain × tanh soft-clip.
-    // This mic produces raw peaks of ~0.4–0.5 Float32 (after OS AGC).
-    // gain=1.5 → tanh(1.5 × 0.45) = tanh(0.675) = 0.59 Float32 → ~19 400 Int16 (59 %)
-    // gain=4.0 was too high: tanh(4 × 0.45) = 0.97 Float32 → 91% — GSM distorts
-    // at that level because its 13-coefficient predictor overflows its range.
-    // 59 % is comfortably in the GSM sweet-spot and reliably triggers VOX.
-    this._gain = 1.5;
+    // gain=8 ensures a good level even with quiet microphones.
+    //   Quiet mic (raw peak ~0.05): tanh(8×0.05)=tanh(0.40)=0.38 → ~12 450 Int16 (38%)
+    //   Normal mic (raw peak ~0.13): tanh(8×0.13)=tanh(1.04)=0.78 → ~25 500 Int16 (78%)
+    //   Loud mic  (raw peak ~0.45): tanh(8×0.45)=tanh(3.60)=0.998 → ~32 700 Int16 (100%)
+    // tanh soft-clips gracefully — no hard clipping artefacts.
+    // GSM 06.10 handles full-scale input well; its XMAX normalises per sub-frame.
+    this._gain = 8;
 
     // Level logging (posted once per second)
     this._logEvery  = Math.round(nativeRate / 128);

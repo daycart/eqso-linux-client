@@ -144,14 +144,31 @@ export class FfmpegGsmEncoder extends EventEmitter {
   start(): void {
     if (this.proc || this.stopped) return;
 
-    this.proc = spawn(ENCODER_BIN, [
+    // stdbuf -o0: disable stdio output buffering so each GSM frame is written
+    // to the pipe immediately (no OS-level block buffering).
+    // -flush_packets 1: force ffmpeg to flush the output muxer after every packet.
+    // -probesize 32 -analyzeduration 0: skip unnecessary input probing
+    // (format is fully specified by -f s16le -ar 8000 -ac 1).
+    const stdbufBin = "stdbuf";
+    this.proc = spawn(stdbufBin, [
+      "-o0",
+      ENCODER_BIN,
       "-hide_banner", "-loglevel", "quiet",
+      "-probesize", "32", "-analyzeduration", "0",
       "-f", "s16le", "-ar", "8000", "-ac", "1",
       "-i", "pipe:0",
       "-acodec", "libgsm",
       "-f", "gsm", "-ar", "8000",
+      "-flush_packets", "1",
       "pipe:1",
     ], { stdio: ["pipe", "pipe", "pipe"] });
+
+    // Prime the encoder with silence so the ffmpeg pipeline is initialised and
+    // the internal muxer buffer is flushed before any real speech arrives.
+    // These silence GSM packets are discarded by ws-bridge.ts (pttGranted=false).
+    const PRIME_PACKETS = 12; // 12 × 960 samples = 1.44 s worth of 8 kHz silence
+    const silence = Buffer.alloc(PRIME_PACKETS * GSM_FRAME_SAMPLES * FRAMES_PER_PACKET * 2);
+    try { this.proc.stdin.write(silence); } catch { /* ignore if stdin not ready yet */ }
 
     this.proc.stderr.on("data", (d: Buffer) => {
       const msg = d.toString().trim();

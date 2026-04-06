@@ -17,7 +17,7 @@ import {
 import { EqsoProxy, ProxyEvent } from "./eqso-proxy";
 import {
   FfmpegGsmDecoder,
-  TsGsmEncoder,
+  FfmpegGsmEncoder,
   GSM_FRAME_SAMPLES,
   FRAMES_PER_PACKET,
   GSM_PACKET_BYTES,
@@ -209,7 +209,7 @@ function handleRemoteMode(
 
   // ── GSM codec instances (per connection) ───────────────────────────────────
   const decoder = new FfmpegGsmDecoder();
-  const encoder = new TsGsmEncoder();
+  const encoder = new FfmpegGsmEncoder();
   decoder.start();
   encoder.start();
 
