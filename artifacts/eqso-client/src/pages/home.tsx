@@ -59,8 +59,11 @@ export default function HomePage() {
     audio.stopRecording();
     eqso.pttEnd();
     setPttActive(false);
-    // Restore RX audio after releasing PTT
-    audio.muteRx(false);
+    // Keep RX muted for 400 ms after releasing PTT so the repeater tail
+    // (the RF signal the repeater keeps emitting after carrier drops) does
+    // not play through the speakers and get picked up by the mic on the
+    // next PTT press, which would create an echo loop.
+    setTimeout(() => audio.muteRx(false), 400);
   }, [pttActive, audio, eqso]);
 
   useEffect(() => {

@@ -53,11 +53,12 @@ class MicProcessor extends AudioWorkletProcessor {
     this._accum         = new Float32Array(0);
 
     // Fixed gain × tanh soft-clip.
-    // At this user's mic level (raw peak ≈ 0.15 Float32), gain=4 gives:
-    //   tanh(4 × 0.15) = 0.54 Float32  →  ~17 700 Int16 (54 % FS)
-    // This is well within the GSM codec's comfortable operating range
-    // and reliably triggers a CB radio VOX/COS at the repeater.
-    this._gain = 4.0;
+    // This mic produces raw peaks of ~0.4–0.5 Float32 (after OS AGC).
+    // gain=1.5 → tanh(1.5 × 0.45) = tanh(0.675) = 0.59 Float32 → ~19 400 Int16 (59 %)
+    // gain=4.0 was too high: tanh(4 × 0.45) = 0.97 Float32 → 91% — GSM distorts
+    // at that level because its 13-coefficient predictor overflows its range.
+    // 59 % is comfortably in the GSM sweet-spot and reliably triggers VOX.
+    this._gain = 1.5;
 
     // Level logging (posted once per second)
     this._logEvery  = Math.round(nativeRate / 128);
@@ -68,6 +69,15 @@ class MicProcessor extends AudioWorkletProcessor {
 
     this.port.onmessage = (ev) => {
       if (ev.data?.type === 'emit') {
+        // When PTT starts, discard any audio accumulated since the last PTT
+        // ended.  The worklet runs continuously (mic stays open), so _carry
+        // and _accum fill with mic-noise samples between presses.  If we do
+        // not flush them the first transmitted packet contains old audio, which
+        // can sound like an echo or garbled syllable at the start of each TX.
+        if (ev.data.emitting) {
+          this._carry = new Float32Array(0);
+          this._accum = new Float32Array(0);
+        }
         if (this._warmupDone) {
           this._emitting = ev.data.emitting;
         } else {
