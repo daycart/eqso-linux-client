@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error";
+export type ConnectionStatus = "disconnected" | "connecting" | "connected" | "reconnecting" | "error";
 
 export interface RoomMember {
   name: string;
@@ -200,6 +200,22 @@ export function useEqsoClient(
         setPttGranted(false);
         setChannelBusy(true);
         setTimeout(() => setChannelBusy(false), 2000);
+        break;
+
+      case "reconnecting":
+        // Server is auto-reconnecting — stay in connected view but show status.
+        setStatus("reconnecting");
+        setActiveSpeaker(null);
+        setPttGranted(false);
+        pttGrantedRef.current = false;
+        pttPendingRef.current = false;
+        pendingAudioRef.current = [];
+        break;
+
+      case "reconnected":
+        // Reconnected successfully — resume session.
+        setStatus("connected");
+        setError(null);
         break;
 
       case "disconnected":

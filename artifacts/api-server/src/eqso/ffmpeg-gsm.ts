@@ -203,7 +203,7 @@ export class FfmpegGsmEncoder extends EventEmitter {
         emitted++;
       }
       if (emitted > 1) {
-        logger.warn({ emitted, chunkBytes: chunk.length }, "ffmpeg GSM encoder: burst output");
+        logger.debug({ emitted, chunkBytes: chunk.length }, "ffmpeg GSM encoder: burst (expected with pipeline buffering)");
       }
     });
 

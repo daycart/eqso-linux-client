@@ -125,6 +125,12 @@ export default function HomePage() {
               Conectando...
             </span>
           )}
+          {eqso.status === "reconnecting" && (
+            <span className="flex items-center gap-1.5 text-xs text-orange-400">
+              <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
+              Reconectando...
+            </span>
+          )}
           {(eqso.status === "disconnected" || eqso.status === "error") && (
             <span className="flex items-center gap-1.5 text-xs text-gray-500">
               <span className="w-2 h-2 rounded-full bg-gray-500" />

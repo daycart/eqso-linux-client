@@ -284,19 +284,49 @@ function handleRemoteMode(
     }
   });
 
+  // Session parameters saved so we can auto-re-join on reconnect.
+  let joinParams: { name: string; room: string; message: string; password: string } | null = null;
+  let sessionEstablished = false; // true once we've successfully joined a room
+
   proxy.on("event", (ev: ProxyEvent) => {
     switch (ev.type) {
       case "connected":
-        sendJson(ws, { type: "server_info", message: `Conectado a ${host}:${port}` });
+        if (sessionEstablished && joinParams) {
+          // Reconnected after a drop — silently re-join the room.
+          logger.info({ name: joinParams.name, room: joinParams.room }, "eQSO proxy: reconnected — re-joining room");
+          proxy.sendJoin(joinParams.name, joinParams.room, joinParams.message, joinParams.password);
+          sendJson(ws, { type: "reconnected", message: `Reconectado a ${host}:${port}` });
+        } else {
+          sendJson(ws, { type: "server_info", message: `Conectado a ${host}:${port}` });
+        }
         break;
       case "server_info":
         sendJson(ws, { type: "error", message: String(ev.data) });
         break;
+      case "reconnecting": {
+        const d = ev.data as { attempt: number; delayMs: number };
+        sendJson(ws, {
+          type: "reconnecting",
+          message: `Reconectando... (intento ${d.attempt})`,
+          delayMs: d.delayMs,
+        });
+        // Abort any in-progress PTT when connection drops.
+        if (pttGranted) {
+          pttGranted = false;
+          pcmAccum = new Int16Array(0);
+          sendJson(ws, { type: "ptt_released" });
+        }
+        break;
+      }
       case "disconnected":
         sendJson(ws, { type: "disconnected", message: "Servidor desconectado" });
         break;
       case "error":
-        sendJson(ws, { type: "error", message: `Error de conexión: ${ev.data}` });
+        // Errors are handled by scheduleReconnect() in the proxy.
+        // Only surface them to the browser if we've never connected (initial failure).
+        if (!sessionEstablished) {
+          sendJson(ws, { type: "error", message: `Error de conexión: ${ev.data}` });
+        }
         break;
       case "room_list":
         sendJson(ws, { type: "room_list", rooms: ev.data as string[] });
@@ -393,6 +423,9 @@ function handleRemoteMode(
           const password = (msg.password ?? "").trim();
           currentName = name;
           currentRoom = room;
+          // Save join params for auto-reconnect
+          joinParams = { name, room, message, password };
+          sessionEstablished = true;
           logger.info({ id, name, room, host, port }, "Remote proxy: join requested");
           proxy.sendJoin(name, room, message, password);
           sendJson(ws, { type: "joined", room, name, members: [] });
