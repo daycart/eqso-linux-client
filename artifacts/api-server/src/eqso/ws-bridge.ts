@@ -213,8 +213,13 @@ function handleRemoteMode(
   decoder.start();
   encoder.start();
 
-  // When decoder produces a decoded PCM packet, send it to browser
+  // When decoder produces a decoded PCM packet, send it to browser.
+  // IMPORTANT: suppress RX output while we are transmitting (PTT active).
+  // eQSO is half-duplex; ASORAPA relays our own TX audio back to us.
+  // If we play that back through the speaker while PTT is held, the mic
+  // picks it up again → infinite echo feedback loop.
   decoder.on("pcm", (pcm: Int16Array) => {
+    if (pttGranted) return; // half-duplex: mute speaker during our own TX
     let peak = 0;
     const float32 = new Float32Array(pcm.length);
     for (let i = 0; i < pcm.length; i++) {

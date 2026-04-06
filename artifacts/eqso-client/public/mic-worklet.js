@@ -53,13 +53,13 @@ class MicProcessor extends AudioWorkletProcessor {
     this._accum         = new Float32Array(0);
 
     // Fixed gain × tanh soft-clip.
-    // gain=8 ensures a good level even with quiet microphones.
-    //   Quiet mic (raw peak ~0.05): tanh(8×0.05)=tanh(0.40)=0.38 → ~12 450 Int16 (38%)
-    //   Normal mic (raw peak ~0.13): tanh(8×0.13)=tanh(1.04)=0.78 → ~25 500 Int16 (78%)
-    //   Loud mic  (raw peak ~0.45): tanh(8×0.45)=tanh(3.60)=0.998 → ~32 700 Int16 (100%)
+    // gain=4: comfortable balance for most microphones.
+    //   Quiet mic (raw peak ~0.05): tanh(4×0.05)=tanh(0.20)=0.20 → ~6 550 Int16 (20%)
+    //   Normal mic (raw peak ~0.13): tanh(4×0.13)=tanh(0.52)=0.48 → ~15 700 Int16 (48%)
+    //   Loud mic  (raw peak ~0.45): tanh(4×0.45)=tanh(1.80)=0.97 → ~31 700 Int16 (97%)
     // tanh soft-clips gracefully — no hard clipping artefacts.
-    // GSM 06.10 handles full-scale input well; its XMAX normalises per sub-frame.
-    this._gain = 8;
+    // GSM 06.10 XMAX per-sub-frame normalisation handles 30-100% FS well.
+    this._gain = 4;
 
     // Level logging (posted once per second)
     this._logEvery  = Math.round(nativeRate / 128);
