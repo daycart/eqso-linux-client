@@ -46,10 +46,13 @@ logger.info({ ENCODER_BIN, DECODER_BIN }, "ffmpeg GSM codec binary paths resolve
 
 export const GSM_FRAME_BYTES    = 33;
 export const GSM_FRAME_SAMPLES  = 160;
-export const FRAMES_PER_PACKET  = 6;
-export const GSM_PACKET_BYTES   = GSM_FRAME_BYTES * FRAMES_PER_PACKET;     // 198
-export const PCM_PACKET_BYTES   = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET * 2; // 1920
-export const AUDIO_PAYLOAD_SIZE = GSM_PACKET_BYTES;
+// eQSO protocol: one GSM frame (33 bytes) per audio packet — 50 packets/s at 20ms/frame.
+// The Windows eQSO client sends [0x01][33 bytes] every 20 ms, not 6 frames bundled.
+// Sending 6-frame blocks (198 bytes) every 120 ms produces carrier without audio at the radio.
+export const FRAMES_PER_PACKET  = 1;
+export const GSM_PACKET_BYTES   = GSM_FRAME_BYTES * FRAMES_PER_PACKET;     // 33
+export const PCM_PACKET_BYTES   = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET * 2; // 320
+export const AUDIO_PAYLOAD_SIZE = 198; // eQSO TCP packet payload still 198 bytes on receive
 
 // ---------------------------------------------------------------------------
 // FfmpegGsmDecoder: GSM bytes → Int16 PCM samples
@@ -104,18 +107,23 @@ export class FfmpegGsmDecoder extends EventEmitter {
     logger.debug({ bin: DECODER_BIN }, "ffmpeg GSM decoder started");
   }
 
-  /** Feed a 198-byte GSM packet. Emits "pcm" event with Int16Array(960) when decoded. */
-  decode(gsmPacket: Buffer): void {
+  /**
+   * Feed a GSM payload from the eQSO server (typically 198 bytes = 6 frames,
+   * but we accept any multiple of 33 bytes).
+   * Emits "pcm" events with Int16Array(160) per decoded frame.
+   */
+  decode(gsmPayload: Buffer): void {
     if (!this.proc) {
       logger.warn("ffmpeg GSM decoder not running, dropping packet");
       return;
     }
-    if (gsmPacket.length < GSM_PACKET_BYTES) {
-      logger.warn({ len: gsmPacket.length }, "ffmpeg GSM decoder: short packet, skipping");
+    if (gsmPayload.length < GSM_FRAME_BYTES) {
+      logger.warn({ len: gsmPayload.length }, "ffmpeg GSM decoder: payload too short, skipping");
       return;
     }
     try {
-      this.proc.stdin.write(gsmPacket.slice(0, GSM_PACKET_BYTES));
+      // Feed all bytes — the frame accumulator in stdout handler handles any chunk size
+      this.proc.stdin.write(gsmPayload);
     } catch (err) {
       logger.warn({ err }, "ffmpeg GSM decoder write error");
     }

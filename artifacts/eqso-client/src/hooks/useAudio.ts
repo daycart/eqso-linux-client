@@ -12,8 +12,10 @@ export interface UseAudioReturn {
   muteRx: (muted: boolean) => void;
 }
 
-// Remote mode: Int16 signed PCM, 960 samples (6 GSM frames × 160) per chunk = 1920 bytes
-const REMOTE_CHUNK_SAMPLES = 960;
+// Remote mode: Int16 signed PCM, 160 samples (1 GSM frame × 160) per chunk = 320 bytes.
+// eQSO protocol: the client must send [0x01][33 bytes GSM] every 20ms (1 frame at a time).
+// Sending 6 frames bundled (198 bytes / 120ms) causes the radio to key up but produce no audio.
+const REMOTE_CHUNK_SAMPLES = 160;
 // Local mode: Uint8 unsigned PCM, 160 bytes per chunk
 const LOCAL_CHUNK_BYTES = 160;
 // Target sample rate for GSM encoding

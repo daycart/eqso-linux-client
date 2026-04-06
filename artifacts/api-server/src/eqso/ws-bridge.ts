@@ -322,15 +322,11 @@ function handleRemoteMode(
         sendJson(ws, { type: "ptt_released_remote", ...(ev.data as object) });
         break;
       case "audio": {
-        // Incoming GSM packet from remote eQSO server: [0x01][198 bytes GSM]
+        // Incoming GSM packet from remote eQSO server: [0x01][198 bytes = 6 frames]
+        // Feed all 198 bytes to the decoder; it accumulates and emits per-frame PCM.
         const pkt = ev.data as Buffer;
-        if (pkt.length < 1 + AUDIO_PAYLOAD_SIZE) break;
-        // Feed 198-byte GSM payload into the streaming decoder
-        const gsmBuf = Buffer.from(
-          pkt.buffer,
-          pkt.byteOffset + 1,
-          Math.min(AUDIO_PAYLOAD_SIZE, GSM_PACKET_BYTES)
-        );
+        if (pkt.length < 2) break;
+        const gsmBuf = Buffer.from(pkt.buffer, pkt.byteOffset + 1, pkt.length - 1);
         decoder.decode(gsmBuf);
         break;
       }

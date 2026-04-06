@@ -322,13 +322,18 @@ export class EqsoProxy extends EventEmitter {
     this.socketWrite(Buffer.from([0x0d]));
   }
 
+  /**
+   * Send one GSM audio frame (33 bytes) to the eQSO server.
+   * eQSO protocol: [0x01][33 bytes] per frame, 50 frames/second.
+   * DO NOT bundle multiple frames — the server/radio-link expects the
+   * 20 ms cadence of individual frames to keep the audio decodable.
+   */
   sendAudio(data: Buffer): void {
-    if (data.length < AUDIO_PAYLOAD_SIZE) {
-      const padded = Buffer.alloc(AUDIO_PAYLOAD_SIZE);
-      data.copy(padded);
-      data = padded;
-    }
-    const pkt = Buffer.concat([Buffer.from([0x01]), data.slice(0, AUDIO_PAYLOAD_SIZE)]);
+    const GSM_FRAME_BYTES = 33;
+    const frameData = data.length >= GSM_FRAME_BYTES
+      ? data.slice(0, GSM_FRAME_BYTES)
+      : Buffer.concat([data, Buffer.alloc(GSM_FRAME_BYTES - data.length)]);
+    const pkt = Buffer.concat([Buffer.from([0x01]), frameData]);
     this.socketWrite(pkt);
   }
 
