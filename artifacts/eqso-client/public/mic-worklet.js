@@ -59,12 +59,14 @@ class MicProcessor extends AudioWorkletProcessor {
     this._agcRelease = Math.exp(-blockMs / 80);    // 80 ms release
     this._rmsEst     = 0.01;
 
-    // ── Comfort carrier: 200 Hz sine at 4 % FS ────────────────────────────
+    // ── Comfort carrier: 200 Hz sine at 8 % FS ────────────────────────────
     // Keeps radio VOX keyed during inter-word pauses without creating noise.
     // A pure sine is the ideal GSM LPC input (single pole, zero residual).
+    // 8 % FS ensures the VOX threshold (~3-5 % FS) is met even after GSM
+    // encoding attenuation of low-amplitude pure tones.
     this._carrierPhase = 0;
     this._carrierFreq  = 200;        // Hz
-    this._carrierAmp   = 0.04;       // 4 % FS (−28 dBFS)
+    this._carrierAmp   = 0.08;       // 8 % FS (−22 dBFS)
     this._carrierStep  = (2 * Math.PI * this._carrierFreq) / targetRate;
 
     // ── Level logging ─────────────────────────────────────────────────────
@@ -203,4 +205,4 @@ class MicProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('mic-processor-v9', MicProcessor);
+registerProcessor('mic-processor-v10', MicProcessor);

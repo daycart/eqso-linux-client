@@ -6,6 +6,8 @@ export interface UseAudioReturn {
   startRecording: (onChunk: (data: ArrayBuffer) => void, mode?: "local" | "remote") => Promise<void>;
   stopRecording: () => void;
   playAudio: (data: ArrayBuffer, isFloat32?: boolean) => void;
+  /** Play TX self-monitor audio — uses a separate gain node, never silenced by muteRx. */
+  playMonitor: (data: ArrayBuffer) => void;
   resumeContext: () => void;
   inputLevel: number;
   /** Mute or unmute RX audio (use during TX to prevent acoustic feedback). */
@@ -39,6 +41,9 @@ export function useAudio(): UseAudioReturn {
   const accumRemoteRef = useRef<Int16Array>(new Int16Array(0));
   const nextPlayTimeRef = useRef<number>(0);
   const gainNodeRef = useRef<GainNode | null>(null);
+  // Monitor gain node: never silenced by muteRx — used for TX self-monitor only.
+  const monitorGainRef = useRef<GainNode | null>(null);
+  const monitorNextPlayRef = useRef<number>(0);
 
   // The chunk callback and mode are stored in refs so they can be updated on
   // each PTT press without recreating the worklet message handler.
@@ -70,7 +75,15 @@ export function useAudio(): UseAudioReturn {
       gain.gain.value = 3;
       gain.connect(ctxRef.current.destination);
       gainNodeRef.current = gain;
+
+      // Separate monitor gain node — never touched by muteRx.
+      const monGain = ctxRef.current.createGain();
+      monGain.gain.value = 3;
+      monGain.connect(ctxRef.current.destination);
+      monitorGainRef.current = monGain;
+
       nextPlayTimeRef.current = 0;
+      monitorNextPlayRef.current = 0;
     }
     if (ctxRef.current.state === "suspended") {
       ctxRef.current.resume().catch(() => {});
@@ -169,7 +182,7 @@ export function useAudio(): UseAudioReturn {
 
         // Version suffix forces the browser to bypass the service-worker / HTTP
         // cache and fetch the latest worklet whenever this constant is bumped.
-        const WORKLET_VERSION = "9";
+        const WORKLET_VERSION = "10";
         const workletUrl = import.meta.env.BASE_URL + "mic-worklet.js?v=" + WORKLET_VERSION;
         try {
           await ctx.audioWorklet.addModule(workletUrl);
@@ -178,7 +191,7 @@ export function useAudio(): UseAudioReturn {
         }
 
         const warmupBlocks = Math.round(TX_WARMUP_SECONDS * nativeRate / 128);
-        const workletNode = new AudioWorkletNode(ctx, "mic-processor-v9", {
+        const workletNode = new AudioWorkletNode(ctx, "mic-processor-v10", {
           processorOptions: {
             nativeRate,
             targetRate:   GSM_RATE,
@@ -403,6 +416,34 @@ export function useAudio(): UseAudioReturn {
     }
   }, [getOrCreateCtx]);
 
+  // TX self-monitor playback — bypasses muteRx, uses a dedicated gain node.
+  const playMonitor = useCallback((data: ArrayBuffer) => {
+    try {
+      const ctx = getOrCreateCtx();
+      if (ctx.state !== "running") {
+        ctx.resume().catch(() => {});
+      }
+      const float32 = new Float32Array(data.slice(0));
+      if (float32.length === 0) return;
+
+      const buffer = ctx.createBuffer(1, float32.length, GSM_RATE);
+      buffer.getChannelData(0).set(float32);
+
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(monitorGainRef.current ?? ctx.destination);
+
+      const now = ctx.currentTime;
+      if (monitorNextPlayRef.current < now || monitorNextPlayRef.current > now + MAX_QUEUE_AHEAD_SEC) {
+        monitorNextPlayRef.current = now;
+      }
+      source.start(monitorNextPlayRef.current);
+      monitorNextPlayRef.current += buffer.duration;
+    } catch (err) {
+      console.error("[audio] playMonitor error:", err);
+    }
+  }, [getOrCreateCtx]);
+
   const muteRx = useCallback((muted: boolean) => {
     const ctx = getOrCreateCtx();
     if (!gainNodeRef.current) return;
@@ -440,6 +481,7 @@ export function useAudio(): UseAudioReturn {
     startRecording,
     stopRecording,
     playAudio,
+    playMonitor,
     resumeContext,
     inputLevel,
     muteRx,

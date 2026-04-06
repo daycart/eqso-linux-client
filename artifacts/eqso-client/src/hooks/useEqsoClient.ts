@@ -79,6 +79,7 @@ export interface EqsoActions {
 // Binary opcodes (must match ws-bridge.ts)
 const WS_AUDIO_LOCAL  = 0x01; // local relay: Uint8 unsigned PCM
 const WS_AUDIO_REMOTE = 0x11; // remote RX:   Float32 PCM decoded from GSM
+const WS_TX_MONITOR   = 0x12; // TX self-monitor: Float32 PCM (ffmpeg-decoded TX, never muted)
 const WS_PCM_TX       = 0x05; // remote TX:   Int16 signed PCM → GSM encode on server
 
 function getWsUrl(): string {
@@ -96,10 +97,13 @@ function getWsUrl(): string {
 }
 
 export function useEqsoClient(
-  onAudio?: (data: ArrayBuffer, isFloat32: boolean) => void
+  onAudio?: (data: ArrayBuffer, isFloat32: boolean) => void,
+  onMonitor?: (data: ArrayBuffer) => void
 ): EqsoState & EqsoActions {
   const onAudioRef = useRef(onAudio);
   useEffect(() => { onAudioRef.current = onAudio; }, [onAudio]);
+  const onMonitorRef = useRef(onMonitor);
+  useEffect(() => { onMonitorRef.current = onMonitor; }, [onMonitor]);
   const wsRef = useRef<WebSocket | null>(null);
   const pendingJoinRef = useRef<{ name: string; room: string } | null>(null);
 
@@ -246,6 +250,14 @@ export function useEqsoClient(
       if (view.length > 1) {
         console.debug(`[eqso] RX audio: ${view.length - 1} bytes`);
         onAudioRef.current?.(data.slice(1), true);
+      }
+      return;
+    }
+
+    // TX self-monitor: Float32 PCM of our own TX audio decoded by ffmpeg (never muted)
+    if (cmd === WS_TX_MONITOR) {
+      if (view.length > 1) {
+        onMonitorRef.current?.(data.slice(1));
       }
       return;
     }
