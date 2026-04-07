@@ -70,7 +70,7 @@ export interface EqsoState {
 export interface EqsoActions {
   connect: (server: EqsoServer, customHost?: string, customPort?: number) => void;
   disconnect: () => void;
-  join: (name: string, room: string, message?: string, password?: string) => void;
+  join: (name: string, room: string, message?: string, password?: string, token?: string) => void;
   pttStart: () => void;
   pttEnd: () => void;
   sendAudio: (data: ArrayBuffer) => void;
@@ -333,28 +333,36 @@ export function useEqsoClient(
     pendingJoinRef.current = null;
   }, []);
 
-  const join = useCallback((name: string, room: string, message = "", password = "") => {
+  const join = useCallback((name: string, room: string, message = "", password = "", token?: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    const upper = name.toUpperCase().trim();
-    // Ensure "0R-" prefix
-    const withPrefix = upper.startsWith("0R-") ? upper : `0R-${upper}`;
-    // RC IRIA "Solo radio-enlaces" filter validates Maidenhead grid locator format:
-    // [A-R][A-R][0-9][0-9][A-X][A-X] — positions 4-5 MUST be letters, not digits.
-    // Pad short suffixes using template "AA00AA" (letters at 0,1,4,5; digits at 2,3).
-    const prefix = "0R-";
-    const suffix = withPrefix.slice(prefix.length);
-    let finalSuffix = suffix;
-    if (suffix.length < 6) {
-      // Positions 0-1: letters (A-R), 2-3: digits (0-9), 4-5: letters (A-X)
+
+    let nodeName: string;
+    if (token) {
+      // Authenticated: callsign comes from session, server handles prefix/padding
+      nodeName = name.toUpperCase().trim();
+    } else {
+      // Legacy / unauthenticated: apply 0R- prefix + Maidenhead padding client-side
+      const upper = name.toUpperCase().trim();
+      const withPrefix = upper.startsWith("0R-") ? upper : `0R-${upper}`;
+      const prefix = "0R-";
+      const suffix = withPrefix.slice(prefix.length);
       const TEMPLATE = "AA00AA";
       let padded = "";
       for (let i = 0; i < 6; i++) padded += i < suffix.length ? suffix[i] : TEMPLATE[i];
-      finalSuffix = padded;
+      nodeName = prefix + padded;
     }
-    const nodeName = prefix + finalSuffix;
+
     pendingJoinRef.current = { name: nodeName, room };
-    ws.send(JSON.stringify({ type: "join", name: nodeName, room: room.toUpperCase(), message, password }));
+    const msg: Record<string, unknown> = {
+      type: "join",
+      name: nodeName,
+      room: room.toUpperCase(),
+      message,
+      password,
+    };
+    if (token) msg.token = token;
+    ws.send(JSON.stringify(msg));
   }, []);
 
   const pttStart = useCallback(() => {

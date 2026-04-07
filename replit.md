@@ -77,6 +77,21 @@ Audio uses GSM 06.10 (libgsm) codec: 198 bytes / 120ms / 8 kHz mono.
   - Client changes must be pushed via GitHub API (bash, not code_execution).
   - Build requires `PORT` and `BASE_PATH` env vars (handled by CI).
 
+## User Authentication System
+
+Added in April 2026. Only registered users can access the eQSO client.
+
+- **Database**: `users` table — callsign (PK unique), password_hash (scrypt), is_relay, active, created_at, last_login
+- **Endpoints**: `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/users`
+- **Sessions**: UUID tokens (24h TTL), stored in-memory Map on the API server. Pruned hourly.
+- **Password hashing**: Node.js built-in `crypto.scrypt` (64-byte output, random 16-byte salt), no external deps.
+- **WS join auth**: Client sends `token` in join message → server validates session → applies `0R-` + Maidenhead padding for relay users automatically.
+- **User types**:
+  - `is_relay = false`: normal user, callsign used as-is (no prefix)
+  - `is_relay = true`: relay/enlace, server prepends `0R-` + pads to 6-char Maidenhead format
+- **Client**: `LoginPanel.tsx` — login/register tabs shown before ConnectPanel. Token stored in React state (session memory only).
+- **Header**: Shows authenticated callsign + "enlace" badge for relay users + "Salir" button.
+
 ## Key Commands
 
 - `pnpm run typecheck` — full typecheck across all packages

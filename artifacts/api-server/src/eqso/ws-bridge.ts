@@ -15,6 +15,7 @@ import {
   AUDIO_PAYLOAD_SIZE,
 } from "./protocol";
 import { EqsoProxy, ProxyEvent } from "./eqso-proxy";
+import { validateSession } from "../lib/auth";
 import {
   FfmpegGsmDecoder,
   FfmpegGsmEncoder,
@@ -47,6 +48,7 @@ interface WsMessage {
   room?: string;
   message?: string;
   password?: string;
+  token?: string;
 }
 
 function sendJson(ws: WebSocket, obj: object): void {
@@ -101,10 +103,33 @@ function handleLocalMode(
 
       switch (msg.type) {
         case "join": {
-          const name = (msg.name ?? "").trim().toUpperCase();
           const room = (msg.room ?? "GENERAL").trim().toUpperCase();
           const message = (msg.message ?? "").trim();
           const password = (msg.password ?? "").trim();
+
+          // Resolve callsign from session token or raw name
+          let name = (msg.name ?? "").trim().toUpperCase();
+          let isRelay = false;
+          if (msg.token) {
+            const session = validateSession(msg.token);
+            if (!session) {
+              sendJson(ws, { type: "error", message: "Sesión expirada. Vuelve a iniciar sesión." });
+              ws.close();
+              return;
+            }
+            name = session.callsign;
+            isRelay = session.isRelay;
+          }
+
+          // Apply 0R- prefix + Maidenhead padding for relay users
+          if (isRelay) {
+            const prefix = "0R-";
+            const suffix = name.startsWith(prefix) ? name.slice(prefix.length) : name;
+            const TEMPLATE = "AA00AA";
+            let padded = "";
+            for (let i = 0; i < 6; i++) padded += i < suffix.length ? suffix[i] : TEMPLATE[i];
+            name = prefix + padded;
+          }
 
           const serverPassword = process.env.EQSO_PASSWORD ?? "";
           if (serverPassword && password !== serverPassword) {
@@ -359,16 +384,41 @@ function handleRemoteMode(
 
       switch (msg.type) {
         case "join": {
-          const name = (msg.name ?? "").trim().toUpperCase();
           const room = (msg.room ?? "GENERAL").trim().toUpperCase();
           const message = (msg.message ?? "").trim();
           const password = (msg.password ?? "").trim();
-          currentName = name;
+
+          // Resolve callsign: prefer authenticated session over raw name
+          let resolvedName = (msg.name ?? "").trim().toUpperCase();
+          let isRelay = false;
+          if (msg.token) {
+            const session = validateSession(msg.token);
+            if (!session) {
+              sendJson(ws, { type: "error", message: "Sesión expirada. Vuelve a iniciar sesión." });
+              return;
+            }
+            resolvedName = session.callsign;
+            isRelay = session.isRelay;
+          }
+
+          // Apply 0R- prefix + Maidenhead padding for relay users
+          if (isRelay) {
+            const prefix = "0R-";
+            const suffix = resolvedName.startsWith(prefix)
+              ? resolvedName.slice(prefix.length)
+              : resolvedName;
+            const TEMPLATE = "AA00AA";
+            let padded = "";
+            for (let i = 0; i < 6; i++) padded += i < suffix.length ? suffix[i] : TEMPLATE[i];
+            resolvedName = prefix + padded;
+          }
+
+          currentName = resolvedName;
           currentRoom = room;
-          logger.info({ id, name, room, host, port }, "Remote proxy: join requested");
-          proxy.sendJoin(name, room, message, password);
-          sendJson(ws, { type: "joined", room, name, members: [] });
-          logger.info({ id, name, room }, "Remote proxy: sent joined to browser");
+          logger.info({ id, name: resolvedName, room, host, port, isRelay }, "Remote proxy: join requested");
+          proxy.sendJoin(resolvedName, room, message, password);
+          sendJson(ws, { type: "joined", room, name: resolvedName, members: [] });
+          logger.info({ id, name: resolvedName, room }, "Remote proxy: sent joined to browser");
           break;
         }
         case "ptt_start":

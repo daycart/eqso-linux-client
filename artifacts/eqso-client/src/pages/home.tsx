@@ -3,6 +3,7 @@ import { useEqsoClient, EqsoServer } from "@/hooks/useEqsoClient";
 import { useAudio } from "@/hooks/useAudio";
 import { ConnectPanel } from "@/components/ConnectPanel";
 import { RoomPanel } from "@/components/RoomPanel";
+import { LoginPanel, type AuthSession } from "@/components/LoginPanel";
 
 export default function HomePage() {
   const audioRef = useRef<ReturnType<typeof useAudio> | null>(null);
@@ -14,12 +15,27 @@ export default function HomePage() {
       audioRef.current?.playAudio(data, isFloat32);
     }, [])
   );
+
+  const [auth, setAuth] = useState<AuthSession | null>(null);
   const [callsign, setCallsign] = useState("");
   const [selectedRoom, setSelectedRoom] = useState("GENERAL");
   const [statusMessage, setStatusMessage] = useState("CB27 link via internet. ");
   const [password, setPassword] = useState("");
   const [pttActive, setPttActive] = useState(false);
   const pttChunkRef = useRef<(data: ArrayBuffer) => void>(() => {});
+
+  const handleAuth = (session: AuthSession) => {
+    setAuth(session);
+    setCallsign(session.callsign);
+  };
+
+  const handleLogout = () => {
+    setAuth(null);
+    setCallsign("");
+    eqso.disconnect();
+    audio.stopRecording();
+    setPttActive(false);
+  };
 
   const handleConnect = (server: EqsoServer, customHost?: string, customPort?: number) => {
     eqso.connect(server, customHost, customPort);
@@ -33,33 +49,27 @@ export default function HomePage() {
 
   const handleJoin = () => {
     if (!callsign.trim()) return;
-    // User gesture → unlock AudioContext so playback works immediately
     audio.resumeContext();
-    eqso.join(callsign.trim(), selectedRoom, statusMessage, password);
+    eqso.join(callsign.trim(), selectedRoom, statusMessage, password, auth?.token);
   };
 
   const pttStart = useCallback(async () => {
     if (pttActive || !eqso.currentRoom) return;
-    console.debug("[ptt] start — room:", eqso.currentRoom, "server:", eqso.selectedServer.mode);
-    // Mute RX before opening mic: prevents acoustic echo (speaker → mic → TX loop)
     audio.muteRx(true);
     eqso.pttStart();
     setPttActive(true);
 
     const mode = eqso.selectedServer.mode === "remote" ? "remote" : "local";
     await audio.startRecording((chunk) => {
-      console.debug("[ptt] audio chunk:", chunk.byteLength, "bytes");
       pttChunkRef.current(chunk);
     }, mode);
   }, [pttActive, eqso, audio]);
 
   const pttEnd = useCallback(() => {
     if (!pttActive) return;
-    console.debug("[ptt] end");
     audio.stopRecording();
     eqso.pttEnd();
     setPttActive(false);
-    // Restore RX audio after releasing PTT
     audio.muteRx(false);
   }, [pttActive, audio, eqso]);
 
@@ -92,6 +102,25 @@ export default function HomePage() {
 
   const isInRoom = !!eqso.currentRoom;
 
+  if (!auth) {
+    return (
+      <div className="min-h-screen bg-gray-950 text-gray-100 flex flex-col">
+        <header className="border-b border-gray-800 px-6 py-3 flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center">
+              <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-white">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/>
+              </svg>
+            </div>
+            <span className="font-bold text-lg tracking-wide">eQSO Linux</span>
+            <span className="text-xs text-gray-500 font-mono">CB27 / Radio Link</span>
+          </div>
+        </header>
+        <LoginPanel onAuth={handleAuth} />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 flex flex-col">
       <header className="border-b border-gray-800 px-6 py-3 flex items-center gap-3">
@@ -104,7 +133,24 @@ export default function HomePage() {
           <span className="font-bold text-lg tracking-wide">eQSO Linux</span>
           <span className="text-xs text-gray-500 font-mono">CB27 / Radio Link</span>
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">
+              <span className="font-mono text-green-400">{auth.callsign}</span>
+              {auth.isRelay && (
+                <span className="ml-1.5 text-[10px] bg-orange-900 text-orange-300 border border-orange-700 rounded px-1 py-0.5">
+                  enlace
+                </span>
+              )}
+            </span>
+            <button
+              onClick={handleLogout}
+              className="text-xs text-gray-500 hover:text-gray-300 transition-colors px-2 py-1 rounded hover:bg-gray-800"
+              title="Cerrar sesion"
+            >
+              Salir
+            </button>
+          </div>
           {eqso.status === "connected" && (
             <span className="flex items-center gap-1.5 text-xs text-green-400">
               <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
@@ -161,7 +207,7 @@ export default function HomePage() {
             isRemote={eqso.selectedServer.mode === "remote"}
             onRoomChange={(room) => {
               setSelectedRoom(room);
-              eqso.join(eqso.currentName!, room);
+              eqso.join(eqso.currentName!, room, "", "", auth?.token);
             }}
             onPttStart={pttStart}
             onPttEnd={pttEnd}
