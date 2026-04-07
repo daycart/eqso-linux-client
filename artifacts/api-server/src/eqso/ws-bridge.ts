@@ -201,11 +201,24 @@ function handleRemoteMode(
 } {
   const proxy = new EqsoProxy(host, port);
   let pttGranted = false;
+  let pttTailTimer: ReturnType<typeof setTimeout> | null = null;
   let currentName = "";
   let currentRoom = "";
 
   // PCM accumulation buffer for TX: browser sends Int16 PCM chunks
   let pcmAccum = new Int16Array(0);
+
+  // PTT tail: flush FFmpeg encoder buffer before sending [0x0d] to eQSO.
+  // GSM 06.10 encoding has ~120 ms pipeline latency; 300 ms tail ensures
+  // the last voice frames make it through before the channel closes.
+  const PTT_TAIL_MS = 300;
+
+  function releasePtt(): void {
+    pttGranted = false;
+    pcmAccum = new Int16Array(0);
+    proxy.sendPttEnd();
+    logger.info({ name: currentName }, "Remote TX: PTT end sent to eQSO server");
+  }
 
   // ── FFmpeg codec instances (pre-warmed at connection time) ──────────────────
   const decoder = new FfmpegGsmDecoder();
@@ -356,6 +369,8 @@ function handleRemoteMode(
           break;
         }
         case "ptt_start":
+          // Cancel any pending tail timer from a previous PTT release
+          if (pttTailTimer) { clearTimeout(pttTailTimer); pttTailTimer = null; }
           pttGranted = true;
           pcmAccum = new Int16Array(0); // reset accumulator
           // No separate PTT-announce packet in eQSO — the first [0x01][198 GSM] frame
@@ -365,11 +380,13 @@ function handleRemoteMode(
           logger.info({ name: currentName, room: currentRoom }, "Remote TX: PTT start (first voice frame will open channel)");
           break;
         case "ptt_end":
-          pttGranted = false;
-          pcmAccum = new Int16Array(0); // discard leftover
-          proxy.sendPttEnd(); // send [0x0d] to remote eQSO server to release the channel
-          logger.info({ name: currentName }, "Remote TX: PTT end sent to eQSO server");
+          // Notify browser immediately so UI updates, then wait for the FFmpeg
+          // encoder to flush its remaining frames before releasing the eQSO channel.
           sendJson(ws, { type: "ptt_released" });
+          pttTailTimer = setTimeout(() => {
+            pttTailTimer = null;
+            releasePtt();
+          }, PTT_TAIL_MS);
           break;
         case "ping":
           sendJson(ws, { type: "pong" });
@@ -378,9 +395,8 @@ function handleRemoteMode(
     },
 
     onClose: () => {
-      if (pttGranted) {
-        proxy.sendPttEnd(); // release channel before disconnecting
-      }
+      if (pttTailTimer) { clearTimeout(pttTailTimer); pttTailTimer = null; }
+      if (pttGranted) proxy.sendPttEnd(); // release channel before disconnecting
       pttGranted = false;
       pcmAccum = new Int16Array(0);
       decoder.stop();
