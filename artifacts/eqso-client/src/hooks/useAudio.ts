@@ -56,7 +56,7 @@ export function useAudio(): UseAudioReturn {
   const [inputLevel, setInputLevel] = useState(0);
 
   const getOrCreateCtx = useCallback((): AudioContext => {
-    if (!ctxRef.current) {
+    if (!ctxRef.current || ctxRef.current.state === "closed") {
       ctxRef.current = new AudioContext();
       const gain = ctxRef.current.createGain();
       // GSM 06.10 decoded via ffmpeg: typical speech peaks at ~3500/32768
@@ -265,12 +265,12 @@ export function useAudio(): UseAudioReturn {
         micInitializedRef.current = false;
         // Close the AudioContext so getOrCreateCtx() builds a fresh one next time.
         // A stale/broken context would cause addModule to fail repeatedly.
-        if (ctxRef.current) {
+        if (ctxRef.current && ctxRef.current.state !== "closed") {
           ctxRef.current.close().catch(() => {});
-          ctxRef.current = null;
-          gainNodeRef.current = null;
-          nextPlayTimeRef.current = 0;
         }
+        ctxRef.current = null;
+        gainNodeRef.current = null;
+        nextPlayTimeRef.current = 0;
       }
     };
 
@@ -423,7 +423,10 @@ export function useAudio(): UseAudioReturn {
   useEffect(() => {
     return () => {
       teardown();
-      ctxRef.current?.close();
+      if (ctxRef.current && ctxRef.current.state !== "closed") {
+        ctxRef.current.close().catch(() => {});
+      }
+      ctxRef.current = null;
     };
   }, [teardown]);
 
