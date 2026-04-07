@@ -1,26 +1,25 @@
 /**
- * MicProcessor v20 — AGC target 8 % RMS + Tanh + Sine Carrier 5 % FS.
+ * MicProcessor v23 — Low-level output to match portable CB radio.
  *
- * ── Why the level was reduced ─────────────────────────────────────────────
- * v19 sent audio at ~30 % RMS, which arrived at the radio-link node
- * fully saturated (VU in red).  The eQSO node software rejects clipped
- * audio and does not key the COM-port PTT.
+ * ── Why the level matters ─────────────────────────────────────────────────
+ * RC IRIA "Solo radio-enlaces" routes 0R-* audio to the COM-port PTT.
+ * Before routing, the software checks for saturation: if audio peaks above
+ * ~15-20 % FS (the "green line" on the VU meter) it marks the signal as
+ * clipped and does NOT key the radio.
  *
- * A portable radio sends the first green line (~5-8 % FS) and the node
- * activates correctly.  We now target 8 % RMS so decoded audio at the
- * node is in the same range, below any saturation gate.
+ * A portable CB radio sends audio at ~5-8 % FS peak (first green segment).
+ * We must stay within that range.
  *
  * ── Signal chain ──────────────────────────────────────────────────────────
  *   input (native rate) → box-filter decimation to 8 kHz
- *   → AGC (target 0.08 RMS, attack 200 ms / release 80 ms)
- *   → tanh soft clip (safety; at 8 % target barely activates)
- *   → mix comfort carrier (200 Hz, 5 % FS)
+ *   → AGC (target 0.02 RMS ≈ 8 % FS peak, attack 200 ms / release 80 ms)
+ *   → tanh soft clip (safety clamp)
  *   → clamp ±1.0 → emit
  *
- * ── Carrier ──────────────────────────────────────────────────────────────
- * 200 Hz sine survives GSM 06.10 (modelled as voiced LPC excitation) and
- * keeps the node's VOX/PTT gate active between words.  5 % FS is below
- * perceptible distortion on an FM receiver at these overall levels.
+ * ── No carrier ────────────────────────────────────────────────────────────
+ * Removed the 200 Hz comfort carrier.  The radio PTT is keyed via the eQSO
+ * protocol packet, not by audio level.  The carrier was adding audible
+ * interference and pushing the total signal above the saturation threshold.
  *
  * ── Warmup ────────────────────────────────────────────────────────────────
  * First 80 ms discarded to absorb hardware startup transients.
@@ -48,17 +47,12 @@ class MicProcessor extends AudioWorkletProcessor {
     // ── AGC state ─────────────────────────────────────────────────────────
     const blockMs = (128 / nativeRate) * 1000;
     this._agcGain    = 1.0;
-    this._agcTarget  = 0.15;   // 15 % RMS — enough to exceed node VOX threshold reliably
+    this._agcTarget  = 0.02;   // 2 % RMS → peak ~8 % FS (matches portable CB radio)
     this._agcMaxGain = 25.0;   // cap: prevents ambient noise from saturating
     this._agcMinGain = 0.1;
     this._agcAttack  = Math.exp(-blockMs / 200);
     this._agcRelease = Math.exp(-blockMs / 80);
     this._rmsEst     = 0.01;
-
-    // ── Comfort carrier: 200 Hz sine at 5 % FS ────────────────────────────
-    this._carrierPhase = 0;
-    this._carrierStep  = (2 * Math.PI * 200) / targetRate;
-    this._carrierAmp   = 0.05;   // 5 % FS — audible to GSM, not audible on RF
 
     // ── Level logging ─────────────────────────────────────────────────────
     this._logEvery  = Math.round(nativeRate / 128);
@@ -70,11 +64,10 @@ class MicProcessor extends AudioWorkletProcessor {
     this.port.onmessage = (ev) => {
       if (ev.data?.type === 'emit') {
         if (ev.data.emitting) {
-          this._carry        = new Float32Array(0);
-          this._accum        = new Float32Array(0);
-          this._rmsEst       = 0.01;
-          this._agcGain      = 1.0;
-          this._carrierPhase = 0;
+          this._carry    = new Float32Array(0);
+          this._accum    = new Float32Array(0);
+          this._rmsEst   = 0.01;
+          this._agcGain  = 1.0;
         }
         if (this._warmupDone) {
           this._emitting = ev.data.emitting;
@@ -142,18 +135,7 @@ class MicProcessor extends AudioWorkletProcessor {
       ds[i] = Math.tanh(g * ds[i]);
     }
 
-    // ── Step 4: Mix comfort carrier (200 Hz, 5 % FS) ─────────────────────
-    const amp  = this._carrierAmp;
-    const step = this._carrierStep;
-    let   phi  = this._carrierPhase;
-    for (let i = 0; i < outLen; i++) {
-      ds[i] += amp * Math.sin(phi);
-      phi   += step;
-      if (phi > 2 * Math.PI) phi -= 2 * Math.PI;
-    }
-    this._carrierPhase = phi;
-
-    // ── Step 5: Clamp to ±1.0 ─────────────────────────────────────────────
+    // ── Step 4: Clamp to ±1.0 ─────────────────────────────────────────────
     for (let i = 0; i < outLen; i++) {
       if      (ds[i] >  1) ds[i] =  1;
       else if (ds[i] < -1) ds[i] = -1;
