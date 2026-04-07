@@ -339,13 +339,20 @@ export function useEqsoClient(
     const upper = name.toUpperCase().trim();
     // Ensure "0R-" prefix
     const withPrefix = upper.startsWith("0R-") ? upper : `0R-${upper}`;
-    // The RC IRIA "Solo radio-enlaces" filter requires callsign suffix >= 6 chars
-    // (standard Maidenhead grid locator format, e.g. 0R-IN80AU = 9 chars total).
-    // Pad suffix with zeros if shorter to avoid being filtered out.
+    // RC IRIA "Solo radio-enlaces" filter validates Maidenhead grid locator format:
+    // [A-R][A-R][0-9][0-9][A-X][A-X] — positions 4-5 MUST be letters, not digits.
+    // Pad short suffixes using template "AA00AA" (letters at 0,1,4,5; digits at 2,3).
     const prefix = "0R-";
     const suffix = withPrefix.slice(prefix.length);
-    const paddedSuffix = suffix.length < 6 ? suffix.padEnd(6, "0") : suffix;
-    const nodeName = prefix + paddedSuffix;
+    let finalSuffix = suffix;
+    if (suffix.length < 6) {
+      // Positions 0-1: letters (A-R), 2-3: digits (0-9), 4-5: letters (A-X)
+      const TEMPLATE = "AA00AA";
+      let padded = "";
+      for (let i = 0; i < 6; i++) padded += i < suffix.length ? suffix[i] : TEMPLATE[i];
+      finalSuffix = padded;
+    }
+    const nodeName = prefix + finalSuffix;
     pendingJoinRef.current = { name: nodeName, room };
     ws.send(JSON.stringify({ type: "join", name: nodeName, room: room.toUpperCase(), message, password }));
   }, []);

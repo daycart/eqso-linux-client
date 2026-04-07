@@ -185,15 +185,22 @@ export function ConnectPanel({
               <p className="mt-1 text-xs text-gray-600">
                 Apareceras como:{" "}
                 <span className="font-mono text-green-400">
-                  0R-{callsign.length < 6 ? callsign.padEnd(6, "0") : callsign}
+                  {(() => {
+                    const upper = callsign.toUpperCase();
+                    if (upper.length >= 6) return `0R-${upper}`;
+                    const TEMPLATE = "AA00AA";
+                    let padded = "";
+                    for (let i = 0; i < 6; i++) padded += i < upper.length ? upper[i] : TEMPLATE[i];
+                    return `0R-${padded}`;
+                  })()}
                 </span>
                 {callsign.length < 6 && (
-                  <span className="text-amber-500/80"> (relleno automatico para activar filtro RF)</span>
+                  <span className="text-amber-500/80"> (relleno Maidenhead automatico)</span>
                 )}
               </p>
             )}
             <p className="mt-1 text-xs text-gray-600">
-              Usa al menos 6 caracteres para activar el filtro de radioenlace (ej: <span className="font-mono">IN80AU</span>)
+              Formato: localizador Maidenhead de 6 caracteres (ej: <span className="font-mono">IN80AU</span> para Madrid)
             </p>
           </div>
 
