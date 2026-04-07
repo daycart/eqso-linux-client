@@ -1,5 +1,5 @@
 /**
- * MicProcessor v8 — AGC + Comfort Carrier Tone.
+ * MicProcessor v16 — AGC + Comfort Carrier Tone.
  *
  * ── Signal chain ──────────────────────────────────────────────────────────
  *   input (native rate) → box-filter decimation to 8 kHz
