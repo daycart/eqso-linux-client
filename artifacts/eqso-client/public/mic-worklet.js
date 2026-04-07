@@ -1,28 +1,26 @@
 /**
- * MicProcessor v23 — Low-level output to match portable CB radio.
+ * MicProcessor v24 — Stable output for CB radio linking (RC IRIA compatible).
  *
  * ── Why the level matters ─────────────────────────────────────────────────
  * RC IRIA "Solo radio-enlaces" routes 0R-* audio to the COM-port PTT.
- * Before routing, the software checks for saturation: if audio peaks above
- * ~15-20 % FS (the "green line" on the VU meter) it marks the signal as
- * clipped and does NOT key the radio.
- *
- * A portable CB radio sends audio at ~5-8 % FS peak (first green segment).
- * We must stay within that range.
+ * The software checks for saturation: if audio peaks above ~15-20 % FS it
+ * marks the signal as clipped and does NOT key the radio.
+ * Below the "Nivel de silencio" threshold it also ignores it.
+ * Target zone: 5-15 % FS peak (first green segment on the VU meter).
  *
  * ── Signal chain ──────────────────────────────────────────────────────────
  *   input (native rate) → box-filter decimation to 8 kHz
- *   → AGC (target 0.02 RMS ≈ 8 % FS peak, attack 200 ms / release 80 ms)
- *   → tanh soft clip (safety clamp)
- *   → clamp ±1.0 → emit
+ *   → AGC with hold/attack/release (target 0.02 RMS ≈ 8 % FS peak)
+ *   → tanh soft clip → clamp ±1.0 → emit
  *
- * ── No carrier ────────────────────────────────────────────────────────────
- * Removed the 200 Hz comfort carrier.  The radio PTT is keyed via the eQSO
- * protocol packet, not by audio level.  The carrier was adding audible
- * interference and pushing the total signal above the saturation threshold.
- *
- * ── Warmup ────────────────────────────────────────────────────────────────
- * First 80 ms discarded to absorb hardware startup transients.
+ * ── AGC hold/attack/release ───────────────────────────────────────────────
+ * Standard broadcast AGC behaviour:
+ *   release  80 ms  — gain drops FAST when the signal gets louder (no overload)
+ *   hold    300 ms  — after signal drops, gain is FROZEN for 300 ms
+ *                     → prevents gain spikes during natural speech pauses
+ *   attack 2000 ms  — after the hold, gain rises very SLOWLY
+ *                     → smooth recovery between sentences
+ * Max gain 10× keeps peak ≤ 10 × input_peak so mild mics can't saturate.
  */
 class MicProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -47,12 +45,16 @@ class MicProcessor extends AudioWorkletProcessor {
     // ── AGC state ─────────────────────────────────────────────────────────
     const blockMs = (128 / nativeRate) * 1000;
     this._agcGain    = 1.0;
-    this._agcTarget  = 0.02;   // 2 % RMS → peak ~8 % FS (matches portable CB radio)
-    this._agcMaxGain = 10.0;   // cap at 10× — mic at 0.3 % FS → 3 % FS out (green zone)
+    this._agcTarget  = 0.02;   // 2 % RMS → peak ~8 % FS (first green segment)
+    this._agcMaxGain = 10.0;   // cap: mic at 0.5 % FS → 5 % FS out (well in green)
     this._agcMinGain = 0.1;
-    this._agcAttack  = Math.exp(-blockMs / 200);
-    this._agcRelease = Math.exp(-blockMs / 80);
+    this._agcRelease = Math.exp(-blockMs / 80);    // fast drop: 80 ms
+    this._agcAttack  = Math.exp(-blockMs / 2000);  // slow rise: 2000 ms
     this._rmsEst     = 0.01;
+
+    // AGC hold: gain is frozen for 300 ms after the signal drops
+    this._agcHoldMs        = 300;
+    this._agcHoldRemaining = 0;  // counts down in ms
 
     // ── Level logging ─────────────────────────────────────────────────────
     this._logEvery  = Math.round(nativeRate / 128);
@@ -65,9 +67,8 @@ class MicProcessor extends AudioWorkletProcessor {
       if (ev.data?.type === 'emit') {
         if (ev.data.emitting) {
           // Reset audio buffers but NOT the AGC state.
-          // Preserving gain/rmsEst across PTTs prevents the gain from
-          // ramping to max (10x) during silence and then overshooting on
-          // the first word of the next transmission.
+          // Preserving gain/rmsEst/hold across PTTs prevents the gain from
+          // ramping to max during silence and then overshooting on the first word.
           this._carry = new Float32Array(0);
           this._accum = new Float32Array(0);
         }
@@ -115,19 +116,37 @@ class MicProcessor extends AudioWorkletProcessor {
     }
     this._carry = combined.slice(outLen * iRatio);
 
-    // ── Step 2: AGC ───────────────────────────────────────────────────────
+    // ── Step 2: AGC with hold/attack/release ──────────────────────────────
+    //
+    // This block time in ms (at native rate, 128 samples per process() call):
+    const blockMs = (128 / sampleRate) * 1000;
+
     let sumSq = 0;
     for (let i = 0; i < outLen; i++) sumSq += ds[i] * ds[i];
     const blockRms = outLen > 0 ? Math.sqrt(sumSq / outLen) : 0;
 
+    // Track RMS with the fast release constant so we respond quickly to
+    // louder signals. This is the INPUT RMS (before gain is applied).
     this._rmsEst = this._rmsEst * this._agcRelease + blockRms * (1 - this._agcRelease);
     if (this._rmsEst < 1e-7) this._rmsEst = 1e-7;
 
-    const neededGain = this._agcTarget / this._rmsEst;
+    const neededGain = Math.max(this._agcMinGain,
+                         Math.min(this._agcMaxGain,
+                           this._agcTarget / this._rmsEst));
+
     if (neededGain < this._agcGain) {
+      // Signal got LOUDER → drop gain fast (release), reset hold timer
+      this._agcHoldRemaining = this._agcHoldMs;
       this._agcGain = this._agcGain * this._agcRelease + neededGain * (1 - this._agcRelease);
     } else {
-      this._agcGain = this._agcGain * this._agcAttack + neededGain * (1 - this._agcAttack);
+      // Signal got quieter → honour hold before allowing gain to rise
+      if (this._agcHoldRemaining > 0) {
+        this._agcHoldRemaining = Math.max(0, this._agcHoldRemaining - blockMs);
+        // gain stays where it is during hold
+      } else {
+        // After hold expires: raise gain very slowly (attack 2000 ms)
+        this._agcGain = this._agcGain * this._agcAttack + neededGain * (1 - this._agcAttack);
+      }
     }
     this._agcGain = Math.max(this._agcMinGain, Math.min(this._agcMaxGain, this._agcGain));
 
