@@ -176,12 +176,25 @@ export function ConnectPanel({
                 type="text"
                 value={callsign}
                 onChange={(e) => onCallsignChange(e.target.value.toUpperCase())}
-                placeholder="FF"
+                placeholder="IN80AU"
                 maxLength={17}
                 className="flex-1 bg-transparent px-3 py-2.5 text-white placeholder-gray-600 focus:outline-none font-mono text-sm"
               />
             </div>
-            <p className="mt-1 text-xs text-gray-600">El prefijo 0R- identifica tu equipo como nodo radioenlace</p>
+            {callsign.length > 0 && (
+              <p className="mt-1 text-xs text-gray-600">
+                Apareceras como:{" "}
+                <span className="font-mono text-green-400">
+                  0R-{callsign.length < 6 ? callsign.padEnd(6, "0") : callsign}
+                </span>
+                {callsign.length < 6 && (
+                  <span className="text-amber-500/80"> (relleno automatico para activar filtro RF)</span>
+                )}
+              </p>
+            )}
+            <p className="mt-1 text-xs text-gray-600">
+              Usa al menos 6 caracteres para activar el filtro de radioenlace (ej: <span className="font-mono">IN80AU</span>)
+            </p>
           </div>
 
           {/* ROOM */}

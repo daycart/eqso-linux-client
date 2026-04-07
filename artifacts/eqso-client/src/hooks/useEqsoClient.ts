@@ -336,8 +336,16 @@ export function useEqsoClient(
   const join = useCallback((name: string, room: string, message = "", password = "") => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    const upper = name.toUpperCase();
-    const nodeName = upper.startsWith("0R-") ? upper : `0R-${upper}`;
+    const upper = name.toUpperCase().trim();
+    // Ensure "0R-" prefix
+    const withPrefix = upper.startsWith("0R-") ? upper : `0R-${upper}`;
+    // The RC IRIA "Solo radio-enlaces" filter requires callsign suffix >= 6 chars
+    // (standard Maidenhead grid locator format, e.g. 0R-IN80AU = 9 chars total).
+    // Pad suffix with zeros if shorter to avoid being filtered out.
+    const prefix = "0R-";
+    const suffix = withPrefix.slice(prefix.length);
+    const paddedSuffix = suffix.length < 6 ? suffix.padEnd(6, "0") : suffix;
+    const nodeName = prefix + paddedSuffix;
     pendingJoinRef.current = { name: nodeName, room };
     ws.send(JSON.stringify({ type: "join", name: nodeName, room: room.toUpperCase(), message, password }));
   }, []);
