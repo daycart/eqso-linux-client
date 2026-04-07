@@ -170,14 +170,18 @@ export function ConnectPanel({
             <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
               Indicativo / Callsign
             </label>
-            <input
-              type="text"
-              value={callsign}
-              onChange={(e) => onCallsignChange(e.target.value.toUpperCase())}
-              placeholder="EA4XYZ o 27CB123"
-              maxLength={20}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white placeholder-gray-600 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 font-mono text-sm"
-            />
+            <div className="flex items-center bg-gray-800 border border-gray-700 rounded-lg focus-within:border-green-500 focus-within:ring-1 focus-within:ring-green-500 overflow-hidden">
+              <span className="px-2.5 py-2.5 text-green-400 font-mono text-sm select-none border-r border-gray-700 bg-gray-900">0R-</span>
+              <input
+                type="text"
+                value={callsign}
+                onChange={(e) => onCallsignChange(e.target.value.toUpperCase())}
+                placeholder="FF"
+                maxLength={17}
+                className="flex-1 bg-transparent px-3 py-2.5 text-white placeholder-gray-600 focus:outline-none font-mono text-sm"
+              />
+            </div>
+            <p className="mt-1 text-xs text-gray-600">El prefijo 0R- identifica tu equipo como nodo radioenlace</p>
           </div>
 
           {/* ROOM */}

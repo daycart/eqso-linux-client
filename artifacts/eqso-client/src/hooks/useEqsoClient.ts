@@ -336,8 +336,10 @@ export function useEqsoClient(
   const join = useCallback((name: string, room: string, message = "", password = "") => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    pendingJoinRef.current = { name, room };
-    ws.send(JSON.stringify({ type: "join", name: name.toUpperCase(), room: room.toUpperCase(), message, password }));
+    const upper = name.toUpperCase();
+    const nodeName = upper.startsWith("0R-") ? upper : `0R-${upper}`;
+    pendingJoinRef.current = { name: nodeName, room };
+    ws.send(JSON.stringify({ type: "join", name: nodeName, room: room.toUpperCase(), message, password }));
   }, []);
 
   const pttStart = useCallback(() => {
