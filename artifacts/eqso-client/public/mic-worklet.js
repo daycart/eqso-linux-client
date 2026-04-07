@@ -1,37 +1,29 @@
 /**
- * MicProcessor v19 — AGC + Tanh + Sine Comfort Carrier (8 % FS).
+ * MicProcessor v20 — AGC target 8 % RMS + Tanh + Sine Carrier 5 % FS.
+ *
+ * ── Why the level was reduced ─────────────────────────────────────────────
+ * v19 sent audio at ~30 % RMS, which arrived at the radio-link node
+ * fully saturated (VU in red).  The eQSO node software rejects clipped
+ * audio and does not key the COM-port PTT.
+ *
+ * A portable radio sends the first green line (~5-8 % FS) and the node
+ * activates correctly.  We now target 8 % RMS so decoded audio at the
+ * node is in the same range, below any saturation gate.
  *
  * ── Signal chain ──────────────────────────────────────────────────────────
  *   input (native rate) → box-filter decimation to 8 kHz
- *   → AGC (adaptive gain, attack 200ms / release 80ms)
- *   → tanh soft clip
- *   → mix comfort carrier (200 Hz, 8 % FS) → clamp ±1.0 → emit
+ *   → AGC (target 0.08 RMS, attack 200 ms / release 80 ms)
+ *   → tanh soft clip (safety; at 8 % target barely activates)
+ *   → mix comfort carrier (200 Hz, 5 % FS)
+ *   → clamp ±1.0 → emit
  *
- * ── Why sine carrier, not white noise ────────────────────────────────────
- * GSM 06.10 is a speech vocoder: it models signals as filtered excitation
- * through a vocal-tract LPC filter.  White noise is mapped to the residual
- * with very low energy in the decoded output — the radio VOX sees near
- * silence and does not key up.  A 200 Hz sine is modelled as voiced speech
- * (single LPC pole, periodic excitation) and survives the codec with
- * reasonable energy, keeping the VOX keyed between words.
- *
- * ── Why 8 % FS and not 20 % ──────────────────────────────────────────────
- * At 20 % FS the carrier was audible as a "double beep" artefact on the
- * radio receiver (GSM pitch-doubling artefact on a pure tone).  At 8 % the
- * decoded level is below typical background noise on an FM channel and is
- * not objectionable, while still exceeding the VOX threshold of most radio
- * link nodes (~3–5 % FS RMS).
- *
- * ── Why tanh and not hard clip ────────────────────────────────────────────
- * Hard clip creates rectangular peaks (many harmonics) that GSM decodes as
- * broadband noise.  Tanh smoothly compresses peaks so the output remains
- * speech-like and is decoded cleanly.
- *
- * ── AGC ──────────────────────────────────────────────────────────────────
- * Attack: 200 ms · Release: 80 ms · Target RMS: 0.30 · Max gain: 80
+ * ── Carrier ──────────────────────────────────────────────────────────────
+ * 200 Hz sine survives GSM 06.10 (modelled as voiced LPC excitation) and
+ * keeps the node's VOX/PTT gate active between words.  5 % FS is below
+ * perceptible distortion on an FM receiver at these overall levels.
  *
  * ── Warmup ────────────────────────────────────────────────────────────────
- * First 80 ms discarded to absorb hardware startup pop/click.
+ * First 80 ms discarded to absorb hardware startup transients.
  */
 class MicProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -55,21 +47,18 @@ class MicProcessor extends AudioWorkletProcessor {
 
     // ── AGC state ─────────────────────────────────────────────────────────
     const blockMs = (128 / nativeRate) * 1000;
-    this._agcGain    = 4.0;
-    this._agcTarget  = 0.30;
+    this._agcGain    = 1.0;
+    this._agcTarget  = 0.08;   // 8 % RMS — matches portable radio level at node
     this._agcMaxGain = 80.0;
-    this._agcMinGain = 0.3;
-    this._agcAttack  = Math.exp(-blockMs / 200);   // 200 ms attack
-    this._agcRelease = Math.exp(-blockMs / 80);    // 80 ms release
+    this._agcMinGain = 0.1;
+    this._agcAttack  = Math.exp(-blockMs / 200);
+    this._agcRelease = Math.exp(-blockMs / 80);
     this._rmsEst     = 0.01;
 
-    // ── Comfort carrier: 200 Hz sine at 8 % FS ────────────────────────────
-    // Sine survives GSM 06.10 codec (modelled as voiced speech) and keeps
-    // the radio VOX keyed between words.  8 % FS is inaudible under speech
-    // and does not cause objectionable tonal artefacts at the receiver.
+    // ── Comfort carrier: 200 Hz sine at 5 % FS ────────────────────────────
     this._carrierPhase = 0;
     this._carrierStep  = (2 * Math.PI * 200) / targetRate;
-    this._carrierAmp   = 0.08;                     // 8 % FS (−22 dBFS)
+    this._carrierAmp   = 0.05;   // 5 % FS — audible to GSM, not audible on RF
 
     // ── Level logging ─────────────────────────────────────────────────────
     this._logEvery  = Math.round(nativeRate / 128);
@@ -84,7 +73,7 @@ class MicProcessor extends AudioWorkletProcessor {
           this._carry        = new Float32Array(0);
           this._accum        = new Float32Array(0);
           this._rmsEst       = 0.01;
-          this._agcGain      = 4.0;
+          this._agcGain      = 1.0;
           this._carrierPhase = 0;
         }
         if (this._warmupDone) {
@@ -153,7 +142,7 @@ class MicProcessor extends AudioWorkletProcessor {
       ds[i] = Math.tanh(g * ds[i]);
     }
 
-    // ── Step 4: Mix comfort carrier (200 Hz, 8 % FS) ─────────────────────
+    // ── Step 4: Mix comfort carrier (200 Hz, 5 % FS) ─────────────────────
     const amp  = this._carrierAmp;
     const step = this._carrierStep;
     let   phi  = this._carrierPhase;
