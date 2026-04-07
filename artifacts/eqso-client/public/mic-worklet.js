@@ -1,11 +1,11 @@
 /**
- * MicProcessor v16 — AGC + Comfort Carrier Tone.
+ * MicProcessor v17 — AGC + Hard Clip + Comfort Carrier Tone.
  *
  * ── Signal chain ──────────────────────────────────────────────────────────
  *   input (native rate) → box-filter decimation to 8 kHz
  *   → AGC (adaptive gain, attack 200ms / release 80ms)
- *   → tanh soft clip
- *   → mix comfort carrier (200 Hz, 4 % FS) → emit
+ *   → hard clip to ±1.0
+ *   → mix comfort carrier (200 Hz, 20 % FS) → emit
  *
  * ── Why a comfort carrier ────────────────────────────────────────────────
  * Inter-word pauses (100–400 ms) cause the radio VOX to release even though
@@ -57,12 +57,12 @@ class MicProcessor extends AudioWorkletProcessor {
     this._agcRelease = Math.exp(-blockMs / 80);    // 80 ms release
     this._rmsEst     = 0.01;
 
-    // ── Comfort carrier: 200 Hz sine at 4 % FS ────────────────────────────
-    // Keeps radio VOX keyed during inter-word pauses without creating noise.
-    // A pure sine is the ideal GSM LPC input (single pole, zero residual).
+    // ── Comfort carrier: 200 Hz sine at 20 % FS ───────────────────────────
+    // Keeps radio VOX keyed during inter-word pauses.  20 % FS ensures the
+    // VOX threshold is exceeded even on radio links with high sensitivity.
     this._carrierPhase = 0;
     this._carrierFreq  = 200;        // Hz
-    this._carrierAmp   = 0.04;       // 4 % FS (−28 dBFS)
+    this._carrierAmp   = 0.20;       // 20 % FS (−14 dBFS)
     this._carrierStep  = (2 * Math.PI * this._carrierFreq) / targetRate;
 
     // ── Level logging ─────────────────────────────────────────────────────
@@ -141,15 +141,16 @@ class MicProcessor extends AudioWorkletProcessor {
     }
     this._agcGain = Math.max(this._agcMinGain, Math.min(this._agcMaxGain, this._agcGain));
 
-    // ── Step 3: Apply AGC + tanh soft clip ────────────────────────────────
+    // ── Step 3: Apply AGC + hard clip to ±1.0 ────────────────────────────
     const g = this._agcGain;
     for (let i = 0; i < outLen; i++) {
-      ds[i] = Math.tanh(g * ds[i]);
+      const s = g * ds[i];
+      ds[i] = s > 1 ? 1 : (s < -1 ? -1 : s);
     }
 
-    // ── Step 4: Mix comfort carrier (200 Hz, 4 % FS) ─────────────────────
-    // Added after tanh so it is never clipped.  Its amplitude (0.04) is
-    // below typical speech (-12 dBFS average) but above VOX threshold.
+    // ── Step 4: Mix comfort carrier (200 Hz, 20 % FS) ────────────────────
+    // Added after hard clip.  Its amplitude (0.20) ensures the radio VOX
+    // stays keyed during inter-word pauses (−14 dBFS, audible as soft hum).
     const amp  = this._carrierAmp;
     const step = this._carrierStep;
     let   phi  = this._carrierPhase;
