@@ -167,8 +167,13 @@ export function useAudio(): UseAudioReturn {
         const workletUrl = import.meta.env.BASE_URL + "mic-worklet.js?v=" + WORKLET_VERSION;
         try {
           await ctx.audioWorklet.addModule(workletUrl);
-        } catch {
-          // Already registered — safe to ignore.
+        } catch (moduleErr) {
+          const name = (moduleErr as DOMException)?.name ?? "";
+          // NotSupportedError = processor already registered in this context — safe to ignore.
+          // Any other error is a real failure (fetch blocked, syntax error, etc.) → rethrow.
+          if (name !== "NotSupportedError") {
+            throw new Error(`AudioWorklet addModule failed (${name}): ${(moduleErr as Error)?.message ?? moduleErr}`);
+          }
         }
 
         const warmupBlocks = Math.round(TX_WARMUP_SECONDS * nativeRate / 128);
@@ -253,9 +258,19 @@ export function useAudio(): UseAudioReturn {
         micInitializedRef.current = true;
         console.debug("[audio] mic chain initialized, worklet running");
       } catch (err) {
-        console.error("[audio] mic init error:", err);
+        const msg = (err as Error)?.message ?? String(err);
+        console.error("[audio] mic init error:", msg, err);
         setIsMicAllowed(false);
         micInitPromiseRef.current = null;
+        micInitializedRef.current = false;
+        // Close the AudioContext so getOrCreateCtx() builds a fresh one next time.
+        // A stale/broken context would cause addModule to fail repeatedly.
+        if (ctxRef.current) {
+          ctxRef.current.close().catch(() => {});
+          ctxRef.current = null;
+          gainNodeRef.current = null;
+          nextPlayTimeRef.current = 0;
+        }
       }
     };
 
