@@ -44,6 +44,11 @@ export function RoomPanel({
     ...members.filter((m) => m.name !== currentName),
   ];
 
+  const radioLinks = members.filter(
+    (m) => m.name !== currentName && m.name.startsWith("0R-")
+  );
+  const hasRadioLinks = radioLinks.length > 0;
+
   return (
     <div className="flex flex-1 overflow-hidden">
       <aside className="w-64 border-r border-gray-800 bg-gray-900 flex flex-col">
@@ -66,49 +71,63 @@ export function RoomPanel({
           </div>
         </div>
 
-        <div className="px-4 py-3 flex-1">
+        <div className="px-4 py-3 flex-1 overflow-y-auto">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
             Usuarios en #{currentRoom} ({allMembers.length})
           </p>
           <div className="space-y-1">
-            {allMembers.map((m) => (
-              <div
-                key={m.name}
-                className={`flex items-center gap-2 px-2 py-1.5 rounded-lg ${
-                  activeSpeaker === m.name ? "bg-yellow-900/30" : ""
-                }`}
-              >
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                  m.name === currentName
-                    ? "bg-green-700 text-green-100"
-                    : "bg-gray-700 text-gray-300"
-                }`}>
-                  {m.name[0]}
-                </div>
-                <div className="min-w-0">
-                  <p className={`text-sm font-mono truncate ${
-                    activeSpeaker === m.name ? "text-yellow-300" : "text-gray-200"
+            {allMembers.map((m) => {
+              const isRadioLink = m.name.startsWith("0R-") && m.name !== currentName;
+              return (
+                <div
+                  key={m.name}
+                  className={`flex items-center gap-2 px-2 py-1.5 rounded-lg ${
+                    activeSpeaker === m.name ? "bg-yellow-900/30" : ""
+                  }`}
+                >
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                    m.name === currentName
+                      ? "bg-green-700 text-green-100"
+                      : isRadioLink
+                      ? "bg-blue-800 text-blue-100"
+                      : "bg-gray-700 text-gray-300"
                   }`}>
-                    {m.name}
-                    {m.name === currentName && (
-                      <span className="text-gray-500 font-sans text-xs ml-1">(tú)</span>
+                    {isRadioLink ? (
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                        <path d="M4.5 6.375a4.125 4.125 0 1 1 8.25 0 4.125 4.125 0 0 1-8.25 0ZM14.25 8.625a3.375 3.375 0 1 1 6.75 0 3.375 3.375 0 0 1-6.75 0ZM1.5 19.125a7.125 7.125 0 0 1 14.25 0v.003l-.001.119a.75.75 0 0 1-.363.63 13.067 13.067 0 0 1-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 0 1-.364-.63l-.001-.122ZM17.25 19.128l-.001.144a2.25 2.25 0 0 1-.233.96 10.088 10.088 0 0 0 5.06-1.01.75.75 0 0 0 .42-.643 4.875 4.875 0 0 0-6.957-4.611 8.586 8.586 0 0 1 1.71 5.157v.003Z" />
+                      </svg>
+                    ) : (
+                      m.name[0]
                     )}
-                  </p>
-                  {m.message && m.name !== currentName && (
-                    <p className="text-xs text-gray-500 truncate">{m.message}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className={`text-sm font-mono truncate ${
+                      activeSpeaker === m.name ? "text-yellow-300" : isRadioLink ? "text-blue-300" : "text-gray-200"
+                    }`}>
+                      {m.name}
+                      {m.name === currentName && (
+                        <span className="text-gray-500 font-sans text-xs ml-1">(tú)</span>
+                      )}
+                    </p>
+                    {isRadioLink && (
+                      <p className="text-xs text-blue-500">Nodo radioenlace</p>
+                    )}
+                    {m.message && !isRadioLink && m.name !== currentName && (
+                      <p className="text-xs text-gray-500 truncate">{m.message}</p>
+                    )}
+                  </div>
+                  {activeSpeaker === m.name && (
+                    <div className="ml-auto flex-shrink-0">
+                      <span className="flex gap-0.5">
+                        {[1,2,3].map((i) => (
+                          <span key={i} className="w-0.5 h-3 bg-yellow-400 rounded-full animate-pulse" style={{ animationDelay: `${i * 100}ms` }} />
+                        ))}
+                      </span>
+                    </div>
                   )}
                 </div>
-                {activeSpeaker === m.name && (
-                  <div className="ml-auto flex-shrink-0">
-                    <span className="flex gap-0.5">
-                      {[1,2,3].map((i) => (
-                        <span key={i} className="w-0.5 h-3 bg-yellow-400 rounded-full animate-pulse" style={{ animationDelay: `${i * 100}ms` }} />
-                      ))}
-                    </span>
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -136,6 +155,16 @@ export function RoomPanel({
           <span className="text-gray-400 text-lg">#</span>
           <span className="font-bold text-white">{currentRoom}</span>
           <span className="text-gray-600 text-sm">{allMembers.length} usuario{allMembers.length !== 1 ? "s" : ""}</span>
+          <div className={`flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full border ${
+            hasRadioLinks
+              ? "bg-blue-900/30 border-blue-700/50 text-blue-300"
+              : "bg-amber-900/30 border-amber-700/50 text-amber-300"
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${hasRadioLinks ? "bg-blue-400" : "bg-amber-400 animate-pulse"}`} />
+            {hasRadioLinks
+              ? `${radioLinks.length} nodo${radioLinks.length !== 1 ? "s" : ""} RF`
+              : "Sin nodo RF"}
+          </div>
           {channelBusy && !pttActive && (
             <div className="ml-auto flex items-center gap-2 bg-yellow-900/30 border border-yellow-700/50 rounded-full px-3 py-1">
               <span className="flex gap-0.5">
@@ -156,6 +185,15 @@ export function RoomPanel({
             <p className="text-3xl font-bold font-mono text-white"># {currentRoom}</p>
             <p className="text-gray-500 text-sm mt-1 font-mono">{currentName}</p>
           </div>
+
+          {!hasRadioLinks && (
+            <div className="mb-6 bg-amber-950/50 border border-amber-700/60 text-amber-300 text-sm rounded-lg px-4 py-3 text-center max-w-sm">
+              <p className="font-semibold mb-1">Sin nodos de radioenlace en la sala</p>
+              <p className="text-amber-400/80 text-xs">
+                El software Windows del nodo no esta conectado a #{currentRoom}. Tus transmisiones llegan al servidor pero no se emiten por RF.
+              </p>
+            </div>
+          )}
 
           {isMicAllowed === false && (
             <div className="mb-6 bg-red-950/50 border border-red-800 text-red-300 text-sm rounded-lg px-4 py-3 text-center max-w-sm">
