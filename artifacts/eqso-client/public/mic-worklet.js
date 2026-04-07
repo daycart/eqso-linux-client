@@ -10,7 +10,7 @@
  *
  * ── Signal chain ──────────────────────────────────────────────────────────
  *   input (native rate) → box-filter decimation to 8 kHz
- *   → AGC with hold/attack/release (target 0.02 RMS ≈ 8 % FS peak)
+ *   → AGC with hold/attack/release (target 0.04 RMS ≈ 12 % FS peak)
  *   → tanh soft clip → clamp ±1.0 → emit
  *
  * ── AGC hold/attack/release ───────────────────────────────────────────────
@@ -44,9 +44,9 @@ class MicProcessor extends AudioWorkletProcessor {
 
     // ── AGC state ─────────────────────────────────────────────────────────
     const blockMs = (128 / nativeRate) * 1000;
-    this._agcGain    = 3.0;   // reasonable start for most mics
-    this._agcTarget  = 0.02;   // 2 % RMS → peak ~8 % FS (first green segment)
-    this._agcMaxGain = 10.0;   // cap: mic at 0.5 % FS → 5 % FS out (well in green)
+    this._agcGain    = 1.0;    // safe start: avoids first-PTT saturation spike
+    this._agcTarget  = 0.04;   // 4 % RMS → peak ~12 % FS (first green segment)
+    this._agcMaxGain = 10.0;   // cap: mic at 0.4 % FS → 4 % RMS out
     this._agcMinGain = 0.1;
     this._agcRelease = Math.exp(-blockMs / 80);    // fast drop: 80 ms
     this._agcAttack  = Math.exp(-blockMs / 2000);  // slow rise: 2000 ms
