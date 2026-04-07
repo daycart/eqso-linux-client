@@ -49,7 +49,7 @@ class MicProcessor extends AudioWorkletProcessor {
     const blockMs = (128 / nativeRate) * 1000;
     this._agcGain    = 1.0;
     this._agcTarget  = 0.08;   // 8 % RMS — matches portable radio level at node
-    this._agcMaxGain = 80.0;
+    this._agcMaxGain = 15.0;   // cap: prevents ambient noise from saturating
     this._agcMinGain = 0.1;
     this._agcAttack  = Math.exp(-blockMs / 200);
     this._agcRelease = Math.exp(-blockMs / 80);
