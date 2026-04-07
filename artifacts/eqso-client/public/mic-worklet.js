@@ -44,7 +44,7 @@ class MicProcessor extends AudioWorkletProcessor {
 
     // ── AGC state ─────────────────────────────────────────────────────────
     const blockMs = (128 / nativeRate) * 1000;
-    this._agcGain    = 1.0;
+    this._agcGain    = 3.0;   // reasonable start for most mics
     this._agcTarget  = 0.02;   // 2 % RMS → peak ~8 % FS (first green segment)
     this._agcMaxGain = 10.0;   // cap: mic at 0.5 % FS → 5 % FS out (well in green)
     this._agcMinGain = 0.1;
@@ -134,21 +134,28 @@ class MicProcessor extends AudioWorkletProcessor {
                          Math.min(this._agcMaxGain,
                            this._agcTarget / this._rmsEst));
 
-    if (neededGain < this._agcGain) {
-      // Signal got LOUDER → drop gain fast (release), reset hold timer
-      this._agcHoldRemaining = this._agcHoldMs;
-      this._agcGain = this._agcGain * this._agcRelease + neededGain * (1 - this._agcRelease);
-    } else {
-      // Signal got quieter → honour hold before allowing gain to rise
-      if (this._agcHoldRemaining > 0) {
-        this._agcHoldRemaining = Math.max(0, this._agcHoldRemaining - blockMs);
-        // gain stays where it is during hold
+    // Gain is only updated while transmitting.  Between PTTs the gain is
+    // FROZEN at its last value so that inter-PTT silence cannot ramp it to
+    // the maximum and cause an overload spike at the start of the next PTT.
+    // rmsEst continues to track the mic regardless, so the first PTT block
+    // already has a good estimate of the current mic level.
+    if (this._emitting) {
+      if (neededGain < this._agcGain) {
+        // Signal got LOUDER → drop gain fast (release), reset hold timer
+        this._agcHoldRemaining = this._agcHoldMs;
+        this._agcGain = this._agcGain * this._agcRelease + neededGain * (1 - this._agcRelease);
       } else {
-        // After hold expires: raise gain very slowly (attack 2000 ms)
-        this._agcGain = this._agcGain * this._agcAttack + neededGain * (1 - this._agcAttack);
+        // Signal got quieter → honour hold before allowing gain to rise
+        if (this._agcHoldRemaining > 0) {
+          this._agcHoldRemaining = Math.max(0, this._agcHoldRemaining - blockMs);
+          // gain stays where it is during hold
+        } else {
+          // After hold expires: raise gain very slowly (attack 2000 ms)
+          this._agcGain = this._agcGain * this._agcAttack + neededGain * (1 - this._agcAttack);
+        }
       }
+      this._agcGain = Math.max(this._agcMinGain, Math.min(this._agcMaxGain, this._agcGain));
     }
-    this._agcGain = Math.max(this._agcMinGain, Math.min(this._agcMaxGain, this._agcGain));
 
     // ── Step 3: Apply AGC + tanh soft clip ────────────────────────────────
     const g = this._agcGain;
