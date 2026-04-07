@@ -1,31 +1,34 @@
 /**
- * MicProcessor v18 — AGC + Tanh + Comfort Noise.
+ * MicProcessor v19 — AGC + Tanh + Sine Comfort Carrier (8 % FS).
  *
  * ── Signal chain ──────────────────────────────────────────────────────────
  *   input (native rate) → box-filter decimation to 8 kHz
  *   → AGC (adaptive gain, attack 200ms / release 80ms)
  *   → tanh soft clip
- *   → mix comfort noise (white, 15 % RMS) → clamp ±1.0 → emit
+ *   → mix comfort carrier (200 Hz, 8 % FS) → clamp ±1.0 → emit
  *
- * ── Why comfort noise instead of a carrier tone ──────────────────────────
- * A pure 200 Hz sine encodes badly through GSM 06.10: the vocoder models it
- * as a pitch-periodic signal and produces audible artifacts (double beep).
- * White noise at low level encodes as broadband background — the radio sounds
- * like normal "air" (carrier up, no modulation), which is natural and
- * expected on FM radio links.  15 % RMS keeps the radio VOX keyed during
- * inter-word pauses without any audible tonal artifact.
+ * ── Why sine carrier, not white noise ────────────────────────────────────
+ * GSM 06.10 is a speech vocoder: it models signals as filtered excitation
+ * through a vocal-tract LPC filter.  White noise is mapped to the residual
+ * with very low energy in the decoded output — the radio VOX sees near
+ * silence and does not key up.  A 200 Hz sine is modelled as voiced speech
+ * (single LPC pole, periodic excitation) and survives the codec with
+ * reasonable energy, keeping the VOX keyed between words.
  *
- * ── Why tanh instead of hard clip ────────────────────────────────────────
- * Hard clip (brick-wall limiting) creates rectangular wave tops, which GSM
- * decodes as broadband noise.  Tanh smoothly compresses peaks so the output
- * waveform remains speech-like — GSM encodes and decodes it cleanly.
+ * ── Why 8 % FS and not 20 % ──────────────────────────────────────────────
+ * At 20 % FS the carrier was audible as a "double beep" artefact on the
+ * radio receiver (GSM pitch-doubling artefact on a pure tone).  At 8 % the
+ * decoded level is below typical background noise on an FM channel and is
+ * not objectionable, while still exceeding the VOX threshold of most radio
+ * link nodes (~3–5 % FS RMS).
+ *
+ * ── Why tanh and not hard clip ────────────────────────────────────────────
+ * Hard clip creates rectangular peaks (many harmonics) that GSM decodes as
+ * broadband noise.  Tanh smoothly compresses peaks so the output remains
+ * speech-like and is decoded cleanly.
  *
  * ── AGC ──────────────────────────────────────────────────────────────────
- * Attack: 200 ms (fast enough to fill inter-word gaps)
- * Release: 80 ms (quick gain reduction on loud input)
- * Target RMS: 0.30 (30 % FS) — louder than v17 for better speech levels
- * Max gain: 80   — amplifies very quiet mics sufficiently
- * Min gain: 0.3  — attenuates very hot mics
+ * Attack: 200 ms · Release: 80 ms · Target RMS: 0.30 · Max gain: 80
  *
  * ── Warmup ────────────────────────────────────────────────────────────────
  * First 80 ms discarded to absorb hardware startup pop/click.
@@ -60,10 +63,13 @@ class MicProcessor extends AudioWorkletProcessor {
     this._agcRelease = Math.exp(-blockMs / 80);    // 80 ms release
     this._rmsEst     = 0.01;
 
-    // ── Comfort noise amplitude ────────────────────────────────────────────
-    // Uniform distribution U(-A, A) has RMS = A / sqrt(3).
-    // For RMS = 0.15: A = 0.15 * sqrt(3) ≈ 0.260.
-    this._noiseAmp = 0.15 * Math.sqrt(3);          // ~0.260 peak
+    // ── Comfort carrier: 200 Hz sine at 8 % FS ────────────────────────────
+    // Sine survives GSM 06.10 codec (modelled as voiced speech) and keeps
+    // the radio VOX keyed between words.  8 % FS is inaudible under speech
+    // and does not cause objectionable tonal artefacts at the receiver.
+    this._carrierPhase = 0;
+    this._carrierStep  = (2 * Math.PI * 200) / targetRate;
+    this._carrierAmp   = 0.08;                     // 8 % FS (−22 dBFS)
 
     // ── Level logging ─────────────────────────────────────────────────────
     this._logEvery  = Math.round(nativeRate / 128);
@@ -75,10 +81,11 @@ class MicProcessor extends AudioWorkletProcessor {
     this.port.onmessage = (ev) => {
       if (ev.data?.type === 'emit') {
         if (ev.data.emitting) {
-          this._carry   = new Float32Array(0);
-          this._accum   = new Float32Array(0);
-          this._rmsEst  = 0.01;
-          this._agcGain = 4.0;
+          this._carry        = new Float32Array(0);
+          this._accum        = new Float32Array(0);
+          this._rmsEst       = 0.01;
+          this._agcGain      = 4.0;
+          this._carrierPhase = 0;
         }
         if (this._warmupDone) {
           this._emitting = ev.data.emitting;
@@ -146,14 +153,16 @@ class MicProcessor extends AudioWorkletProcessor {
       ds[i] = Math.tanh(g * ds[i]);
     }
 
-    // ── Step 4: Add comfort noise (white, 15 % RMS) ───────────────────────
-    // White noise encodes through GSM as broadband background — sounds like
-    // normal radio "air" on the receiving end.  Keeps radio VOX keyed during
-    // inter-word pauses without any tonal artifact.
-    const na = this._noiseAmp;
+    // ── Step 4: Mix comfort carrier (200 Hz, 8 % FS) ─────────────────────
+    const amp  = this._carrierAmp;
+    const step = this._carrierStep;
+    let   phi  = this._carrierPhase;
     for (let i = 0; i < outLen; i++) {
-      ds[i] += (Math.random() - 0.5) * 2 * na;
+      ds[i] += amp * Math.sin(phi);
+      phi   += step;
+      if (phi > 2 * Math.PI) phi -= 2 * Math.PI;
     }
+    this._carrierPhase = phi;
 
     // ── Step 5: Clamp to ±1.0 ─────────────────────────────────────────────
     for (let i = 0; i < outLen; i++) {
