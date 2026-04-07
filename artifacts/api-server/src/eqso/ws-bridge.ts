@@ -233,7 +233,10 @@ function handleRemoteMode(
     for (let i = 0; i < pcm.length; i++) {
       const a = Math.abs(pcm[i]);
       if (a > peak) peak = a;
-      float32[i] = pcm[i] / 32768;
+      // Soft-limit to ±0.85 FS before sending to browser:
+      // prevents clipping on the browser's 2× playback gain node for loud
+      // stations while keeping the dynamic range of normal speech intact.
+      float32[i] = Math.max(-0.85, Math.min(0.85, pcm[i] / 32768));
     }
     const header = Buffer.alloc(1);
     header[0] = WS_AUDIO_REMOTE;

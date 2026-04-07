@@ -60,8 +60,9 @@ export function useAudio(): UseAudioReturn {
       ctxRef.current = new AudioContext();
       const gain = ctxRef.current.createGain();
       // GSM 06.10 decoded via ffmpeg: typical speech peaks at ~3500/32768
-      // (~-19 dBFS). 3× gain brings typical speech to ~-9 dBFS.
-      gain.gain.value = 3;
+      // (~-19 dBFS). 2× gain brings typical speech to ~-13 dBFS with more
+      // headroom for loud signals (avoids clipping on peaks > 50% FS).
+      gain.gain.value = 2;
       gain.connect(ctxRef.current.destination);
       gainNodeRef.current = gain;
       nextPlayTimeRef.current = 0;
@@ -132,7 +133,10 @@ export function useAudio(): UseAudioReturn {
             // ambient noise is stable (~2-5 % FS raw); our worklet gain×6 + tanh
             // brings it to ~11-17 % FS — consistently above any VOX threshold.
             autoGainControl: false,
-            echoCancellation: false,
+            // AEC on: removes acoustic echo of RX speaker audio from the mic
+            // signal without interfering with our worklet AGC (which operates
+            // after the browser's audio pipeline).
+            echoCancellation: true,
             noiseSuppression: false,
           },
           video: false,
@@ -163,7 +167,7 @@ export function useAudio(): UseAudioReturn {
 
         // Version suffix forces the browser to bypass the service-worker / HTTP
         // cache and fetch the latest worklet whenever this constant is bumped.
-        const WORKLET_VERSION = "22";
+        const WORKLET_VERSION = "23";
         const workletUrl = import.meta.env.BASE_URL + "mic-worklet.js?v=" + WORKLET_VERSION;
         try {
           await ctx.audioWorklet.addModule(workletUrl);
@@ -417,7 +421,7 @@ export function useAudio(): UseAudioReturn {
     if (!gainNodeRef.current) return;
     const now = ctx.currentTime;
     gainNodeRef.current.gain.cancelScheduledValues(now);
-    gainNodeRef.current.gain.setTargetAtTime(muted ? 0 : 3, now, 0.01);
+    gainNodeRef.current.gain.setTargetAtTime(muted ? 0 : 2, now, 0.01);
   }, [getOrCreateCtx]);
 
   useEffect(() => {

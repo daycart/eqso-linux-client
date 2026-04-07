@@ -20,7 +20,7 @@
  *                     → prevents gain spikes during natural speech pauses
  *   attack 2000 ms  — after the hold, gain rises very SLOWLY
  *                     → smooth recovery between sentences
- * Max gain 10× keeps peak ≤ 10 × input_peak so mild mics can't saturate.
+ * Max gain 5× limits compression ratio to avoid audible AGC "pumping".
  */
 class MicProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -46,10 +46,10 @@ class MicProcessor extends AudioWorkletProcessor {
     const blockMs = (128 / nativeRate) * 1000;
     this._agcGain    = 1.0;    // safe start: avoids first-PTT saturation spike
     this._agcTarget  = 0.04;   // 4 % RMS → peak ~12 % FS (first green segment)
-    this._agcMaxGain = 10.0;   // cap: mic at 0.4 % FS → 4 % RMS out
+    this._agcMaxGain = 5.0;    // cap: limits compression ratio, avoids AGC pumping
     this._agcMinGain = 0.1;
     this._agcRelease = Math.exp(-blockMs / 80);    // fast drop: 80 ms
-    this._agcAttack  = Math.exp(-blockMs / 2000);  // slow rise: 2000 ms
+    this._agcAttack  = Math.exp(-blockMs / 4000);  // slow rise: 4000 ms (smoother)
     this._rmsEst     = 0.01;
 
     // AGC hold: gain is frozen for 300 ms after the signal drops
