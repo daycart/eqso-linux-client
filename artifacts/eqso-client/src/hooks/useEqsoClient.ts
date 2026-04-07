@@ -32,7 +32,7 @@ export const KNOWN_SERVERS: EqsoServer[] = [
     mode: "remote",
     host: "193.152.83.229",
     port: 8008,
-    defaultRooms: ["CB", "ASORAPA"],
+    defaultRooms: ["CB", "ASORAPA", "PRUEBAS"],
   },
   {
     id: "eqso-main",

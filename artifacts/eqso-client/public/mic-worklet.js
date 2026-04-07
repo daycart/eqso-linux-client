@@ -48,7 +48,7 @@ class MicProcessor extends AudioWorkletProcessor {
     const blockMs = (128 / nativeRate) * 1000;
     this._agcGain    = 1.0;
     this._agcTarget  = 0.02;   // 2 % RMS → peak ~8 % FS (matches portable CB radio)
-    this._agcMaxGain = 25.0;   // cap: prevents ambient noise from saturating
+    this._agcMaxGain = 10.0;   // cap at 10× — mic at 0.3 % FS → 3 % FS out (green zone)
     this._agcMinGain = 0.1;
     this._agcAttack  = Math.exp(-blockMs / 200);
     this._agcRelease = Math.exp(-blockMs / 80);
@@ -64,10 +64,12 @@ class MicProcessor extends AudioWorkletProcessor {
     this.port.onmessage = (ev) => {
       if (ev.data?.type === 'emit') {
         if (ev.data.emitting) {
-          this._carry    = new Float32Array(0);
-          this._accum    = new Float32Array(0);
-          this._rmsEst   = 0.01;
-          this._agcGain  = 1.0;
+          // Reset audio buffers but NOT the AGC state.
+          // Preserving gain/rmsEst across PTTs prevents the gain from
+          // ramping to max (10x) during silence and then overshooting on
+          // the first word of the next transmission.
+          this._carry = new Float32Array(0);
+          this._accum = new Float32Array(0);
         }
         if (this._warmupDone) {
           this._emitting = ev.data.emitting;
