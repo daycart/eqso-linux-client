@@ -23,22 +23,23 @@ export async function verifyPassword(password: string, stored: string): Promise<
 
 // ── Session store ────────────────────────────────────────────────────────────
 
-interface Session {
+export interface Session {
   callsign: string;
   isRelay: boolean;
+  role: "admin" | "user";
   expiresAt: number;
 }
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const sessions = new Map<string, Session>();
 
-export function createSession(callsign: string, isRelay: boolean): string {
+export function createSession(
+  callsign: string,
+  isRelay: boolean,
+  role: "admin" | "user" = "user"
+): string {
   const token = randomUUID();
-  sessions.set(token, {
-    callsign,
-    isRelay,
-    expiresAt: Date.now() + SESSION_TTL_MS,
-  });
+  sessions.set(token, { callsign, isRelay, role, expiresAt: Date.now() + SESSION_TTL_MS });
   return token;
 }
 

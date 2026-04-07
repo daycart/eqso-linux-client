@@ -1,0 +1,462 @@
+import { useState, useEffect, useCallback } from "react";
+import { getApiBase } from "./LoginPanel";
+
+interface AdminUser {
+  id: number;
+  callsign: string;
+  isRelay: boolean;
+  status: string;
+  role: string;
+  createdAt: string;
+  lastLogin: string | null;
+}
+
+interface AdminPanelProps {
+  token: string;
+  onClose: () => void;
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  pending:  "Pendiente",
+  active:   "Activo",
+  inactive: "Inactivo",
+};
+
+const STATUS_COLOR: Record<string, string> = {
+  pending:  "bg-yellow-900 text-yellow-300 border-yellow-700",
+  active:   "bg-green-900 text-green-300 border-green-700",
+  inactive: "bg-gray-800 text-gray-400 border-gray-700",
+};
+
+function fmtDate(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("es-ES", {
+    day: "2-digit", month: "2-digit", year: "2-digit",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function authHeaders(token: string) {
+  return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+}
+
+export function AdminPanel({ token, onClose }: AdminPanelProps) {
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actionId, setActionId] = useState<number | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    callsign: "", password: "", isRelay: false, role: "user",
+  });
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [filter, setFilter] = useState<"all" | "pending" | "active" | "inactive">("all");
+  const [resetId, setResetId] = useState<number | null>(null);
+  const [resetPw, setResetPw] = useState("");
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${getApiBase()}/api/admin/users`, {
+        headers: authHeaders(token),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Error");
+      setUsers(await res.json());
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Error al cargar usuarios");
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function setStatus(id: number, status: string) {
+    setActionId(id);
+    try {
+      const res = await fetch(`${getApiBase()}/api/admin/users/${id}/status`, {
+        method: "PATCH",
+        headers: authHeaders(token),
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Error");
+      await load();
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Error");
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  async function setRole(id: number, role: string) {
+    setActionId(id);
+    try {
+      const res = await fetch(`${getApiBase()}/api/admin/users/${id}/role`, {
+        method: "PATCH",
+        headers: authHeaders(token),
+        body: JSON.stringify({ role }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Error");
+      await load();
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Error");
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  async function deleteUser(id: number, callsign: string) {
+    if (!confirm(`Eliminar usuario "${callsign}"? Esta accion no se puede deshacer.`)) return;
+    setActionId(id);
+    try {
+      const res = await fetch(`${getApiBase()}/api/admin/users/${id}`, {
+        method: "DELETE",
+        headers: authHeaders(token),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Error");
+      await load();
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Error");
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    setCreateError(null);
+    if (!createForm.callsign.trim() || !createForm.password) {
+      setCreateError("Indicativo y contraseña son obligatorios");
+      return;
+    }
+    setCreating(true);
+    try {
+      const res = await fetch(`${getApiBase()}/api/admin/users`, {
+        method: "POST",
+        headers: authHeaders(token),
+        body: JSON.stringify({
+          callsign: createForm.callsign.trim(),
+          password: createForm.password,
+          isRelay: createForm.isRelay,
+          role: createForm.role,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setCreateError(data.error ?? "Error"); return; }
+      setShowCreate(false);
+      setCreateForm({ callsign: "", password: "", isRelay: false, role: "user" });
+      await load();
+    } catch {
+      setCreateError("Error de conexion");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleResetPw(id: number) {
+    setResetError(null);
+    if (resetPw.length < 4) { setResetError("Minimo 4 caracteres"); return; }
+    setResetting(true);
+    try {
+      const res = await fetch(`${getApiBase()}/api/admin/users/${id}/password`, {
+        method: "PATCH",
+        headers: authHeaders(token),
+        body: JSON.stringify({ password: resetPw }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Error");
+      setResetId(null);
+      setResetPw("");
+    } catch (e: unknown) {
+      setResetError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setResetting(false);
+    }
+  }
+
+  const pendingCount = users.filter(u => u.status === "pending").length;
+  const filtered = filter === "all" ? users : users.filter(u => u.status === filter);
+
+  return (
+    <div className="flex flex-col flex-1 bg-gray-950 overflow-hidden">
+      {/* Header */}
+      <div className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-100">Panel de administracion</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Gestion de usuarios del sistema eQSO</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowCreate(true)}
+            className="bg-green-700 hover:bg-green-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            + Nuevo usuario
+          </button>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-200 text-sm px-3 py-2 rounded-lg hover:bg-gray-800 transition-colors"
+          >
+            Volver
+          </button>
+        </div>
+      </div>
+
+      {/* Filter tabs */}
+      <div className="flex gap-1 px-6 pt-4">
+        {(["all", "pending", "active", "inactive"] as const).map((f) => {
+          const label = f === "all" ? "Todos" : STATUS_LABEL[f];
+          const cnt = f === "all" ? users.length : users.filter(u => u.status === f).length;
+          return (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                filter === f
+                  ? "bg-gray-700 text-gray-100"
+                  : "text-gray-500 hover:text-gray-300 hover:bg-gray-800"
+              }`}
+            >
+              {label}
+              {f === "pending" && cnt > 0 ? (
+                <span className="ml-1.5 bg-yellow-600 text-white rounded-full px-1.5 py-0.5 text-[10px]">{cnt}</span>
+              ) : (
+                <span className="ml-1.5 text-gray-600">{cnt}</span>
+              )}
+            </button>
+          );
+        })}
+        <button onClick={load} className="ml-auto text-xs text-gray-600 hover:text-gray-400 px-2">
+          Actualizar
+        </button>
+      </div>
+
+      {/* Pending alert */}
+      {pendingCount > 0 && filter !== "pending" && (
+        <div
+          className="mx-6 mt-3 rounded-lg bg-yellow-950 border border-yellow-800 px-4 py-2.5 flex items-center gap-2 cursor-pointer"
+          onClick={() => setFilter("pending")}
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-yellow-400 shrink-0">
+            <path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+          </svg>
+          <p className="text-xs text-yellow-300">
+            {pendingCount} solicitud{pendingCount > 1 ? "es" : ""} pendiente{pendingCount > 1 ? "s" : ""} de aprobacion
+          </p>
+          <span className="ml-auto text-xs text-yellow-600 underline">Ver</span>
+        </div>
+      )}
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto px-6 py-4">
+        {loading && (
+          <div className="text-center py-12 text-gray-600 text-sm">Cargando usuarios...</div>
+        )}
+        {error && (
+          <div className="rounded-lg bg-red-950 border border-red-800 px-4 py-3 text-sm text-red-300">{error}</div>
+        )}
+        {!loading && !error && filtered.length === 0 && (
+          <div className="text-center py-12 text-gray-600 text-sm">No hay usuarios en esta categoria.</div>
+        )}
+
+        {!loading && !error && filtered.length > 0 && (
+          <div className="space-y-2">
+            {filtered.map((u) => (
+              <div
+                key={u.id}
+                className={`rounded-xl border p-4 ${
+                  u.status === "pending"
+                    ? "border-yellow-800 bg-yellow-950/30"
+                    : "border-gray-800 bg-gray-900"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono font-bold text-gray-100 text-sm">{u.callsign}</span>
+                      <span className={`text-[10px] border rounded px-1.5 py-0.5 ${STATUS_COLOR[u.status] ?? "bg-gray-800 text-gray-400"}`}>
+                        {STATUS_LABEL[u.status] ?? u.status}
+                      </span>
+                      {u.isRelay && (
+                        <span className="text-[10px] border border-orange-700 bg-orange-900 text-orange-300 rounded px-1.5 py-0.5">
+                          enlace 0R-
+                        </span>
+                      )}
+                      {u.role === "admin" && (
+                        <span className="text-[10px] border border-blue-700 bg-blue-900 text-blue-300 rounded px-1.5 py-0.5">
+                          admin
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-4 mt-1.5 text-[11px] text-gray-600">
+                      <span>Alta: {fmtDate(u.createdAt)}</span>
+                      <span>Ultimo acceso: {fmtDate(u.lastLogin)}</span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                    {u.status === "pending" && (
+                      <button
+                        onClick={() => setStatus(u.id, "active")}
+                        disabled={actionId === u.id}
+                        className="bg-green-700 hover:bg-green-600 text-white text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        Aprobar
+                      </button>
+                    )}
+                    {u.status === "active" && (
+                      <button
+                        onClick={() => setStatus(u.id, "inactive")}
+                        disabled={actionId === u.id}
+                        className="bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        Desactivar
+                      </button>
+                    )}
+                    {u.status === "inactive" && (
+                      <button
+                        onClick={() => setStatus(u.id, "active")}
+                        disabled={actionId === u.id}
+                        className="bg-green-800 hover:bg-green-700 text-green-200 text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        Reactivar
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setRole(u.id, u.role === "admin" ? "user" : "admin")}
+                      disabled={actionId === u.id}
+                      className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                      title={u.role === "admin" ? "Quitar admin" : "Hacer admin"}
+                    >
+                      {u.role === "admin" ? "Quitar admin" : "Hacer admin"}
+                    </button>
+                    <button
+                      onClick={() => { setResetId(u.id); setResetPw(""); setResetError(null); }}
+                      disabled={actionId === u.id}
+                      className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                      title="Cambiar contrasena"
+                    >
+                      Contrasena
+                    </button>
+                    <button
+                      onClick={() => deleteUser(u.id, u.callsign)}
+                      disabled={actionId === u.id}
+                      className="bg-red-950 hover:bg-red-900 text-red-300 text-xs px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                      title="Eliminar usuario"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                </div>
+
+                {/* Password reset inline */}
+                {resetId === u.id && (
+                  <div className="mt-3 pt-3 border-t border-gray-700 flex items-center gap-2">
+                    <input
+                      type="password"
+                      value={resetPw}
+                      onChange={(e) => setResetPw(e.target.value)}
+                      placeholder="Nueva contrasena (min 4)"
+                      className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100
+                                 placeholder:text-gray-600 focus:outline-none focus:border-green-600"
+                    />
+                    <button
+                      onClick={() => handleResetPw(u.id)}
+                      disabled={resetting}
+                      className="bg-green-700 hover:bg-green-600 text-white text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      Guardar
+                    </button>
+                    <button
+                      onClick={() => { setResetId(null); setResetPw(""); setResetError(null); }}
+                      className="text-gray-500 hover:text-gray-300 text-xs px-2 py-1.5"
+                    >
+                      Cancelar
+                    </button>
+                    {resetError && <span className="text-xs text-red-400">{resetError}</span>}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Create user modal */}
+      {showCreate && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-sm shadow-2xl">
+            <h3 className="text-base font-semibold text-gray-100 mb-4">Crear usuario</h3>
+            <form onSubmit={handleCreate} className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Indicativo</label>
+                <input
+                  type="text"
+                  value={createForm.callsign}
+                  onChange={(e) => setCreateForm(f => ({ ...f, callsign: e.target.value.toUpperCase() }))}
+                  placeholder="Ej: 30RCI184, EA1ABC..."
+                  maxLength={20}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100
+                             font-mono uppercase placeholder:text-gray-600 focus:outline-none focus:border-green-600"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Contrasena</label>
+                <input
+                  type="password"
+                  value={createForm.password}
+                  onChange={(e) => setCreateForm(f => ({ ...f, password: e.target.value }))}
+                  placeholder="Contrasena"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100
+                             placeholder:text-gray-600 focus:outline-none focus:border-green-600"
+                />
+              </div>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={createForm.isRelay}
+                    onChange={(e) => setCreateForm(f => ({ ...f, isRelay: e.target.checked }))}
+                    className="accent-green-600"
+                  />
+                  <span className="text-xs text-gray-300">Radio-enlace (0R-)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={createForm.role === "admin"}
+                    onChange={(e) => setCreateForm(f => ({ ...f, role: e.target.checked ? "admin" : "user" }))}
+                    className="accent-blue-600"
+                  />
+                  <span className="text-xs text-gray-300">Administrador</span>
+                </label>
+              </div>
+              {createError && (
+                <p className="text-xs text-red-400">{createError}</p>
+              )}
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="flex-1 bg-green-700 hover:bg-green-600 text-white text-sm font-medium py-2 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {creating ? "Creando..." : "Crear"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowCreate(false); setCreateError(null); }}
+                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm py-2 rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -81,16 +81,37 @@ Audio uses GSM 06.10 (libgsm) codec: 198 bytes / 120ms / 8 kHz mono.
 
 Added in April 2026. Only registered users can access the eQSO client.
 
-- **Database**: `users` table — callsign (PK unique), password_hash (scrypt), is_relay, active, created_at, last_login
-- **Endpoints**: `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/users`
-- **Sessions**: UUID tokens (24h TTL), stored in-memory Map on the API server. Pruned hourly.
-- **Password hashing**: Node.js built-in `crypto.scrypt` (64-byte output, random 16-byte salt), no external deps.
-- **WS join auth**: Client sends `token` in join message → server validates session → applies `0R-` + Maidenhead padding for relay users automatically.
-- **User types**:
-  - `is_relay = false`: normal user, callsign used as-is (no prefix)
-  - `is_relay = true`: relay/enlace, server prepends `0R-` + pads to 6-char Maidenhead format
-- **Client**: `LoginPanel.tsx` — login/register tabs shown before ConnectPanel. Token stored in React state (session memory only).
-- **Header**: Shows authenticated callsign + "enlace" badge for relay users + "Salir" button.
+### Database schema (users table)
+- callsign (PK unique, max 20 chars — accepts CB like 30RCI184, amateur EA1ABC, etc.)
+- password_hash (scrypt, 64-byte, random 16-byte salt), is_relay, active
+- **status**: `pending` | `active` | `inactive` — controls access
+- **role**: `admin` | `user` — controls admin panel access
+- created_at, last_login
+
+### Auth endpoints (`/api/auth/`)
+- `POST /api/auth/register` — creates user with `status='pending'`. If no admin exists, first user becomes admin+active automatically.
+- `POST /api/auth/login` — checks status: pending→403, inactive→403, active→token. Returns `{token, callsign, isRelay, role}`.
+
+### Admin endpoints (`/api/admin/`) — require Bearer token + role='admin'
+- `GET /api/admin/users` — list all users (no passwords)
+- `POST /api/admin/users` — create user (immediately active)
+- `PATCH /api/admin/users/:id/status` — approve (active) / deactivate (inactive) / re-activate
+- `PATCH /api/admin/users/:id/role` — promote/demote admin
+- `PATCH /api/admin/users/:id/password` — reset password
+- `DELETE /api/admin/users/:id` — delete user
+
+### Sessions
+- UUID tokens (24h TTL), in-memory Map, pruned hourly.
+- WS join auth: client sends token → server validates session → applies `0R-` + Maidenhead padding for relay users automatically.
+
+### User types
+- `is_relay = false`: normal user, any callsign format (CB, amateur, etc.), no prefix
+- `is_relay = true`: relay/enlace, server prepends `0R-` + pads to 6-char Maidenhead format
+
+### Client components
+- `LoginPanel.tsx` — login/register tabs. Register shows "pendiente de aprobacion" message.
+- `AdminPanel.tsx` — admin-only panel: list/filter by status, approve, activate, deactivate, delete, create, reset password, change role. Alert badge for pending users.
+- `home.tsx` — shows admin button in header only if role='admin'. Space key disabled in admin panel.
 
 ## Key Commands
 
