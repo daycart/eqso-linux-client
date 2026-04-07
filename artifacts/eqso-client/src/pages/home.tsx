@@ -200,7 +200,7 @@ function AppHeader({ auth, eqsoStatus, onLogout, onAdmin }: AppHeaderProps) {
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/>
           </svg>
         </div>
-        <span className="font-bold text-lg tracking-wide">eQSO Linux</span>
+        <span className="font-bold text-lg tracking-wide">eQSO ASORAPA</span>
         <span className="text-xs text-gray-500 font-mono">CB27 / Radio Link</span>
       </div>
 

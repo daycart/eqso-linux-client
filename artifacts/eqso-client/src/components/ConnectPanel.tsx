@@ -96,7 +96,7 @@ export function ConnectPanel({
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 7.5l16.5-4.125M12 6.75c-2.708 0-5.363.224-7.948.655C2.999 7.58 2.25 8.507 2.25 9.574v9.176A2.25 2.25 0 004.5 21h15a2.25 2.25 0 002.25-2.25V9.574c0-1.067-.75-1.994-1.802-2.169A48.329 48.329 0 0012 6.75zm-1.683 6.443l-.005.005-.006-.005.006-.005.005.005zm-.005 2.146l-.005-.005.005-.006.006.006-.006.005zm-2.116-.006l-.005.005-.006-.005.005-.005.006.005zm-.005-2.146l-.006-.005.006-.005.005.005-.005.005z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-white">eQSO Linux Client</h1>
+          <h1 className="text-2xl font-bold text-white">eQSO ASORAPA</h1>
           <p className="text-sm text-gray-400 mt-1">Enlace CB27 via Internet</p>
         </div>
 
