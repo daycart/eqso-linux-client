@@ -240,8 +240,8 @@ function AppHeader({ auth, eqsoStatus, pttConfig, portOpen, onLogout, onAdmin, o
           </span>
         )}
 
-        {/* PTT config button — shown when authenticated */}
-        {auth && onPTTConfig && (
+        {/* PTT config button — shown only to admins */}
+        {auth && auth.role === "admin" && onPTTConfig && (
           <button
             onClick={onPTTConfig}
             className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 px-2 py-1 rounded hover:bg-gray-800 transition-colors border border-gray-700 hover:border-gray-600"
