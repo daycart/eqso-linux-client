@@ -19,6 +19,18 @@ interface MonitorRoom {
   clients: MonitorClient[];
 }
 
+interface RemoteConn {
+  id: string;
+  host: string;
+  port: number;
+  name: string;
+  room: string;
+  status: "connecting" | "connected" | "disconnected";
+  connectedAt: number;
+  txBytes: number;
+  rxBytes: number;
+}
+
 interface ServerStatus {
   enabled: boolean;
   startedAt: number;
@@ -26,6 +38,7 @@ interface ServerStatus {
   totalClients: number;
   inRoom: number;
   rooms: MonitorRoom[];
+  remoteConnections: RemoteConn[];
 }
 
 function fmtBytes(b: number): string {
@@ -144,6 +157,66 @@ export function ServerMonitor({ token }: Props) {
           <Stat label="Clientes" value={String(status.totalClients)} />
           <Stat label="En sala" value={String(status.inRoom)} />
         </div>
+      </div>
+
+      {/* Remote connections */}
+      <div className="space-y-3">
+        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-1">
+          Conexiones a servidores remotos ({status.remoteConnections?.length ?? 0})
+        </h3>
+
+        {(status.remoteConnections?.length ?? 0) === 0 && (
+          <div className="rounded-xl border border-gray-800 bg-gray-900 px-5 py-4 text-sm text-gray-600">
+            Ningun cliente conectado a un servidor remoto en este momento.
+          </div>
+        )}
+
+        {(status.remoteConnections ?? []).map((rc) => (
+          <div key={rc.id} className="rounded-xl border border-gray-800 bg-gray-900 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                  rc.status === "connected" ? "bg-green-500" :
+                  rc.status === "connecting" ? "bg-yellow-500 animate-pulse" : "bg-red-500"
+                }`} />
+                <div>
+                  <span className="text-sm font-mono font-semibold text-gray-100">
+                    {rc.host}:{rc.port}
+                  </span>
+                  {rc.name && (
+                    <span className="ml-2 text-xs text-green-400 font-mono">{rc.name}</span>
+                  )}
+                  {rc.room && (
+                    <span className="ml-2 text-xs text-gray-500">sala: {rc.room}</span>
+                  )}
+                </div>
+              </div>
+              <span className={`text-xs font-medium px-2 py-1 rounded ${
+                rc.status === "connected" ? "bg-green-900 text-green-300" :
+                rc.status === "connecting" ? "bg-yellow-900 text-yellow-300" : "bg-red-900 text-red-300"
+              }`}>
+                {rc.status === "connected" ? "Conectado" :
+                 rc.status === "connecting" ? "Conectando..." : "Desconectado"}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 divide-x divide-gray-800 text-center">
+              <div className="px-4 py-3">
+                <div className="text-xs text-gray-500 mb-1">TX enviado</div>
+                <div className="text-sm font-semibold text-gray-200 tabular-nums">{fmtBytes(rc.txBytes)}</div>
+              </div>
+              <div className="px-4 py-3">
+                <div className="text-xs text-gray-500 mb-1">RX recibido</div>
+                <div className="text-sm font-semibold text-gray-200 tabular-nums">{fmtBytes(rc.rxBytes)}</div>
+              </div>
+              <div className="px-4 py-3">
+                <div className="text-xs text-gray-500 mb-1">Tiempo activo</div>
+                <div className="text-sm font-semibold text-gray-200 tabular-nums">
+                  {rc.status === "connected" ? fmtConnTime(rc.connectedAt) : "—"}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Rooms */}

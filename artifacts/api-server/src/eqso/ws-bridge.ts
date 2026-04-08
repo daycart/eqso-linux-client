@@ -2,7 +2,7 @@ import { IncomingMessage, Server as HttpServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { randomUUID } from "crypto";
 import { logger } from "../lib/logger";
-import { roomManager } from "./room-manager";
+import { roomManager, RemoteConnectionInfo } from "./room-manager";
 import {
   buildRoomList,
   buildUserList,
@@ -235,6 +235,14 @@ function handleRemoteMode(
   let currentName = "";
   let currentRoom = "";
 
+  // Register this outgoing connection in the room manager for monitoring
+  const remoteConnInfo: RemoteConnectionInfo = {
+    id, host, port, name: "", room: "",
+    status: "connecting", connectedAt: Date.now(),
+    txBytes: 0, rxBytes: 0,
+  };
+  roomManager.addRemoteConn(remoteConnInfo);
+
   // PCM accumulation buffer for TX: browser sends Int16 PCM chunks
   let pcmAccum = new Int16Array(0);
 
@@ -279,18 +287,23 @@ function handleRemoteMode(
   encoder.on("gsm", (gsm: Buffer) => {
     if (!pttGranted) return; // discard if PTT released mid-frame
     proxy.sendAudio(gsm);
+    roomManager.updateRemoteConn(id, {
+      txBytes: (roomManager.getRemoteConn(id)?.txBytes ?? 0) + gsm.length,
+    });
     logger.info({ bytes: gsm.length }, "Remote TX: sent GSM packet");
   });
 
   proxy.on("event", (ev: ProxyEvent) => {
     switch (ev.type) {
       case "connected":
+        roomManager.updateRemoteConn(id, { status: "connected", connectedAt: Date.now() });
         sendJson(ws, { type: "server_info", message: `Conectado a ${host}:${port}` });
         break;
       case "server_info":
         sendJson(ws, { type: "error", message: String(ev.data) });
         break;
       case "disconnected":
+        roomManager.updateRemoteConn(id, { status: "disconnected" });
         sendJson(ws, { type: "disconnected", message: "Servidor desconectado" });
         break;
       case "error":
@@ -323,6 +336,9 @@ function handleRemoteMode(
         // Incoming GSM packet from remote eQSO server: [0x01][198 bytes GSM]
         const pkt = ev.data as Buffer;
         if (pkt.length < 1 + AUDIO_PAYLOAD_SIZE) break;
+        roomManager.updateRemoteConn(id, {
+          rxBytes: (roomManager.getRemoteConn(id)?.rxBytes ?? 0) + pkt.length,
+        });
         // Feed 198-byte GSM payload into the streaming decoder
         const gsmBuf = Buffer.from(
           pkt.buffer,
@@ -420,6 +436,7 @@ function handleRemoteMode(
 
           currentName = resolvedName;
           currentRoom = room;
+          roomManager.updateRemoteConn(id, { name: resolvedName, room });
           logger.info({ id, name: resolvedName, room, host, port, isRelay }, "Remote proxy: join requested");
           proxy.sendJoin(resolvedName, room, message, password);
           sendJson(ws, { type: "joined", room, name: resolvedName, members: [] });
@@ -460,6 +477,7 @@ function handleRemoteMode(
       decoder.stop();
       encoder.stop();
       proxy.disconnect();
+      roomManager.removeRemoteConn(id);
     },
   };
 }

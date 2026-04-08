@@ -1,5 +1,17 @@
 import { EventEmitter } from "events";
 
+export interface RemoteConnectionInfo {
+  id: string;
+  host: string;
+  port: number;
+  name: string;
+  room: string;
+  status: "connecting" | "connected" | "disconnected";
+  connectedAt: number;
+  txBytes: number;
+  rxBytes: number;
+}
+
 export interface ClientInfo {
   id: string;
   name: string;
@@ -28,6 +40,7 @@ export class RoomManager extends EventEmitter {
   private roomLocks = new Map<string, string>();
   private _enabled = true;
   private _startedAt = Date.now();
+  private remoteConns = new Map<string, RemoteConnectionInfo>();
 
   isEnabled(): boolean { return this._enabled; }
   enable(): void       { this._enabled = true; }
@@ -145,6 +158,24 @@ export class RoomManager extends EventEmitter {
     return false;
   }
 
+  // ── Remote connection tracking ──────────────────────────────────────────────
+  addRemoteConn(info: RemoteConnectionInfo): void {
+    this.remoteConns.set(info.id, info);
+  }
+
+  updateRemoteConn(id: string, partial: Partial<RemoteConnectionInfo>): void {
+    const existing = this.remoteConns.get(id);
+    if (existing) Object.assign(existing, partial);
+  }
+
+  removeRemoteConn(id: string): void {
+    this.remoteConns.delete(id);
+  }
+
+  getRemoteConn(id: string): RemoteConnectionInfo | undefined {
+    return this.remoteConns.get(id);
+  }
+
   /** Full status for the monitor panel */
   getServerStatus() {
     const now = Date.now();
@@ -178,6 +209,8 @@ export class RoomManager extends EventEmitter {
       });
     }
 
+    const remoteList = Array.from(this.remoteConns.values()).map(r => ({ ...r }));
+
     return {
       enabled:      this._enabled,
       startedAt:    this._startedAt,
@@ -185,6 +218,7 @@ export class RoomManager extends EventEmitter {
       totalClients: allClients.length,
       inRoom:       allClients.filter(c => c.room).length,
       rooms:        Object.values(byRoom).sort((a, b) => a.room.localeCompare(b.room)),
+      remoteConnections: remoteList,
     };
   }
 
