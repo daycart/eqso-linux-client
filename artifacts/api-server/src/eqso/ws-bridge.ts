@@ -239,9 +239,24 @@ function handleRemoteMode(
   const remoteConnInfo: RemoteConnectionInfo = {
     id, host, port, name: "", room: "",
     status: "connecting", connectedAt: Date.now(),
-    txBytes: 0, rxBytes: 0,
+    txBytes: 0, rxBytes: 0, remoteMembers: [],
   };
   roomManager.addRemoteConn(remoteConnInfo);
+
+  // Local helpers to mutate the member list in place (no Map copy overhead)
+  function rmAddMember(name: string, message: string): void {
+    if (!remoteConnInfo.remoteMembers.find(m => m.name === name)) {
+      remoteConnInfo.remoteMembers.push({ name, message, isTx: false });
+    }
+  }
+  function rmRemoveMember(name: string): void {
+    const idx = remoteConnInfo.remoteMembers.findIndex(m => m.name === name);
+    if (idx !== -1) remoteConnInfo.remoteMembers.splice(idx, 1);
+  }
+  function rmSetTx(name: string, isTx: boolean): void {
+    const m = remoteConnInfo.remoteMembers.find(m => m.name === name);
+    if (m) m.isTx = isTx;
+  }
 
   // PCM accumulation buffer for TX: browser sends Int16 PCM chunks
   let pcmAccum = new Int16Array(0);
@@ -304,6 +319,7 @@ function handleRemoteMode(
         break;
       case "disconnected":
         roomManager.updateRemoteConn(id, { status: "disconnected" });
+        remoteConnInfo.remoteMembers = [];
         sendJson(ws, { type: "disconnected", message: "Servidor desconectado" });
         break;
       case "error":
@@ -320,18 +336,30 @@ function handleRemoteMode(
           members: ev.data,
         });
         break;
-      case "user_joined":
+      case "user_joined": {
+        const joined = ev.data as { name: string; message: string };
+        rmAddMember(joined.name, joined.message ?? "");
         sendJson(ws, { type: "user_joined", ...(ev.data as object) });
         break;
-      case "user_left":
+      }
+      case "user_left": {
+        const left = ev.data as { name: string };
+        rmRemoveMember(left.name);
         sendJson(ws, { type: "user_left", ...(ev.data as object) });
         break;
-      case "ptt_started":
+      }
+      case "ptt_started": {
+        const txer = ev.data as { name: string };
+        rmSetTx(txer.name, true);
         sendJson(ws, { type: "ptt_started", ...(ev.data as object) });
         break;
-      case "ptt_released":
+      }
+      case "ptt_released": {
+        const txer = ev.data as { name: string };
+        rmSetTx(txer.name, false);
         sendJson(ws, { type: "ptt_released_remote", ...(ev.data as object) });
         break;
+      }
       case "audio": {
         // Incoming GSM packet from remote eQSO server: [0x01][198 bytes GSM]
         const pkt = ev.data as Buffer;
@@ -436,6 +464,8 @@ function handleRemoteMode(
 
           currentName = resolvedName;
           currentRoom = room;
+          remoteConnInfo.remoteMembers = []; // reset list when joining a new room
+          rmAddMember(resolvedName, message);    // add self to member list
           roomManager.updateRemoteConn(id, { name: resolvedName, room });
           logger.info({ id, name: resolvedName, room, host, port, isRelay }, "Remote proxy: join requested");
           proxy.sendJoin(resolvedName, room, message, password);
@@ -448,6 +478,7 @@ function handleRemoteMode(
           if (pttTailTimer) { clearTimeout(pttTailTimer); pttTailTimer = null; }
           pttGranted = true;
           pcmAccum = new Int16Array(0); // reset accumulator
+          rmSetTx(currentName, true);
           // No separate PTT-announce packet in eQSO — the first [0x01][198 GSM] frame
           // announces PTT implicitly. Just stop the silence heartbeat.
           proxy.startTransmitting();
@@ -455,6 +486,7 @@ function handleRemoteMode(
           logger.info({ name: currentName, room: currentRoom }, "Remote TX: PTT start (first voice frame will open channel)");
           break;
         case "ptt_end":
+          rmSetTx(currentName, false);
           // Notify browser immediately so UI updates, then wait for the FFmpeg
           // encoder to flush its remaining frames before releasing the eQSO channel.
           sendJson(ws, { type: "ptt_released" });

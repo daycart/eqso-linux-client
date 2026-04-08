@@ -19,6 +19,12 @@ interface MonitorRoom {
   clients: MonitorClient[];
 }
 
+interface RemoteMember {
+  name: string;
+  message: string;
+  isTx: boolean;
+}
+
 interface RemoteConn {
   id: string;
   host: string;
@@ -29,6 +35,7 @@ interface RemoteConn {
   connectedAt: number;
   txBytes: number;
   rxBytes: number;
+  remoteMembers: RemoteMember[];
 }
 
 interface ServerStatus {
@@ -199,7 +206,8 @@ export function ServerMonitor({ token }: Props) {
                  rc.status === "connecting" ? "Conectando..." : "Desconectado"}
               </span>
             </div>
-            <div className="grid grid-cols-3 divide-x divide-gray-800 text-center">
+            {/* Stats row */}
+            <div className="grid grid-cols-3 divide-x divide-gray-800 text-center border-b border-gray-800">
               <div className="px-4 py-3">
                 <div className="text-xs text-gray-500 mb-1">TX enviado</div>
                 <div className="text-sm font-semibold text-gray-200 tabular-nums">{fmtBytes(rc.txBytes)}</div>
@@ -215,6 +223,42 @@ export function ServerMonitor({ token }: Props) {
                 </div>
               </div>
             </div>
+
+            {/* Member list */}
+            {rc.status === "connected" && (
+              <div className="px-5 py-3">
+                <div className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">
+                  Presentes en sala ({rc.remoteMembers?.length ?? 0})
+                </div>
+                {(!rc.remoteMembers || rc.remoteMembers.length === 0) ? (
+                  <div className="text-xs text-gray-600 italic">Esperando lista de miembros...</div>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {rc.remoteMembers.map((m) => (
+                      <div
+                        key={m.name}
+                        title={m.message || undefined}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-medium border transition-colors ${
+                          m.isTx
+                            ? "bg-red-900/60 border-red-600 text-red-200"
+                            : m.name === rc.name
+                              ? "bg-green-900/50 border-green-700 text-green-300"
+                              : "bg-gray-800 border-gray-700 text-gray-300"
+                        }`}
+                      >
+                        {m.isTx && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse flex-shrink-0" />
+                        )}
+                        {m.name}
+                        {m.name === rc.name && (
+                          <span className="text-[9px] text-green-500 font-sans ml-0.5">tú</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>

@@ -1,5 +1,11 @@
 import { EventEmitter } from "events";
 
+export interface RemoteMember {
+  name: string;
+  message: string;
+  isTx: boolean;
+}
+
 export interface RemoteConnectionInfo {
   id: string;
   host: string;
@@ -10,6 +16,7 @@ export interface RemoteConnectionInfo {
   connectedAt: number;
   txBytes: number;
   rxBytes: number;
+  remoteMembers: RemoteMember[];
 }
 
 export interface ClientInfo {
