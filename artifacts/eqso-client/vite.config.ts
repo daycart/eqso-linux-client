@@ -65,6 +65,17 @@ export default defineConfig({
     headers: process.env.NODE_ENV !== "production" ? {
       "Cache-Control": "no-store",
     } : {},
+    proxy: {
+      "/api": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+      },
+      "/ws": {
+        target: "ws://localhost:8080",
+        ws: true,
+        changeOrigin: true,
+      },
+    },
     fs: {
       strict: true,
       deny: ["**/.*"],
