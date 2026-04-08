@@ -10,6 +10,7 @@ interface ConnectPanelProps {
   statusMessage: string;
   password: string;
   selectedServer: EqsoServer;
+  servers?: EqsoServer[];
   onCallsignChange: (v: string) => void;
   onRoomChange: (v: string) => void;
   onStatusMessageChange: (v: string) => void;
@@ -26,6 +27,7 @@ export function ConnectPanel({
   selectedRoom,
   statusMessage,
   password,
+  servers: serversProp,
   onCallsignChange,
   onRoomChange,
   onStatusMessageChange,
@@ -36,12 +38,14 @@ export function ConnectPanel({
   const isConnected = status === "connected";
   const isConnecting = status === "connecting";
 
-  const [chosenServerId, setChosenServerId] = useState<string>(KNOWN_SERVERS[0].id);
+  const serverList = serversProp && serversProp.length > 0 ? serversProp : KNOWN_SERVERS;
+
+  const [chosenServerId, setChosenServerId] = useState<string>(serverList[0].id);
   const [editHost, setEditHost] = useState("");
   const [editPort, setEditPort] = useState(2171);
   const [connectedServerLabel, setConnectedServerLabel] = useState("");
 
-  const chosenServer = KNOWN_SERVERS.find((s) => s.id === chosenServerId) ?? KNOWN_SERVERS[0];
+  const chosenServer = serverList.find((s) => s.id === chosenServerId) ?? serverList[0];
   const isRemote = chosenServer.mode === "remote";
 
   useEffect(() => {
@@ -118,7 +122,7 @@ export function ConnectPanel({
               disabled={isConnected}
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 text-sm disabled:opacity-60"
             >
-              {KNOWN_SERVERS.map((s) => (
+              {serverList.map((s) => (
                 <option key={s.id} value={s.id}>{s.label}</option>
               ))}
             </select>

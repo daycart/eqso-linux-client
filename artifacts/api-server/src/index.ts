@@ -3,6 +3,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { startTcpServer } from "./eqso/tcp-server";
 import { startWsBridge } from "./eqso/ws-bridge";
+import { seedServers } from "./lib/seedServers";
 
 const rawPort = process.env["PORT"];
 
@@ -21,6 +22,7 @@ if (Number.isNaN(port) || port <= 0) {
 const httpServer = http.createServer(app);
 
 startWsBridge(httpServer);
+seedServers().catch((err) => logger.warn({ err }, "seedServers failed (non-fatal)"));
 
 httpServer.listen(port, (err?: Error) => {
   if (err) {

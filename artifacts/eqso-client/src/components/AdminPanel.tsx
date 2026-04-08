@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { getApiBase } from "./LoginPanel";
+import { ServersPanel } from "./ServersPanel";
 
 interface AdminUser {
   id: number;
@@ -41,6 +42,7 @@ function authHeaders(token: string) {
 }
 
 export function AdminPanel({ token, onClose }: AdminPanelProps) {
+  const [activeSection, setActiveSection] = useState<"usuarios" | "servidores">("usuarios");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -186,15 +188,17 @@ export function AdminPanel({ token, onClose }: AdminPanelProps) {
       <div className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-100">Panel de administracion</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Gestion de usuarios del sistema eQSO</p>
+          <p className="text-xs text-gray-500 mt-0.5">Gestion del sistema eQSO ASORAPA</p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowCreate(true)}
-            className="bg-green-700 hover:bg-green-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-          >
-            + Nuevo usuario
-          </button>
+          {activeSection === "usuarios" && (
+            <button
+              onClick={() => setShowCreate(true)}
+              className="bg-green-700 hover:bg-green-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            >
+              + Nuevo usuario
+            </button>
+          )}
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-200 text-sm px-3 py-2 rounded-lg hover:bg-gray-800 transition-colors"
@@ -204,7 +208,41 @@ export function AdminPanel({ token, onClose }: AdminPanelProps) {
         </div>
       </div>
 
-      {/* Filter tabs */}
+      {/* Section tabs */}
+      <div className="flex gap-1 px-6 pt-4 border-b border-gray-800 pb-0">
+        {(["usuarios", "servidores"] as const).map((sec) => (
+          <button
+            key={sec}
+            onClick={() => setActiveSection(sec)}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors capitalize ${
+              activeSection === sec
+                ? "bg-gray-800 text-green-400 border-b-2 border-green-500"
+                : "text-gray-500 hover:text-gray-300 hover:bg-gray-900"
+            }`}
+          >
+            {sec === "usuarios" ? (
+              <>
+                Usuarios
+                {pendingCount > 0 && (
+                  <span className="ml-1.5 text-[10px] bg-yellow-700 text-yellow-200 rounded-full px-1.5 py-0.5">
+                    {pendingCount}
+                  </span>
+                )}
+              </>
+            ) : "Servidores"}
+          </button>
+        ))}
+      </div>
+
+      {/* Servidores section */}
+      {activeSection === "servidores" && (
+        <div className="flex-1 overflow-y-auto p-6">
+          <ServersPanel token={token} />
+        </div>
+      )}
+
+      {/* Users section — filter tabs + list */}
+      {activeSection === "usuarios" && <>
       <div className="flex gap-1 px-6 pt-4">
         {(["all", "pending", "active", "inactive"] as const).map((f) => {
           const label = f === "all" ? "Todos" : STATUS_LABEL[f];
@@ -384,6 +422,7 @@ export function AdminPanel({ token, onClose }: AdminPanelProps) {
           </div>
         )}
       </div>
+      </>}
 
       {/* Create user modal */}
       {showCreate && (

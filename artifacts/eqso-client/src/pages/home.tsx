@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useEqsoClient, EqsoServer } from "@/hooks/useEqsoClient";
 import { useAudio } from "@/hooks/useAudio";
 import { usePTTSerial } from "@/hooks/usePTTSerial";
+import { useServers } from "@/hooks/useServers";
 import { ConnectPanel } from "@/components/ConnectPanel";
 import { RoomPanel } from "@/components/RoomPanel";
 import { LoginPanel, type AuthSession } from "@/components/LoginPanel";
@@ -20,6 +21,7 @@ export default function HomePage() {
   );
 
   const serial = usePTTSerial();
+  const { servers } = useServers();
 
   const [auth, setAuth] = useState<AuthSession | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
@@ -159,6 +161,7 @@ export default function HomePage() {
             statusMessage={statusMessage}
             password={password}
             selectedServer={eqso.selectedServer}
+            servers={servers}
             onCallsignChange={setCallsign}
             onRoomChange={setSelectedRoom}
             onStatusMessageChange={setStatusMessage}
