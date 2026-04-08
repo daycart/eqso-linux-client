@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { getHomeServerLabel } from "../lib/homeServer";
-import { HomeServerModal } from "./HomeServerModal";
+import { getApiBase } from "../lib/homeServer";
+
+export { getApiBase } from "../lib/homeServer";
 
 export interface AuthSession {
   token: string;
@@ -13,9 +14,6 @@ interface LoginPanelProps {
   onAuth: (session: AuthSession) => void;
 }
 
-// Re-export so all existing imports still work
-export { getApiBase } from "../lib/homeServer";
-
 type Mode = "login" | "register";
 
 export function LoginPanel({ onAuth }: LoginPanelProps) {
@@ -27,8 +25,6 @@ export function LoginPanel({ onAuth }: LoginPanelProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingMsg, setPendingMsg] = useState<string | null>(null);
-  const [showServerModal, setShowServerModal] = useState(false);
-  const [serverLabel, setServerLabel] = useState(() => getHomeServerLabel());
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -258,26 +254,7 @@ export function LoginPanel({ onAuth }: LoginPanelProps) {
             </form>
           )}
         </div>
-
-        {/* Server config button */}
-        <button
-          onClick={() => setShowServerModal(true)}
-          className="mt-4 w-full flex items-center justify-center gap-2 text-xs text-gray-600 hover:text-gray-400 transition-colors py-1"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5.636 5.636a9 9 0 1 0 12.728 12.728M5.636 5.636A9 9 0 0 1 17 6.343M5.636 5.636 3 3m14 3.343 2.364-2.364" />
-            <circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          Servidor: {serverLabel}
-        </button>
       </div>
-
-      {showServerModal && (
-        <HomeServerModal
-          onClose={() => setShowServerModal(false)}
-          onSaved={(label) => { setServerLabel(label); setShowServerModal(false); }}
-        />
-      )}
     </div>
   );
 }
