@@ -5,6 +5,11 @@ export interface ClientInfo {
   name: string;
   room: string;
   message: string;
+  protocol: "tcp" | "ws";
+  connectedAt: number;
+  txBytes: number;
+  rxBytes: number;
+  pingMs: number;
   send: (data: Buffer) => void;
   close: () => void;
 }
@@ -21,6 +26,13 @@ export class RoomManager extends EventEmitter {
   private clients = new Map<string, ClientInfo>();
   private rooms = new Map<string, Set<string>>();
   private roomLocks = new Map<string, string>();
+  private _enabled = true;
+  private _startedAt = Date.now();
+
+  isEnabled(): boolean { return this._enabled; }
+  enable(): void       { this._enabled = true; }
+  disable(): void      { this._enabled = false; }
+  get startedAt(): number { return this._startedAt; }
 
   getDefaultRooms(): string[] {
     return ["GENERAL", "CB", "ASORAPA", "PRUEBAS"];
@@ -49,10 +61,7 @@ export class RoomManager extends EventEmitter {
   removeClient(id: string): void {
     const client = this.clients.get(id);
     if (!client) return;
-
-    if (client.room) {
-      this.leaveRoom(id);
-    }
+    if (client.room) this.leaveRoom(id);
     this.clients.delete(id);
   }
 
@@ -61,24 +70,13 @@ export class RoomManager extends EventEmitter {
     if (!client) return false;
 
     const oldRoom = client.room;
-    if (oldRoom && oldRoom !== room) {
-      this.leaveRoom(clientId);
-    }
+    if (oldRoom && oldRoom !== room) this.leaveRoom(clientId);
 
-    if (!this.rooms.has(room)) {
-      this.rooms.set(room, new Set());
-    }
-
+    if (!this.rooms.has(room)) this.rooms.set(room, new Set());
     this.rooms.get(room)!.add(clientId);
     client.room = room;
 
-    this.emit("event", {
-      type: "join",
-      clientId,
-      name: client.name,
-      room,
-    } as RoomEvent);
-
+    this.emit("event", { type: "join", clientId, name: client.name, room } as RoomEvent);
     return true;
   }
 
@@ -90,22 +88,12 @@ export class RoomManager extends EventEmitter {
     const members = this.rooms.get(room);
     if (members) {
       members.delete(clientId);
-      if (members.size === 0) {
-        this.rooms.delete(room);
-      }
+      if (members.size === 0) this.rooms.delete(room);
     }
 
-    if (this.roomLocks.get(room) === clientId) {
-      this.roomLocks.delete(room);
-    }
+    if (this.roomLocks.get(room) === clientId) this.roomLocks.delete(room);
 
-    this.emit("event", {
-      type: "leave",
-      clientId,
-      name: client.name,
-      room,
-    } as RoomEvent);
-
+    this.emit("event", { type: "leave", clientId, name: client.name, room } as RoomEvent);
     client.room = "";
   }
 
@@ -117,16 +105,10 @@ export class RoomManager extends EventEmitter {
   }
 
   unlockRoom(room: string, clientId: string): void {
-    if (this.roomLocks.get(room) === clientId) {
-      this.roomLocks.delete(room);
-    }
+    if (this.roomLocks.get(room) === clientId) this.roomLocks.delete(room);
   }
 
-  broadcastToRoom(
-    room: string,
-    data: Buffer,
-    excludeId?: string
-  ): void {
+  broadcastToRoom(room: string, data: Buffer, excludeId?: string): void {
     const members = this.rooms.get(room);
     if (!members) return;
     for (const id of members) {
@@ -134,9 +116,9 @@ export class RoomManager extends EventEmitter {
       const c = this.clients.get(id);
       if (c) {
         try {
+          c.txBytes += data.length;
           c.send(data);
-        } catch {
-        }
+        } catch { /* ignore */ }
       }
     }
   }
@@ -145,9 +127,9 @@ export class RoomManager extends EventEmitter {
     for (const [id, c] of this.clients) {
       if (id === excludeId) continue;
       try {
+        c.txBytes += data.length;
         c.send(data);
-      } catch {
-      }
+      } catch { /* ignore */ }
     }
   }
 
@@ -163,13 +145,55 @@ export class RoomManager extends EventEmitter {
     return false;
   }
 
+  /** Full status for the monitor panel */
+  getServerStatus() {
+    const now = Date.now();
+    const allClients = Array.from(this.clients.values());
+
+    const byRoom: Record<string, {
+      room: string;
+      locked: boolean;
+      lockedBy: string;
+      clients: {
+        id: string; name: string; protocol: string;
+        connectedAt: number; txBytes: number; rxBytes: number;
+        pingMs: number; message: string;
+      }[];
+    }> = {};
+
+    for (const c of allClients) {
+      if (!c.room) continue;
+      if (!byRoom[c.room]) {
+        byRoom[c.room] = {
+          room:     c.room,
+          locked:   !!this.roomLocks.get(c.room),
+          lockedBy: this.roomLocks.get(c.room) ?? "",
+          clients:  [],
+        };
+      }
+      byRoom[c.room].clients.push({
+        id: c.id, name: c.name, protocol: c.protocol,
+        connectedAt: c.connectedAt, txBytes: c.txBytes,
+        rxBytes: c.rxBytes, pingMs: c.pingMs, message: c.message,
+      });
+    }
+
+    return {
+      enabled:      this._enabled,
+      startedAt:    this._startedAt,
+      uptimeMs:     now - this._startedAt,
+      totalClients: allClients.length,
+      inRoom:       allClients.filter(c => c.room).length,
+      rooms:        Object.values(byRoom).sort((a, b) => a.room.localeCompare(b.room)),
+    };
+  }
+
+  /** Legacy */
   getStats() {
     return {
       totalClients: this.clients.size,
       rooms: Array.from(this.rooms.entries()).map(([room, ids]) => ({
-        room,
-        count: ids.size,
-        locked: !!this.roomLocks.get(room),
+        room, count: ids.size, locked: !!this.roomLocks.get(room),
       })),
     };
   }

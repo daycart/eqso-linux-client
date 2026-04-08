@@ -3,6 +3,7 @@ import { db, usersTable } from "@workspace/db";
 import { eq, ne } from "drizzle-orm";
 import { requireAdmin } from "../lib/adminMiddleware";
 import { hashPassword } from "../lib/auth";
+import { roomManager } from "../eqso/room-manager";
 
 const router = Router();
 router.use(requireAdmin);
@@ -164,6 +165,23 @@ router.patch("/users/:id/password", async (req, res) => {
   } catch {
     res.status(500).json({ error: "Error interno del servidor" });
   }
+});
+
+// GET /api/admin/server/status — live server stats
+router.get("/server/status", (_req, res) => {
+  res.json(roomManager.getServerStatus());
+});
+
+// POST /api/admin/server/enable
+router.post("/server/enable", (_req, res) => {
+  roomManager.enable();
+  res.json({ enabled: true });
+});
+
+// POST /api/admin/server/disable
+router.post("/server/disable", (_req, res) => {
+  roomManager.disable();
+  res.json({ enabled: false });
 });
 
 export default router;

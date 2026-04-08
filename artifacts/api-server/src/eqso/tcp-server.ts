@@ -279,12 +279,23 @@ export function startTcpServer(port: number): net.Server {
       handshakeDone: false,
     };
 
+    if (!roomManager.isEnabled()) {
+      socket.write(buildErrorMessage("Servidor desactivado temporalmente"));
+      socket.destroy();
+      return;
+    }
+
     const clientInfo: ClientInfo = {
       id,
       name: `_ANON_${id.slice(0, 6)}`,
       room: "",
       message: "",
-      send: (data: Buffer) => safeWrite(state, data),
+      protocol: "tcp",
+      connectedAt: Date.now(),
+      txBytes: 0,
+      rxBytes: 0,
+      pingMs: 0,
+      send: (data: Buffer) => { clientInfo.txBytes += data.length; safeWrite(state, data); },
       close: () => socket.destroy(),
     };
 
@@ -300,6 +311,8 @@ export function startTcpServer(port: number): net.Server {
     }, KEEPALIVE_INTERVAL_MS);
 
     socket.on("data", (data: Buffer) => {
+      const ci = roomManager.getClient(id);
+      if (ci) ci.rxBytes += data.length;
       handleData(state, data);
     });
 

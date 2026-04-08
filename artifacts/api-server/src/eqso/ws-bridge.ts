@@ -76,7 +76,12 @@ function handleLocalMode(
     name: `_WS_${id.slice(0, 6)}`,
     room: "",
     message: "",
-    send: (data: Buffer) => sendBin(ws, data),
+    protocol: "ws" as const,
+    connectedAt: Date.now(),
+    txBytes: 0,
+    rxBytes: 0,
+    pingMs: 0,
+    send: (data: Buffer) => { clientInfo.txBytes += data.length; sendBin(ws, data); },
     close: () => ws.close(),
   };
   roomManager.addClient(clientInfo);
@@ -463,6 +468,11 @@ export function startWsBridge(httpServer: HttpServer): WebSocketServer {
   const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
 
   wss.on("connection", (ws: WebSocket, _req: IncomingMessage) => {
+    if (!roomManager.isEnabled()) {
+      sendJson(ws, { type: "error", message: "Servidor desactivado temporalmente" });
+      ws.close();
+      return;
+    }
     const id = randomUUID();
     logger.info({ id }, "New WS eQSO client");
 
@@ -486,6 +496,10 @@ export function startWsBridge(httpServer: HttpServer): WebSocketServer {
 
     ws.on("message", (raw) => {
       try {
+        if (raw instanceof Buffer) {
+          const ci = roomManager.getClient(id);
+          if (ci) ci.rxBytes += raw.length;
+        }
         // Binary frames: local audio (0x01) or remote PCM TX (0x05)
         const isBin = raw instanceof Buffer && raw.length > 0 &&
           (raw[0] === WS_AUDIO_LOCAL || raw[0] === WS_PCM_TX);
