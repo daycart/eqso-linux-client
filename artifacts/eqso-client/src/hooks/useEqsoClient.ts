@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getWsUrl } from "../lib/homeServer";
 
 export type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error";
 
@@ -80,13 +81,6 @@ export interface EqsoActions {
 const WS_AUDIO_LOCAL  = 0x01; // local relay: Uint8 unsigned PCM
 const WS_AUDIO_REMOTE = 0x11; // remote RX:   Float32 PCM decoded from GSM
 const WS_PCM_TX       = 0x05; // remote TX:   Int16 signed PCM → GSM encode on server
-
-function getWsUrl(): string {
-  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const host = window.location.host;
-  const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
-  return `${proto}//${host}${base}/ws`;
-}
 
 export function useEqsoClient(
   onAudio?: (data: ArrayBuffer, isFloat32: boolean) => void
