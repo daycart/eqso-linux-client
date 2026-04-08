@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useEqsoClient, EqsoServer } from "@/hooks/useEqsoClient";
 import { useAudio } from "@/hooks/useAudio";
+import { usePTTSerial } from "@/hooks/usePTTSerial";
 import { ConnectPanel } from "@/components/ConnectPanel";
 import { RoomPanel } from "@/components/RoomPanel";
 import { LoginPanel, type AuthSession } from "@/components/LoginPanel";
 import { AdminPanel } from "@/components/AdminPanel";
+import { PTTConfigModal } from "@/components/PTTConfigModal";
 
 export default function HomePage() {
   const audioRef = useRef<ReturnType<typeof useAudio> | null>(null);
@@ -17,8 +19,11 @@ export default function HomePage() {
     }, [])
   );
 
+  const serial = usePTTSerial();
+
   const [auth, setAuth] = useState<AuthSession | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showPTTConfig, setShowPTTConfig] = useState(false);
   const [callsign, setCallsign] = useState("");
   const [selectedRoom, setSelectedRoom] = useState("GENERAL");
   const [statusMessage, setStatusMessage] = useState("CB27 link via internet. ");
@@ -62,12 +67,13 @@ export default function HomePage() {
     audio.muteRx(true);
     eqso.pttStart();
     setPttActive(true);
+    serial.keyDown();
 
     const mode = eqso.selectedServer.mode === "remote" ? "remote" : "local";
     await audio.startRecording((chunk) => {
       pttChunkRef.current(chunk);
     }, mode);
-  }, [pttActive, eqso, audio]);
+  }, [pttActive, eqso, audio, serial]);
 
   const pttEnd = useCallback(() => {
     if (!pttActive) return;
@@ -75,7 +81,8 @@ export default function HomePage() {
     eqso.pttEnd();
     setPttActive(false);
     audio.muteRx(false);
-  }, [pttActive, audio, eqso]);
+    serial.keyUp();
+  }, [pttActive, audio, eqso, serial]);
 
   useEffect(() => {
     pttChunkRef.current = (data: ArrayBuffer) => {
@@ -121,8 +128,9 @@ export default function HomePage() {
   if (showAdmin) {
     return (
       <div className="min-h-screen bg-gray-950 text-gray-100 flex flex-col">
-        <AppHeader auth={auth} onLogout={handleLogout} onAdmin={() => setShowAdmin(true)} />
+        <AppHeader auth={auth} onLogout={handleLogout} onAdmin={() => setShowAdmin(true)} onPTTConfig={() => setShowPTTConfig(true)} />
         <AdminPanel token={auth.token} onClose={() => setShowAdmin(false)} />
+        {showPTTConfig && <PTTConfigModal onClose={() => setShowPTTConfig(false)} />}
       </div>
     );
   }
@@ -133,9 +141,13 @@ export default function HomePage() {
       <AppHeader
         auth={auth}
         eqsoStatus={eqso.status}
+        pttConfig={serial.config}
+        portOpen={serial.portOpen}
         onLogout={handleLogout}
         onAdmin={() => setShowAdmin(true)}
+        onPTTConfig={() => setShowPTTConfig(true)}
       />
+      {showPTTConfig && <PTTConfigModal onClose={() => setShowPTTConfig(false)} />}
       <main className="flex flex-1 overflow-hidden">
         {!isInRoom ? (
           <ConnectPanel
@@ -187,11 +199,14 @@ export default function HomePage() {
 interface AppHeaderProps {
   auth?: AuthSession | null;
   eqsoStatus?: string;
+  pttConfig?: { method: string; pin: string; invertVoltage: boolean };
+  portOpen?: boolean;
   onLogout?: () => void;
   onAdmin?: () => void;
+  onPTTConfig?: () => void;
 }
 
-function AppHeader({ auth, eqsoStatus, onLogout, onAdmin }: AppHeaderProps) {
+function AppHeader({ auth, eqsoStatus, pttConfig, portOpen, onLogout, onAdmin, onPTTConfig }: AppHeaderProps) {
   return (
     <header className="border-b border-gray-800 px-6 py-3 flex items-center gap-3">
       <div className="flex items-center gap-2">
@@ -223,6 +238,28 @@ function AppHeader({ auth, eqsoStatus, onLogout, onAdmin }: AppHeaderProps) {
             <span className="w-2 h-2 rounded-full bg-gray-500" />
             Desconectado
           </span>
+        )}
+
+        {/* PTT config button — shown when authenticated */}
+        {auth && onPTTConfig && (
+          <button
+            onClick={onPTTConfig}
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 px-2 py-1 rounded hover:bg-gray-800 transition-colors border border-gray-700 hover:border-gray-600"
+            title="Configurar PTT / Puerto COM"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 011.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.56.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.893.149c-.425.07-.765.383-.93.78-.165.398-.143.854.107 1.204l.527.738c.32.447.269 1.06-.12 1.45l-.774.773a1.125 1.125 0 01-1.449.12l-.738-.527c-.35-.25-.806-.272-1.203-.107-.397.165-.71.505-.781.929l-.149.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527c-.447.32-1.06.269-1.45-.12l-.773-.774a1.125 1.125 0 01-.12-1.45l.527-.737c.25-.35.273-.806.108-1.204-.165-.397-.505-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.108-1.204l-.526-.738a1.125 1.125 0 01.12-1.45l.773-.773a1.125 1.125 0 011.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            PTT
+            {pttConfig && (
+              <span className="font-mono text-[10px] text-gray-500">
+                {pttConfig.method === "COM"
+                  ? `COM/${pttConfig.pin}${portOpen ? "" : " !"}`
+                  : "VOX"}
+              </span>
+            )}
+          </button>
         )}
 
         {/* Authenticated user info */}
