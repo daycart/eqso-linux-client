@@ -138,6 +138,8 @@ export default function HomePage() {
   }
 
   // ── Main radio UI ──────────────────────────────────────────────────────────
+  const isSecureContext = window.isSecureContext;
+
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 flex flex-col">
       <AppHeader
@@ -149,6 +151,11 @@ export default function HomePage() {
         onAdmin={() => setShowAdmin(true)}
         onPTTConfig={() => setShowPTTConfig(true)}
       />
+      {!isSecureContext && (
+        <div className="bg-yellow-900 border-b border-yellow-700 px-4 py-2 text-xs text-yellow-200 text-center">
+          Aviso: la pagina se sirve por HTTP sin SSL. El microfono y el audio no funcionaran hasta que el servidor tenga un certificado HTTPS.
+        </div>
+      )}
       {showPTTConfig && <PTTConfigModal onClose={() => setShowPTTConfig(false)} />}
       <main className="flex flex-1 overflow-hidden">
         {!isInRoom ? (

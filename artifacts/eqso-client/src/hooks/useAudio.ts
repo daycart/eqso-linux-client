@@ -438,7 +438,10 @@ export function useAudio(): UseAudioReturn {
   // devicechange.  Release the old mic chain so the next PTT press captures
   // audio from the newly selected default device.  Without this, the stream
   // keeps pointing at the stale (possibly ended) track and delivers silence.
+  // Note: navigator.mediaDevices is only available in secure contexts (HTTPS
+  // or localhost). Guard to avoid crashing when served over plain HTTP.
   useEffect(() => {
+    if (!navigator.mediaDevices) return;
     const onDeviceChange = () => {
       if (!micInitializedRef.current) return;
       console.debug("[audio] devicechange — releasing mic for re-init");
