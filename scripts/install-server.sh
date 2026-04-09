@@ -120,8 +120,9 @@ sudo -u "$SERVICE_USER" pnpm --filter @workspace/api-server run build &>/dev/nul
 ok "Servidor API compilado"
 
 info "Copiando archivos estaticos del cliente..."
+rm -rf "$INSTALL_DIR/artifacts/api-server/dist/public"
 cp -r "$INSTALL_DIR/artifacts/eqso-client/dist/public" \
-      "$INSTALL_DIR/artifacts/api-server/dist/public"
+      "$INSTALL_DIR/artifacts/api-server/dist/"
 ok "Archivos estaticos copiados"
 
 info "Creando archivo de configuracion..."
