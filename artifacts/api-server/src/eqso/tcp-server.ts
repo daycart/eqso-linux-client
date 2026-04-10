@@ -133,7 +133,11 @@ function processMultiByte(state: TcpClientState, byte: number): void {
         if (state.buf.equals(HANDSHAKE_CLIENT)) {
           safeWrite(state, HANDSHAKE_SERVER);
           state.handshakeDone = true;
+          logger.info({ id: state.id }, "eQSO TCP handshake complete — sending server info + room list");
           sendServerInfo(state);
+          sendRoomList(state);
+        } else {
+          logger.warn({ id: state.id, hex: state.buf.toString("hex") }, "eQSO TCP bad handshake bytes");
         }
         state.readMultiByte = false;
         state.multiByteCmd = 0;
@@ -154,6 +158,10 @@ function processMultiByte(state: TcpClientState, byte: number): void {
     case EQSO_COMMANDS.JOIN: {
       const parsed = tryParseJoin(state.buf);
       if (parsed) {
+        logger.info(
+          { id: state.id, name: parsed.name, room: parsed.room, bufLen: state.buf.length },
+          "eQSO TCP JOIN parsed"
+        );
         handleJoin(state, parsed.name, parsed.room, parsed.message, parsed.password);
         state.readMultiByte = false;
         state.multiByteCmd = 0;
@@ -234,14 +242,21 @@ function handleJoin(
   const memberList = buildUserList(
     members.map((m) => ({ name: m.name, message: m.message }))
   );
+  logger.info(
+    { id: state.id, name, room, memberCount: members.length, members: members.map(m => m.name), hex: memberList.toString("hex") },
+    "eQSO TCP sending user list to joining client"
+  );
   safeWrite(state, memberList);
 
   const joinedPkt = buildUserJoined(name, message);
   for (const m of members) {
-    if (m.id !== state.id) m.send(joinedPkt);
+    if (m.id !== state.id) {
+      logger.info({ to: m.name, joining: name }, "eQSO TCP notifying existing member of new join");
+      m.send(joinedPkt);
+    }
   }
 
-  logger.info({ id: state.id, name, room }, "TCP client joined room");
+  logger.info({ id: state.id, name, room, memberCount: members.length }, "TCP client joined room");
 }
 
 function handleData(state: TcpClientState, data: Buffer): void {
@@ -300,7 +315,7 @@ export function startTcpServer(port: number): net.Server {
     };
 
     roomManager.addClient(clientInfo);
-    sendRoomList(state);
+    logger.info({ id, addr: socket.remoteAddress }, "eQSO TCP client registered — waiting for handshake");
 
     const keepaliveTimer = setInterval(() => {
       if (socket.destroyed) {
