@@ -130,10 +130,12 @@ function processMultiByte(state: TcpClientState, byte: number): void {
   switch (state.multiByteCmd) {
     case EQSO_COMMANDS.HANDSHAKE: {
       if (state.buf.length === 5) {
-        if (state.buf.equals(HANDSHAKE_CLIENT)) {
+        // Accept any 5-byte handshake starting with 0x0a — different eQSO client
+        // versions use different second bytes (0x82 for proxy, 0x78 for Windows client v1.13)
+        if (state.buf[0] === EQSO_COMMANDS.HANDSHAKE) {
           safeWrite(state, HANDSHAKE_SERVER);
           state.handshakeDone = true;
-          logger.info({ id: state.id }, "eQSO TCP handshake complete — sending server info + room list");
+          logger.info({ id: state.id, hex: state.buf.toString("hex") }, "eQSO TCP handshake complete — sending server info + room list");
           sendServerInfo(state);
           sendRoomList(state);
         } else {
