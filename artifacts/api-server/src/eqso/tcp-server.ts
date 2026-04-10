@@ -232,7 +232,7 @@ function handleJoin(
 
   const members = roomManager.getRoomMembers(room);
   const memberList = buildUserList(
-    members.filter((m) => m.id !== state.id).map((m) => ({ name: m.name, message: m.message }))
+    members.map((m) => ({ name: m.name, message: m.message }))
   );
   safeWrite(state, memberList);
 
