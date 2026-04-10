@@ -135,8 +135,7 @@ function processMultiByte(state: TcpClientState, byte: number): void {
         if (state.buf[0] === EQSO_COMMANDS.HANDSHAKE) {
           safeWrite(state, HANDSHAKE_SERVER);
           state.handshakeDone = true;
-          logger.info({ id: state.id, hex: state.buf.toString("hex") }, "eQSO TCP handshake complete — sending server info + room list");
-          sendServerInfo(state);
+          logger.info({ id: state.id, hex: state.buf.toString("hex") }, "eQSO TCP handshake complete — sending room list");
           sendRoomList(state);
         } else {
           logger.warn({ id: state.id, hex: state.buf.toString("hex") }, "eQSO TCP bad handshake bytes");
