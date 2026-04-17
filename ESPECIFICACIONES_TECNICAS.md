@@ -370,6 +370,23 @@ Los puertos TCP 2171 y 8008 van **directamente** al proceso Node.js (no pasan po
 
 ---
 
+### v1.2 — Abril 2026
+- **InactivityManager** (`eqso/inactivity-manager.ts`): detecta silencio por sala y reproduce aviso de audio
+  - Timer por sala, comprueba cada 30 s, umbral configurable desde 1 a 120 min
+  - Convierte WAV → GSM 06.10 con FFmpeg, emite paquetes eQSO a 120 ms/paquete (ritmo real)
+  - Llama a `buildPttStarted("SERVIDOR")` / `buildPttReleased` para que los clientes Windows vean al "SERVIDOR" transmitir
+  - `recordActivity(room)` invocado en TCP (VOICE start) y WS bridge (ptt_start)
+- **Admin API inactividad**:
+  - `GET /api/admin/inactivity` — estado y config actual
+  - `PATCH /api/admin/inactivity` — cambiar `enabled`, `timeoutMinutes`
+  - `POST /api/admin/inactivity/audio` — subir archivo WAV (raw body, hasta 20 MB)
+  - `POST /api/admin/inactivity/trigger` — probar anuncio inmediatamente en una sala
+- **Panel admin — pestaña "Inactividad"**:
+  - Toggle activar/desactivar con estado visual
+  - Campo numérico para el tiempo de espera con botón Guardar
+  - Subida de archivo .wav directamente desde el navegador
+  - Botón de prueba por sala con mensaje de resultado
+
 ### v1.1 — Abril 2026
 - Nuevo endpoint `PATCH /api/admin/users/:id/relay` para cambiar el tipo radio-enlace de un usuario
 - Botón "Hacer enlace / Quitar enlace" en el panel de administración (color naranja cuando es enlace)
