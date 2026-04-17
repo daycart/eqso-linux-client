@@ -1,9 +1,11 @@
 import { Router } from "express";
+import express from "express";
 import { db, usersTable } from "@workspace/db";
 import { eq, ne } from "drizzle-orm";
 import { requireAdmin } from "../lib/adminMiddleware";
 import { hashPassword } from "../lib/auth";
 import { roomManager } from "../eqso/room-manager";
+import { inactivityManager } from "../eqso/inactivity-manager";
 
 const router = Router();
 router.use(requireAdmin);
@@ -207,5 +209,55 @@ router.post("/server/disable", (_req, res) => {
   roomManager.disable();
   res.json({ enabled: false });
 });
+
+// ── Inactivity management ──────────────────────────────────────────────────────
+
+// GET /api/admin/inactivity — get current config
+router.get("/inactivity", (_req, res) => {
+  res.json(inactivityManager.getConfig());
+});
+
+// PATCH /api/admin/inactivity — update config (enabled, timeoutMinutes)
+router.patch("/inactivity", (req, res) => {
+  const { enabled, timeoutMinutes } = req.body as { enabled?: boolean; timeoutMinutes?: number };
+  if (enabled !== undefined) inactivityManager.setEnabled(Boolean(enabled));
+  if (timeoutMinutes !== undefined) inactivityManager.setTimeoutMinutes(Number(timeoutMinutes));
+  res.json(inactivityManager.getConfig());
+});
+
+// POST /api/admin/inactivity/trigger — manually play the announcement in a room
+router.post("/inactivity/trigger", async (req, res) => {
+  const { room } = req.body as { room?: string };
+  const rooms = roomManager.getRooms();
+  const target = room ?? rooms[0];
+  if (!target) {
+    res.status(400).json({ error: "No hay salas activas" });
+    return;
+  }
+  try {
+    await inactivityManager.trigger(target);
+    res.json({ ok: true, room: target });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// POST /api/admin/inactivity/audio — upload WAV file (raw body, Content-Type: audio/wav)
+router.post(
+  "/inactivity/audio",
+  express.raw({ type: ["audio/wav", "audio/wave", "application/octet-stream"], limit: "20mb" }),
+  async (req, res) => {
+    try {
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+        res.status(400).json({ error: "Cuerpo vacío o tipo incorrecto" });
+        return;
+      }
+      await inactivityManager.saveAudioFile(req.body as Buffer);
+      res.json({ ok: true, bytes: (req.body as Buffer).length });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+);
 
 export default router;

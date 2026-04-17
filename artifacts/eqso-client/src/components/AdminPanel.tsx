@@ -43,7 +43,7 @@ function authHeaders(token: string) {
 }
 
 export function AdminPanel({ token, onClose }: AdminPanelProps) {
-  const [activeSection, setActiveSection] = useState<"usuarios" | "servidores" | "monitor">("usuarios");
+  const [activeSection, setActiveSection] = useState<"usuarios" | "servidores" | "monitor" | "inactividad">("usuarios");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +59,15 @@ export function AdminPanel({ token, onClose }: AdminPanelProps) {
   const [resetPw, setResetPw] = useState("");
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
+
+  // Inactivity section state
+  const [inactConfig, setInactConfig] = useState<{
+    enabled: boolean; timeoutMinutes: number; audioExists: boolean;
+  } | null>(null);
+  const [inactTimeout, setInactTimeout] = useState("10");
+  const [inactUploading, setInactUploading] = useState(false);
+  const [inactTriggerRoom, setInactTriggerRoom] = useState("");
+  const [inactMsg, setInactMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -200,6 +209,71 @@ export function AdminPanel({ token, onClose }: AdminPanelProps) {
   const pendingCount = users.filter(u => u.status === "pending").length;
   const filtered = filter === "all" ? users : users.filter(u => u.status === filter);
 
+  // ── Inactivity helpers ───────────────────────────────────────────────────────
+
+  async function loadInactConfig() {
+    try {
+      const res = await fetch(`${getApiBase()}/api/admin/inactivity`, { headers: authHeaders(token) });
+      if (!res.ok) return;
+      const cfg = await res.json();
+      setInactConfig(cfg);
+      setInactTimeout(String(cfg.timeoutMinutes));
+    } catch {}
+  }
+
+  async function saveInactConfig(patch: { enabled?: boolean; timeoutMinutes?: number }) {
+    setInactMsg(null);
+    try {
+      const res = await fetch(`${getApiBase()}/api/admin/inactivity`, {
+        method: "PATCH",
+        headers: authHeaders(token),
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Error");
+      const cfg = await res.json();
+      setInactConfig(cfg);
+      setInactMsg("Configuracion guardada.");
+    } catch (e: unknown) {
+      setInactMsg(e instanceof Error ? e.message : "Error");
+    }
+  }
+
+  async function uploadInactAudio(file: File) {
+    setInactMsg(null);
+    setInactUploading(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const res = await fetch(`${getApiBase()}/api/admin/inactivity/audio`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "audio/wav" },
+        body: buf,
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Error");
+      setInactMsg(`Archivo subido correctamente (${Math.round(buf.byteLength / 1024)} KB).`);
+      await loadInactConfig();
+    } catch (e: unknown) {
+      setInactMsg(e instanceof Error ? e.message : "Error al subir archivo");
+    } finally {
+      setInactUploading(false);
+    }
+  }
+
+  async function triggerInact() {
+    setInactMsg(null);
+    try {
+      const res = await fetch(`${getApiBase()}/api/admin/inactivity/trigger`, {
+        method: "POST",
+        headers: authHeaders(token),
+        body: JSON.stringify({ room: inactTriggerRoom || undefined }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Error");
+      setInactMsg(`Anuncio reproducido en sala "${json.room}".`);
+    } catch (e: unknown) {
+      setInactMsg(e instanceof Error ? e.message : "Error");
+    }
+  }
+
   return (
     <div className="flex flex-col flex-1 bg-gray-950 overflow-hidden">
       {/* Header */}
@@ -228,10 +302,13 @@ export function AdminPanel({ token, onClose }: AdminPanelProps) {
 
       {/* Section tabs */}
       <div className="flex gap-1 px-6 pt-4 border-b border-gray-800 pb-0">
-        {(["usuarios", "servidores", "monitor"] as const).map((sec) => (
+        {(["usuarios", "servidores", "monitor", "inactividad"] as const).map((sec) => (
           <button
             key={sec}
-            onClick={() => setActiveSection(sec)}
+            onClick={() => {
+              setActiveSection(sec);
+              if (sec === "inactividad") loadInactConfig();
+            }}
             className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors capitalize ${
               activeSection === sec
                 ? "bg-gray-800 text-green-400 border-b-2 border-green-500"
@@ -247,7 +324,7 @@ export function AdminPanel({ token, onClose }: AdminPanelProps) {
                   </span>
                 )}
               </>
-            ) : sec === "servidores" ? "Servidores" : "Monitor"}
+            ) : sec === "servidores" ? "Servidores" : sec === "monitor" ? "Monitor" : "Inactividad"}
           </button>
         ))}
       </div>
@@ -263,6 +340,137 @@ export function AdminPanel({ token, onClose }: AdminPanelProps) {
       {activeSection === "monitor" && (
         <div className="flex-1 overflow-y-auto p-6">
           <ServerMonitor token={token} />
+        </div>
+      )}
+
+      {/* Inactividad section */}
+      {activeSection === "inactividad" && (
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 max-w-2xl">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-200 mb-1">Control de inactividad</h3>
+            <p className="text-xs text-gray-500">
+              Cuando ninguna estacion transmite durante el tiempo configurado, el servidor reproduce
+              automaticamente un mensaje de audio en todas las salas ocupadas.
+            </p>
+          </div>
+
+          {inactMsg && (
+            <p className={`text-xs px-3 py-2 rounded-lg ${
+              inactMsg.startsWith("Error") || inactMsg.startsWith("Ya")
+                ? "bg-red-950 text-red-300 border border-red-800"
+                : "bg-green-950 text-green-300 border border-green-800"
+            }`}>
+              {inactMsg}
+            </p>
+          )}
+
+          {inactConfig === null ? (
+            <p className="text-xs text-gray-600">Cargando configuracion...</p>
+          ) : (
+            <>
+              {/* Enable / disable */}
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-200">
+                    {inactConfig.enabled ? "Activado" : "Desactivado"}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    El temporizador {inactConfig.enabled ? "esta corriendo" : "esta detenido"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => saveInactConfig({ enabled: !inactConfig.enabled })}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    inactConfig.enabled
+                      ? "bg-red-900 hover:bg-red-800 text-red-200"
+                      : "bg-green-800 hover:bg-green-700 text-green-200"
+                  }`}
+                >
+                  {inactConfig.enabled ? "Desactivar" : "Activar"}
+                </button>
+              </div>
+
+              {/* Timeout input */}
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <label className="block text-sm font-medium text-gray-200 mb-3">
+                  Tiempo de inactividad (minutos)
+                </label>
+                <div className="flex gap-3 items-center">
+                  <input
+                    type="number"
+                    min="1"
+                    max="120"
+                    value={inactTimeout}
+                    onChange={(e) => setInactTimeout(e.target.value)}
+                    className="w-24 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-green-600"
+                  />
+                  <span className="text-xs text-gray-500">minutos (actual: {inactConfig.timeoutMinutes})</span>
+                  <button
+                    onClick={() => saveInactConfig({ timeoutMinutes: Number(inactTimeout) })}
+                    className="ml-auto bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm px-4 py-2 rounded-lg transition-colors"
+                  >
+                    Guardar
+                  </button>
+                </div>
+              </div>
+
+              {/* Audio file */}
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <label className="block text-sm font-medium text-gray-200 mb-1">
+                  Archivo de audio de anuncio (.wav, 8 kHz mono recomendado)
+                </label>
+                <p className="text-xs text-gray-500 mb-3">
+                  Estado:{" "}
+                  <span className={inactConfig.audioExists ? "text-green-400" : "text-yellow-400"}>
+                    {inactConfig.audioExists ? "Archivo presente en el servidor" : "Sin archivo — sube uno aqui"}
+                  </span>
+                </p>
+                <label className={`cursor-pointer inline-block px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  inactUploading
+                    ? "bg-gray-800 text-gray-500 cursor-not-allowed"
+                    : "bg-blue-900 hover:bg-blue-800 text-blue-200"
+                }`}>
+                  {inactUploading ? "Subiendo..." : "Seleccionar archivo .wav"}
+                  <input
+                    type="file"
+                    accept=".wav,audio/wav,audio/wave"
+                    className="hidden"
+                    disabled={inactUploading}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) uploadInactAudio(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+
+              {/* Test trigger */}
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <p className="text-sm font-medium text-gray-200 mb-3">Probar anuncio ahora</p>
+                <div className="flex gap-3 items-center">
+                  <input
+                    type="text"
+                    placeholder="Sala (dejar vacio = primera sala)"
+                    value={inactTriggerRoom}
+                    onChange={(e) => setInactTriggerRoom(e.target.value)}
+                    className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-green-600"
+                  />
+                  <button
+                    onClick={triggerInact}
+                    disabled={!inactConfig.audioExists}
+                    className="bg-orange-900 hover:bg-orange-800 text-orange-200 text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={inactConfig.audioExists ? "Reproducir ahora" : "Primero sube un archivo de audio"}
+                  >
+                    Reproducir
+                  </button>
+                </div>
+                {!inactConfig.audioExists && (
+                  <p className="text-xs text-yellow-600 mt-2">Sube un archivo .wav para poder probar el anuncio.</p>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 

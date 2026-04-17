@@ -2,6 +2,7 @@ import net from "net";
 import { randomUUID } from "crypto";
 import { logger } from "../lib/logger";
 import { roomManager, ClientInfo } from "./room-manager";
+import { inactivityManager } from "./inactivity-manager";
 import {
   EQSO_COMMANDS,
   AUDIO_PAYLOAD_SIZE,
@@ -82,6 +83,7 @@ function processSingleByte(state: TcpClientState, byte: number): void {
         const ptt = buildPttStarted(client.name);
         roomManager.tryLockRoom(client.room, state.id);
         roomManager.broadcastToRoom(client.room, ptt, state.id);
+        inactivityManager.recordActivity(client.room);
       }
       state.readMultiByte = true;
       state.multiByteCmd = EQSO_COMMANDS.VOICE;

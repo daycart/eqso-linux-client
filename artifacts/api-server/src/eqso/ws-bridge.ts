@@ -3,6 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { randomUUID } from "crypto";
 import { logger } from "../lib/logger";
 import { roomManager, RemoteConnectionInfo } from "./room-manager";
+import { inactivityManager } from "./inactivity-manager";
 import {
   buildRoomList,
   buildUserList,
@@ -185,6 +186,7 @@ function handleLocalMode(
             const locked = roomManager.tryLockRoom(client.room, id);
             if (locked) {
               roomManager.broadcastToRoom(client.room, buildPttStarted(client.name), id);
+              inactivityManager.recordActivity(client.room);
               sendJson(ws, { type: "ptt_granted" });
             } else {
               sendJson(ws, { type: "ptt_denied", reason: "Canal ocupado" });
