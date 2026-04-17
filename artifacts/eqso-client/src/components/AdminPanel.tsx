@@ -95,6 +95,23 @@ export function AdminPanel({ token, onClose }: AdminPanelProps) {
     }
   }
 
+  async function setRelay(id: number, isRelay: boolean) {
+    setActionId(id);
+    try {
+      const res = await fetch(`${getApiBase()}/api/admin/users/${id}/relay`, {
+        method: "PATCH",
+        headers: authHeaders(token),
+        body: JSON.stringify({ isRelay }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Error");
+      await load();
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Error");
+    } finally {
+      setActionId(null);
+    }
+  }
+
   async function setRole(id: number, role: string) {
     setActionId(id);
     try {
@@ -371,6 +388,18 @@ export function AdminPanel({ token, onClose }: AdminPanelProps) {
                         Reactivar
                       </button>
                     )}
+                    <button
+                      onClick={() => setRelay(u.id, !u.isRelay)}
+                      disabled={actionId === u.id}
+                      className={`text-xs px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 ${
+                        u.isRelay
+                          ? "bg-orange-900 hover:bg-orange-800 text-orange-200"
+                          : "bg-gray-800 hover:bg-gray-700 text-gray-300"
+                      }`}
+                      title={u.isRelay ? "Convertir en usuario normal" : "Convertir en radio-enlace (0R-)"}
+                    >
+                      {u.isRelay ? "Quitar enlace" : "Hacer enlace"}
+                    </button>
                     <button
                       onClick={() => setRole(u.id, u.role === "admin" ? "user" : "admin")}
                       disabled={actionId === u.id}

@@ -100,6 +100,30 @@ router.patch("/users/:id/status", async (req, res) => {
   }
 });
 
+// PATCH /api/admin/users/:id/relay — toggle radio-relay flag
+router.patch("/users/:id/relay", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { isRelay } = req.body as { isRelay: boolean };
+
+    if (typeof isRelay !== "boolean") {
+      res.status(400).json({ error: "isRelay debe ser true o false" });
+      return;
+    }
+
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id)).limit(1);
+    if (!user) {
+      res.status(404).json({ error: "Usuario no encontrado" });
+      return;
+    }
+
+    await db.update(usersTable).set({ isRelay }).where(eq(usersTable.id, id));
+    res.json({ id, isRelay });
+  } catch {
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+});
+
 // PATCH /api/admin/users/:id/role — change role
 router.patch("/users/:id/role", async (req, res) => {
   try {
