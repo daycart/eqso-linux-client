@@ -206,7 +206,10 @@ Base: `/api`
 | POST | `/api/auth/register` | Público | Registro de usuario. El primero se convierte en admin automáticamente |
 | POST | `/api/auth/login` | Público | Login. Devuelve token de sesión (24h) |
 | GET | `/api/admin/users` | Admin | Lista todos los usuarios |
-| PUT | `/api/admin/users/:id` | Admin | Aprobar/desactivar usuario |
+| PATCH | `/api/admin/users/:id/status` | Admin | Cambiar estado (active/inactive/pending) |
+| PATCH | `/api/admin/users/:id/role` | Admin | Cambiar rol (admin/user) |
+| PATCH | `/api/admin/users/:id/relay` | Admin | Cambiar tipo radio-enlace (isRelay true/false) |
+| PATCH | `/api/admin/users/:id/password` | Admin | Resetear contraseña |
 | GET | `/api/servers` | Auth | Lista de servidores eQSO configurados |
 | GET | `/api/health` | Público | Estado del servidor |
 
@@ -364,6 +367,13 @@ Los puertos TCP 2171 y 8008 van **directamente** al proceso Node.js (no pasan po
 - Modo relay: prefijo `0R-` + formato Maidenhead
 - EqsoProxy para conexión a servidores externos con transcoding GSM↔PCM en tiempo real
 - Despliegue en VM Ubuntu + systemd + Nginx
+
+---
+
+### v1.1 — Abril 2026
+- Nuevo endpoint `PATCH /api/admin/users/:id/relay` para cambiar el tipo radio-enlace de un usuario
+- Botón "Hacer enlace / Quitar enlace" en el panel de administración (color naranja cuando es enlace)
+- Detalle en especificaciones de todas las rutas admin con sus métodos HTTP correctos
 
 ---
 
