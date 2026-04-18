@@ -44,10 +44,13 @@ export function RoomPanel({
     ...members.filter((m) => m.name !== currentName),
   ];
 
+  const currentIsRelay = currentName.startsWith("0R-");
   const radioLinks = members.filter(
     (m) => m.name !== currentName && m.name.startsWith("0R-")
   );
-  const hasRadioLinks = radioLinks.length > 0;
+  // Incluir al propio usuario si es un radioenlace
+  const totalRelayCount = radioLinks.length + (currentIsRelay ? 1 : 0);
+  const hasRadioLinks = totalRelayCount > 0;
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -77,7 +80,8 @@ export function RoomPanel({
           </p>
           <div className="space-y-1">
             {allMembers.map((m) => {
-              const isRadioLink = m.name.startsWith("0R-") && m.name !== currentName;
+              const isRadioLink = m.name.startsWith("0R-");
+              const isSelf = m.name === currentName;
               return (
                 <div
                   key={m.name}
@@ -86,7 +90,9 @@ export function RoomPanel({
                   }`}
                 >
                   <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                    m.name === currentName
+                    isSelf && isRadioLink
+                      ? "bg-green-700 text-green-100"
+                      : isSelf
                       ? "bg-green-700 text-green-100"
                       : isRadioLink
                       ? "bg-blue-800 text-blue-100"
@@ -102,7 +108,7 @@ export function RoomPanel({
                   </div>
                   <div className="min-w-0">
                     <p className={`text-sm font-mono truncate ${
-                      activeSpeaker === m.name ? "text-yellow-300" : isRadioLink ? "text-blue-300" : "text-gray-200"
+                      activeSpeaker === m.name ? "text-yellow-300" : isSelf ? "text-green-300" : isRadioLink ? "text-blue-300" : "text-gray-200"
                     }`}>
                       {m.name}
                       {m.name === currentName && (
@@ -162,7 +168,7 @@ export function RoomPanel({
           }`}>
             <span className={`w-1.5 h-1.5 rounded-full ${hasRadioLinks ? "bg-blue-400" : "bg-amber-400 animate-pulse"}`} />
             {hasRadioLinks
-              ? `${radioLinks.length} nodo${radioLinks.length !== 1 ? "s" : ""} RF`
+              ? `${totalRelayCount} nodo${totalRelayCount !== 1 ? "s" : ""} RF`
               : "Sin nodo RF"}
           </div>
           {channelBusy && !pttActive && (
