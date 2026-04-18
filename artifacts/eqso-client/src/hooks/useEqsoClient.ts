@@ -336,15 +336,10 @@ export function useEqsoClient(
       // Authenticated: callsign comes from session, server handles prefix/padding
       nodeName = name.toUpperCase().trim();
     } else {
-      // Legacy / unauthenticated: apply 0R- prefix + Maidenhead padding client-side
+      // Legacy / unauthenticated: apply 0R- prefix, suffix up to 10 chars
       const upper = name.toUpperCase().trim();
       const withPrefix = upper.startsWith("0R-") ? upper : `0R-${upper}`;
-      const prefix = "0R-";
-      const suffix = withPrefix.slice(prefix.length);
-      const TEMPLATE = "AA00AA";
-      let padded = "";
-      for (let i = 0; i < 6; i++) padded += i < suffix.length ? suffix[i] : TEMPLATE[i];
-      nodeName = prefix + padded;
+      nodeName = withPrefix.slice(0, 13); // "0R-" (3) + 10 chars max
     }
 
     pendingJoinRef.current = { name: nodeName, room };

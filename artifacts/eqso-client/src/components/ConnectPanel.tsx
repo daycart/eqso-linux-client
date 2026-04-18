@@ -181,30 +181,18 @@ export function ConnectPanel({
                 value={callsign}
                 onChange={(e) => onCallsignChange(e.target.value.toUpperCase())}
                 placeholder="IN80AU"
-                maxLength={17}
+                maxLength={10}
                 className="flex-1 bg-transparent px-3 py-2.5 text-white placeholder-gray-600 focus:outline-none font-mono text-sm"
               />
             </div>
             {callsign.length > 0 && (
               <p className="mt-1 text-xs text-gray-600">
                 Apareceras como:{" "}
-                <span className="font-mono text-green-400">
-                  {(() => {
-                    const upper = callsign.toUpperCase();
-                    if (upper.length >= 6) return `0R-${upper}`;
-                    const TEMPLATE = "AA00AA";
-                    let padded = "";
-                    for (let i = 0; i < 6; i++) padded += i < upper.length ? upper[i] : TEMPLATE[i];
-                    return `0R-${padded}`;
-                  })()}
-                </span>
-                {callsign.length < 6 && (
-                  <span className="text-amber-500/80"> (relleno Maidenhead automatico)</span>
-                )}
+                <span className="font-mono text-green-400">0R-{callsign.toUpperCase()}</span>
               </p>
             )}
             <p className="mt-1 text-xs text-gray-600">
-              Formato: localizador Maidenhead de 6 caracteres (ej: <span className="font-mono">IN80AU</span> para Madrid)
+              Maximo 10 caracteres (ej: <span className="font-mono">EA4RCH</span> o <span className="font-mono">IN80AU</span>)
             </p>
           </div>
 
