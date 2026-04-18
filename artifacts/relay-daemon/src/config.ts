@@ -36,7 +36,7 @@ const DEFAULTS: RelayConfig = {
   password: "",
   message: "Radio Enlace",
   server: "193.152.83.229",
-  port: 2171,
+  port: 8008,
   reconnectMinMs: 2000,
   reconnectMaxMs: 60000,
   audio: {

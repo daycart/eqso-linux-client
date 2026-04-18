@@ -7,7 +7,8 @@
   "message": "Radio Enlace ASORAPA 27.555 MHz",
 
   "server": "193.152.83.229",
-  "port": 2171,
+  "_comment_port": "Puertos validos: 2171 (eQSO estandar) o 8008 (ASORAPA / alternativo)",
+  "port": 8008,
 
   "reconnectMinMs": 2000,
   "reconnectMaxMs": 60000,
