@@ -239,6 +239,7 @@ function handleRemoteMode(
     id, host, port, name: "", room: "",
     status: "connecting", connectedAt: Date.now(),
     txBytes: 0, rxBytes: 0, remoteMembers: [],
+    wsSend: (data: object) => { try { sendJson(ws, data); } catch { /* ignore */ } },
   };
   roomManager.addRemoteConn(remoteConnInfo);
 
@@ -351,12 +352,20 @@ function handleRemoteMode(
         const txer = ev.data as { name: string };
         rmSetTx(txer.name, true);
         sendJson(ws, { type: "ptt_started", ...(ev.data as object) });
+        // Broadcast to all other proxy clients in the same room so they show the speaker animation
+        if (currentRoom) {
+          roomManager.broadcastJsonToRemoteRoom(currentRoom, { type: "ptt_started", name: txer.name }, id);
+        }
         break;
       }
       case "ptt_released": {
         const txer = ev.data as { name: string };
         rmSetTx(txer.name, false);
         sendJson(ws, { type: "ptt_released_remote", ...(ev.data as object) });
+        // Broadcast release to all other proxy clients in the same room
+        if (currentRoom) {
+          roomManager.broadcastJsonToRemoteRoom(currentRoom, { type: "ptt_released_remote", name: txer.name }, id);
+        }
         break;
       }
       case "audio": {

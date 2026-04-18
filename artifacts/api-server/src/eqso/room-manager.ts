@@ -17,6 +17,7 @@ export interface RemoteConnectionInfo {
   txBytes: number;
   rxBytes: number;
   remoteMembers: RemoteMember[];
+  wsSend?: (data: object) => void;
 }
 
 export interface ClientInfo {
@@ -179,6 +180,18 @@ export class RoomManager extends EventEmitter {
 
   getRemoteConn(id: string): RemoteConnectionInfo | undefined {
     return this.remoteConns.get(id);
+  }
+
+  /** Broadcast a JSON message to all remote proxy WebSocket clients in the same room,
+   *  except the one identified by excludeId (to avoid echo). */
+  broadcastJsonToRemoteRoom(room: string, data: object, excludeId?: string): void {
+    for (const conn of this.remoteConns.values()) {
+      if (conn.id === excludeId) continue;
+      if (conn.room !== room) continue;
+      try {
+        conn.wsSend?.(data);
+      } catch { /* ignore */ }
+    }
   }
 
   /** Full status for the monitor panel */

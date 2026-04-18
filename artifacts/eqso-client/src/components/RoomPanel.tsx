@@ -123,12 +123,17 @@ export function RoomPanel({
                     )}
                   </div>
                   {activeSpeaker === m.name && (
-                    <div className="ml-auto flex-shrink-0">
-                      <span className="flex gap-0.5">
-                        {[1,2,3].map((i) => (
-                          <span key={i} className="w-0.5 h-3 bg-yellow-400 rounded-full animate-pulse" style={{ animationDelay: `${i * 100}ms` }} />
-                        ))}
-                      </span>
+                    <div className="ml-auto flex-shrink-0 flex items-center gap-0.5">
+                      {[120, 60, 180, 90, 150].map((dur, i) => (
+                        <span
+                          key={i}
+                          className="w-1 bg-yellow-400 rounded-full"
+                          style={{
+                            animation: `vuBar ${dur}ms ease-in-out ${i * 40}ms infinite alternate`,
+                            minHeight: "4px",
+                          }}
+                        />
+                      ))}
                     </div>
                   )}
                 </div>
