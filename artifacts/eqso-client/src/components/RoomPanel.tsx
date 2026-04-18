@@ -89,18 +89,29 @@ export function RoomPanel({
             {allMembers.map((m) => {
               const isRadioLink = m.name.startsWith("0R-");
               const isSelf = m.name === currentName;
+              const isSelfTx = isSelf && pttActive && pttGranted;
+              const isSpeaking = activeSpeaker === m.name;
+              const initials = m.name.replace(/^0R-/, "").slice(0, 2).toUpperCase();
               return (
                 <div
                   key={m.name}
-                  className={`flex items-center gap-2 px-2 py-1.5 rounded-lg ${
-                    activeSpeaker === m.name ? "bg-yellow-900/30" : ""
+                  className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors ${
+                    isSelfTx
+                      ? "bg-red-900/30"
+                      : isSpeaking
+                      ? "bg-yellow-900/30"
+                      : ""
                   }`}
                 >
                   <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                    isSelf && isRadioLink
+                    isSelfTx
+                      ? "bg-red-700 text-red-100"
+                      : isSelf && isRadioLink
                       ? "bg-green-700 text-green-100"
                       : isSelf
                       ? "bg-green-700 text-green-100"
+                      : isSpeaking
+                      ? "bg-yellow-700 text-yellow-100"
                       : isRadioLink
                       ? "bg-blue-800 text-blue-100"
                       : "bg-gray-700 text-gray-300"
@@ -110,31 +121,39 @@ export function RoomPanel({
                         <path d="M4.5 6.375a4.125 4.125 0 1 1 8.25 0 4.125 4.125 0 0 1-8.25 0ZM14.25 8.625a3.375 3.375 0 1 1 6.75 0 3.375 3.375 0 0 1-6.75 0ZM1.5 19.125a7.125 7.125 0 0 1 14.25 0v.003l-.001.119a.75.75 0 0 1-.363.63 13.067 13.067 0 0 1-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 0 1-.364-.63l-.001-.122ZM17.25 19.128l-.001.144a2.25 2.25 0 0 1-.233.96 10.088 10.088 0 0 0 5.06-1.01.75.75 0 0 0 .42-.643 4.875 4.875 0 0 0-6.957-4.611 8.586 8.586 0 0 1 1.71 5.157v.003Z" />
                       </svg>
                     ) : (
-                      m.name[0]
+                      initials
                     )}
                   </div>
                   <div className="min-w-0">
                     <p className={`text-sm font-mono truncate ${
-                      activeSpeaker === m.name ? "text-yellow-300" : isSelf ? "text-green-300" : isRadioLink ? "text-blue-300" : "text-gray-200"
+                      isSelfTx
+                        ? "text-red-300"
+                        : isSpeaking
+                        ? "text-yellow-300"
+                        : isSelf
+                        ? "text-green-300"
+                        : isRadioLink
+                        ? "text-blue-300"
+                        : "text-gray-200"
                     }`}>
                       {m.name}
-                      {m.name === currentName && (
+                      {isSelf && (
                         <span className="text-gray-500 font-sans text-xs ml-1">(tú)</span>
                       )}
                     </p>
                     {isRadioLink && (
-                      <p className="text-xs text-blue-500">Nodo radioenlace</p>
+                      <p className={`text-xs ${isSelf ? "text-green-600" : "text-blue-500"}`}>Nodo radioenlace</p>
                     )}
-                    {m.message && !isRadioLink && m.name !== currentName && (
+                    {m.message && !isRadioLink && !isSelf && (
                       <p className="text-xs text-gray-500 truncate">{m.message}</p>
                     )}
                   </div>
-                  {(activeSpeaker === m.name || (isSelf && pttActive && pttGranted)) && (
+                  {(isSpeaking || isSelfTx) && (
                     <div className="ml-auto flex-shrink-0 flex items-center gap-0.5">
                       {[120, 60, 180, 90, 150].map((dur, i) => (
                         <span
                           key={i}
-                          className={`w-1 rounded-full ${isSelf && pttActive && pttGranted ? "bg-red-400" : "bg-yellow-400"}`}
+                          className={`w-1 rounded-full ${isSelfTx ? "bg-red-400" : "bg-yellow-400"}`}
                           style={{
                             animation: `vuBar ${dur}ms ease-in-out ${i * 40}ms infinite alternate`,
                             minHeight: "4px",
