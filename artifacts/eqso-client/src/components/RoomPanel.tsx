@@ -39,14 +39,21 @@ export function RoomPanel({
   onPttEnd,
   onDisconnect,
 }: RoomPanelProps) {
+  const seen = new Set<string>([currentName]);
   const allMembers: RoomMember[] = [
     { name: currentName, message: "Tú" },
-    ...members.filter((m) => m.name !== currentName),
+    ...members.reduce<RoomMember[]>((acc, m) => {
+      const n = m.name.trim();
+      if (!n || n === currentName || seen.has(n)) return acc;
+      seen.add(n);
+      acc.push({ name: n, message: m.message });
+      return acc;
+    }, []),
   ];
 
   const currentIsRelay = currentName.startsWith("0R-");
-  const radioLinks = members.filter(
-    (m) => m.name !== currentName && m.name.startsWith("0R-")
+  const radioLinks = allMembers.filter(
+    (m) => m.name !== currentName && m.name.trim().startsWith("0R-")
   );
   // Incluir al propio usuario si es un radioenlace
   const totalRelayCount = radioLinks.length + (currentIsRelay ? 1 : 0);
@@ -122,12 +129,12 @@ export function RoomPanel({
                       <p className="text-xs text-gray-500 truncate">{m.message}</p>
                     )}
                   </div>
-                  {activeSpeaker === m.name && (
+                  {(activeSpeaker === m.name || (isSelf && pttActive && pttGranted)) && (
                     <div className="ml-auto flex-shrink-0 flex items-center gap-0.5">
                       {[120, 60, 180, 90, 150].map((dur, i) => (
                         <span
                           key={i}
-                          className="w-1 bg-yellow-400 rounded-full"
+                          className={`w-1 rounded-full ${isSelf && pttActive && pttGranted ? "bg-red-400" : "bg-yellow-400"}`}
                           style={{
                             animation: `vuBar ${dur}ms ease-in-out ${i * 40}ms infinite alternate`,
                             minHeight: "4px",

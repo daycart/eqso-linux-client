@@ -121,22 +121,33 @@ export function useEqsoClient(
           : (msg.name as string) ?? null;
         setCurrentRoom(room);
         setCurrentName(name);
-        setMembers((msg.members as RoomMember[]) ?? []);
+        const rawMembers = (msg.members as RoomMember[]) ?? [];
+        const dedupedMembers = rawMembers.reduce<RoomMember[]>((acc, m) => {
+          const n = (m.name ?? "").trim();
+          if (n && !acc.some((x) => x.name === n)) acc.push({ name: n, message: m.message ?? "" });
+          return acc;
+        }, []);
+        setMembers(dedupedMembers);
         pendingJoinRef.current = null;
         break;
       }
 
-      case "user_joined":
+      case "user_joined": {
+        const joinName = (msg.name as string ?? "").trim();
+        const joinMsg  = (msg.message as string ?? "").trim();
+        if (!joinName) break;
         setMembers((prev) => {
-          const m = { name: msg.name as string, message: (msg.message as string) ?? "" };
-          if (prev.some((x) => x.name === m.name)) return prev;
-          return [...prev, m];
+          if (prev.some((x) => x.name === joinName)) return prev;
+          return [...prev, { name: joinName, message: joinMsg }];
         });
         break;
+      }
 
-      case "user_left":
-        setMembers((prev) => prev.filter((m) => m.name !== (msg.name as string)));
+      case "user_left": {
+        const leftName = (msg.name as string ?? "").trim();
+        setMembers((prev) => prev.filter((m) => m.name !== leftName));
         break;
+      }
 
       case "ptt_started":
         setActiveSpeaker(msg.name as string);
@@ -236,6 +247,7 @@ export function useEqsoClient(
         }
       } else if (count > 1) {
         const newMembers: RoomMember[] = [];
+        const nameSeen = new Set<string>();
         let off = 4;
         for (let i = 0; i < count; i++) {
           if (off + 5 >= view.length) break;
@@ -243,12 +255,15 @@ export function useEqsoClient(
           if (off >= view.length) break;
           const nameLen = view[off++];
           if (off + nameLen > view.length) break;
-          const name = new TextDecoder().decode(view.slice(off, off + nameLen));
+          const name = new TextDecoder().decode(view.slice(off, off + nameLen)).trim();
           off += nameLen;
           const msgLen = view[off++];
           const msg = msgLen > 0 ? new TextDecoder().decode(view.slice(off, off + msgLen)) : "";
           off += msgLen;
-          newMembers.push({ name, message: msg });
+          if (name && !nameSeen.has(name)) {
+            nameSeen.add(name);
+            newMembers.push({ name, message: msg });
+          }
         }
         if (newMembers.length > 0) setMembers(newMembers);
       }
