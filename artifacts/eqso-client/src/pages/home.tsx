@@ -193,8 +193,9 @@ export default function HomePage() {
             selectedRoom={selectedRoom}
             isRemote={eqso.selectedServer.mode === "remote"}
             onRoomChange={(room) => {
+              if (room === eqso.currentRoom) return;
               setSelectedRoom(room);
-              eqso.join(eqso.currentName!, room, "", "", auth?.token);
+              eqso.join(eqso.currentName!, room, statusMessage, password, auth?.token);
             }}
             onPttStart={pttStart}
             onPttEnd={pttEnd}

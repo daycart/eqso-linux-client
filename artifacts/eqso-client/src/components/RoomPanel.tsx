@@ -65,19 +65,26 @@ export function RoomPanel({
         <div className="px-4 py-3 border-b border-gray-800">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Salas</p>
           <div className="space-y-0.5">
-            {rooms.map((room) => (
-              <button
-                key={room}
-                onClick={() => onRoomChange(room)}
-                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                  room === currentRoom
-                    ? "bg-green-900/50 text-green-300 font-medium"
-                    : "text-gray-400 hover:bg-gray-800 hover:text-gray-200"
-                }`}
-              >
-                # {room}
-              </button>
-            ))}
+            {rooms.map((room) => {
+              const isActive = room === currentRoom;
+              return (
+                <button
+                  key={room}
+                  onClick={() => onRoomChange(room)}
+                  title={isActive ? `Sala activa: #${room}` : `Cambiar a sala #${room}`}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between gap-1 ${
+                    isActive
+                      ? "bg-green-900/50 text-green-300 font-medium"
+                      : "text-gray-500 hover:bg-gray-800 hover:text-gray-300"
+                  }`}
+                >
+                  <span># {room}</span>
+                  {isActive && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
