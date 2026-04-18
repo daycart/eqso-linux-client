@@ -51,21 +51,25 @@ export function buildRoomList(rooms: string[]): Buffer {
 export function buildUserList(
   clients: Array<{ name: string; message: string }>
 ): Buffer {
+  // Header: [0x16][count][0x00][0x00][0x00] — 5 bytes (matches real eQSO server format).
+  // Per-entry prefix: [action=0x00][pad x3] = 4 bytes, then [nameLen][name][msgLen][msg][0x00].
+  // For count=1 this also satisfies the single-entry parser (total offset to nameLen = 9).
+  // For count>1 the multi-entry parser starts at off=5, reads action at pos[5], nameLen at pos[9].
   const parts: Buffer[] = [
-    Buffer.from([0x16, clients.length & 0xff, 0x00, 0x00]),
+    Buffer.from([0x16, clients.length & 0xff, 0x00, 0x00, 0x00]),
   ];
   for (const c of clients) {
     const nb = Buffer.from(c.name, "ascii");
     const mb = Buffer.from(c.message, "ascii");
     parts.push(
-      Buffer.from([0x00, 0x00, 0x00, 0x00, 0x00]),
+      Buffer.from([0x00, 0x00, 0x00, 0x00]), // action(0x00=join) + 3 padding bytes
       Buffer.from([nb.length]),
       nb,
       Buffer.from([mb.length]),
-      mb
+      mb,
+      Buffer.from([0x00])  // per-entry terminator
     );
   }
-  parts.push(Buffer.from([0x00]));
   return Buffer.concat(parts);
 }
 
