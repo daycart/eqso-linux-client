@@ -136,8 +136,7 @@ export class RoomManager extends EventEmitter {
       const c = this.clients.get(id);
       if (c) {
         try {
-          c.txBytes += data.length;
-          c.send(data);
+          c.send(data); // txBytes is tracked inside each client's send() callback
         } catch { /* ignore */ }
       }
     }
@@ -147,7 +146,6 @@ export class RoomManager extends EventEmitter {
     for (const [id, c] of this.clients) {
       if (id === excludeId) continue;
       try {
-        c.txBytes += data.length;
         c.send(data);
       } catch { /* ignore */ }
     }

@@ -30,6 +30,7 @@ interface TcpClientState {
   readMultiByte: boolean;
   multiByteCmd: number;
   handshakeDone: boolean;
+  disconnected: boolean; // guard against double-disconnect (error + close both fire)
 }
 
 function sendRoomList(state: TcpClientState): void {
@@ -206,22 +207,28 @@ function handleJoin(
 
   const serverPassword = process.env.EQSO_PASSWORD ?? "";
   if (serverPassword && password !== serverPassword) {
-    safeWrite(state, buildErrorMessage("Acceso denegado: contraseña incorrecta"));
+    safeWrite(state, buildErrorMessage("Acceso denegado: contrasena incorrecta"));
     logger.warn({ id: state.id, name }, "TCP client rejected: wrong password");
     state.socket.destroy();
     return;
   }
 
-  if (!name || name.length > 20) {
-    safeWrite(state, buildErrorMessage("Invalid callsign (max 20 chars)"));
+  if (!name || name.length > 30) {
+    safeWrite(state, buildErrorMessage("Indicativo invalido (max 30 chars)"));
+    logger.warn({ id: state.id, name, len: name?.length }, "TCP client rejected: invalid callsign");
+    state.socket.destroy();
     return;
   }
-  if (!room || room.length > 20) {
-    safeWrite(state, buildErrorMessage("Invalid room name (max 20 chars)"));
+  if (!room || room.length > 30) {
+    safeWrite(state, buildErrorMessage("Nombre de sala invalido (max 30 chars)"));
+    logger.warn({ id: state.id, room }, "TCP client rejected: invalid room");
+    state.socket.destroy();
     return;
   }
   if (roomManager.isNameTaken(name, state.id)) {
-    safeWrite(state, buildErrorMessage(`Callsign "${name}" already in use`));
+    safeWrite(state, buildErrorMessage(`Indicativo "${name}" ya en uso`));
+    logger.warn({ id: state.id, name }, "TCP client rejected: callsign already in use — destroying socket");
+    state.socket.destroy(); // destroy so the anonymous connection does not linger for 2 minutes
     return;
   }
 
@@ -274,10 +281,14 @@ function handleData(state: TcpClientState, data: Buffer): void {
 }
 
 function handleDisconnect(state: TcpClientState): void {
+  if (state.disconnected) return; // guard: error event is always followed by close event
+  state.disconnected = true;
+
   const client = roomManager.getClient(state.id);
   if (client?.room) {
     const leftPkt = buildUserLeft(client.name);
     roomManager.broadcastToRoom(client.room, leftPkt, state.id);
+    logger.info({ id: state.id, name: client.name, room: client.room }, "TCP eQSO client left room");
   }
   roomManager.removeClient(state.id);
   logger.info({ id: state.id }, "TCP eQSO client disconnected");
@@ -295,6 +306,7 @@ export function startTcpServer(port: number): net.Server {
       readMultiByte: false,
       multiByteCmd: 0,
       handshakeDone: false,
+      disconnected: false,
     };
 
     if (!roomManager.isEnabled()) {
