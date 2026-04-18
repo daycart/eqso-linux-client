@@ -127,14 +127,11 @@ function handleLocalMode(
             isRelay = session.isRelay;
           }
 
-          // Apply 0R- prefix + Maidenhead padding for relay users
+          // Apply 0R- prefix for relay users, suffix up to 10 chars
           if (isRelay) {
             const prefix = "0R-";
-            const suffix = name.startsWith(prefix) ? name.slice(prefix.length) : name;
-            const TEMPLATE = "AA00AA";
-            let padded = "";
-            for (let i = 0; i < 6; i++) padded += i < suffix.length ? suffix[i] : TEMPLATE[i];
-            name = prefix + padded;
+            const withPrefix = name.startsWith(prefix) ? name : `${prefix}${name}`;
+            name = withPrefix.slice(0, 13); // "0R-" (3) + 10 chars max
           }
 
           const serverPassword = process.env.EQSO_PASSWORD ?? "";
@@ -452,16 +449,11 @@ function handleRemoteMode(
             isRelay = session.isRelay;
           }
 
-          // Apply 0R- prefix + Maidenhead padding for relay users
+          // Apply 0R- prefix for relay users, suffix up to 10 chars
           if (isRelay) {
             const prefix = "0R-";
-            const suffix = resolvedName.startsWith(prefix)
-              ? resolvedName.slice(prefix.length)
-              : resolvedName;
-            const TEMPLATE = "AA00AA";
-            let padded = "";
-            for (let i = 0; i < 6; i++) padded += i < suffix.length ? suffix[i] : TEMPLATE[i];
-            resolvedName = prefix + padded;
+            const withPrefix = resolvedName.startsWith(prefix) ? resolvedName : `${prefix}${resolvedName}`;
+            resolvedName = withPrefix.slice(0, 13); // "0R-" (3) + 10 chars max
           }
 
           currentName = resolvedName;
