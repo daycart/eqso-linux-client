@@ -1,0 +1,61 @@
+# Unidad de servicio systemd para el demonio de radioenlace eQSO ASORAPA.
+#
+# Es una plantilla (@): el nombre de instancia es la sala a la que se conecta.
+# Ejemplos:
+#   systemctl enable --now eqso-relay@CB
+#   systemctl enable --now eqso-relay@ASORAPA
+#   systemctl enable --now eqso-relay@PRUEBAS
+#
+# Para cada instancia debe existir el archivo de configuracion:
+#   /etc/eqso-relay/<instancia>.json
+#
+# Instalacion:
+#   sudo cp eqso-relay@.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now eqso-relay@CB
+
+[Unit]
+Description=eQSO Radioenlace — sala %i
+Documentation=https://github.com/daycart/eqso-linux-client
+After=network-online.target sound.target
+Wants=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=eqso
+Group=audio
+
+# La instancia (%i) determina que archivo de config leer
+Environment=RELAY_INSTANCE=%i
+Environment=NODE_ENV=production
+
+# Ruta al daemon compilado (ajustar si se instala en otro lugar)
+WorkingDirectory=/opt/eqso-asorapa/artifacts/relay-daemon
+ExecStart=/usr/bin/node --enable-source-maps dist/main.mjs
+
+# Reinicio automatico: siempre, excepto si se para manualmente
+Restart=always
+RestartSec=5s
+
+# Salida de log a journald (acceso via: journalctl -u eqso-relay@%i -f)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=eqso-relay-%i
+
+# Seguridad basica (solo lo estrictamente necesario)
+PrivateTmp=true
+ProtectSystem=full
+NoNewPrivileges=true
+
+# Permite acceso a /dev/snd para ALSA
+SupplementaryGroups=audio
+
+# Senales de parada
+KillMode=process
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

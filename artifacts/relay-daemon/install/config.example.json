@@ -1,0 +1,36 @@
+{
+  "_comment": "Renombra este archivo a /etc/eqso-relay/CB.json (o el nombre de la sala)",
+
+  "callsign": "0R-ASORAPA",
+  "room": "CB",
+  "password": "Asorapa2024.",
+  "message": "Radio Enlace ASORAPA 27.555 MHz",
+
+  "server": "193.152.83.229",
+  "port": 2171,
+
+  "reconnectMinMs": 2000,
+  "reconnectMaxMs": 60000,
+
+  "audio": {
+    "_comment_devices": "Usa 'arecord -l' y 'aplay -l' para ver los dispositivos disponibles",
+    "captureDevice":  "default",
+    "playbackDevice": "default",
+
+    "_comment_vox": "VOX: activacion automatica por nivel de audio",
+    "vox": true,
+    "voxThresholdRms": 800,
+    "voxHangMs": 1000,
+
+    "_comment_gain": "Ganancia: 1.0 = sin cambio, 2.0 = doble volumen",
+    "inputGain": 1.0,
+    "outputGain": 1.0
+  },
+
+  "control": {
+    "_comment": "Servidor HTTP de control en localhost. Acceso: curl http://127.0.0.1:8009/status",
+    "enabled": true,
+    "port": 8009,
+    "host": "127.0.0.1"
+  }
+}
