@@ -169,6 +169,7 @@ export default function HomePage() {
             password={password}
             selectedServer={eqso.selectedServer}
             servers={servers}
+            auth={auth}
             onCallsignChange={setCallsign}
             onRoomChange={setSelectedRoom}
             onStatusMessageChange={setStatusMessage}

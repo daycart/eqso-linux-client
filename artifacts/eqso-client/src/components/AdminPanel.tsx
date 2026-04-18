@@ -552,12 +552,17 @@ export function AdminPanel({ token, onClose }: AdminPanelProps) {
                       </span>
                       {u.isRelay && (
                         <span className="text-[10px] border border-orange-700 bg-orange-900 text-orange-300 rounded px-1.5 py-0.5">
-                          enlace 0R-
+                          radioenlace
                         </span>
                       )}
                       {u.role === "admin" && (
                         <span className="text-[10px] border border-blue-700 bg-blue-900 text-blue-300 rounded px-1.5 py-0.5">
                           admin
+                        </span>
+                      )}
+                      {!u.isRelay && u.role !== "admin" && (
+                        <span className="text-[10px] border border-green-800 bg-green-950 text-green-400 rounded px-1.5 py-0.5">
+                          usuario
                         </span>
                       )}
                     </div>

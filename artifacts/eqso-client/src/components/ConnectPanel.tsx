@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { ConnectionStatus, EqsoServer, KNOWN_SERVERS } from "@/hooks/useEqsoClient";
+import type { AuthSession } from "@/components/LoginPanel";
 
 interface ConnectPanelProps {
   status: ConnectionStatus;
@@ -11,6 +12,7 @@ interface ConnectPanelProps {
   password: string;
   selectedServer: EqsoServer;
   servers?: EqsoServer[];
+  auth?: AuthSession | null;
   onCallsignChange: (v: string) => void;
   onRoomChange: (v: string) => void;
   onStatusMessageChange: (v: string) => void;
@@ -28,6 +30,7 @@ export function ConnectPanel({
   statusMessage,
   password,
   servers: serversProp,
+  auth,
   onCallsignChange,
   onRoomChange,
   onStatusMessageChange,
@@ -35,6 +38,13 @@ export function ConnectPanel({
   onConnect,
   onJoin,
 }: ConnectPanelProps) {
+  const isAuthenticated = !!auth;
+  const isRelay = auth?.isRelay ?? false;
+  const displayCallsign = isAuthenticated
+    ? (isRelay
+        ? (auth!.callsign.startsWith("0R-") ? auth!.callsign : `0R-${auth!.callsign}`)
+        : auth!.callsign)
+    : null;
   const isConnected = status === "connected";
   const isConnecting = status === "connecting";
 
@@ -174,26 +184,51 @@ export function ConnectPanel({
             <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
               Indicativo / Callsign
             </label>
-            <div className="flex items-center bg-gray-800 border border-gray-700 rounded-lg focus-within:border-green-500 focus-within:ring-1 focus-within:ring-green-500 overflow-hidden">
-              <span className="px-2.5 py-2.5 text-green-400 font-mono text-sm select-none border-r border-gray-700 bg-gray-900">0R-</span>
-              <input
-                type="text"
-                value={callsign}
-                onChange={(e) => onCallsignChange(e.target.value.toUpperCase())}
-                placeholder="IN80AU"
-                maxLength={10}
-                className="flex-1 bg-transparent px-3 py-2.5 text-white placeholder-gray-600 focus:outline-none font-mono text-sm"
-              />
-            </div>
-            {callsign.length > 0 && (
-              <p className="mt-1 text-xs text-gray-600">
-                Apareceras como:{" "}
-                <span className="font-mono text-green-400">0R-{callsign.toUpperCase()}</span>
-              </p>
+
+            {isAuthenticated ? (
+              /* Authenticated: show identity badge, callsign fixed from session */
+              <div className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 ${
+                isRelay
+                  ? "border-orange-800 bg-orange-950/30"
+                  : "border-green-800 bg-green-950/30"
+              }`}>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                  isRelay ? "bg-orange-800 text-orange-100" : "bg-green-800 text-green-100"
+                }`}>
+                  {displayCallsign![0]}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-mono font-bold text-white text-sm">{displayCallsign}</p>
+                  <p className="text-xs text-gray-500">
+                    {isRelay ? "Radioenlace (0R-)" : "Usuario normal"}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              /* Legacy unauthenticated: 0R- prefix + editable callsign */
+              <>
+                <div className="flex items-center bg-gray-800 border border-gray-700 rounded-lg focus-within:border-green-500 focus-within:ring-1 focus-within:ring-green-500 overflow-hidden">
+                  <span className="px-2.5 py-2.5 text-green-400 font-mono text-sm select-none border-r border-gray-700 bg-gray-900">0R-</span>
+                  <input
+                    type="text"
+                    value={callsign}
+                    onChange={(e) => onCallsignChange(e.target.value.toUpperCase())}
+                    placeholder="IN80AU"
+                    maxLength={10}
+                    className="flex-1 bg-transparent px-3 py-2.5 text-white placeholder-gray-600 focus:outline-none font-mono text-sm"
+                  />
+                </div>
+                {callsign.length > 0 && (
+                  <p className="mt-1 text-xs text-gray-600">
+                    Apareceras como:{" "}
+                    <span className="font-mono text-green-400">0R-{callsign.toUpperCase()}</span>
+                  </p>
+                )}
+                <p className="mt-1 text-xs text-gray-600">
+                  Maximo 10 caracteres (ej: <span className="font-mono">EA4RCH</span> o <span className="font-mono">IN80AU</span>)
+                </p>
+              </>
             )}
-            <p className="mt-1 text-xs text-gray-600">
-              Maximo 10 caracteres (ej: <span className="font-mono">EA4RCH</span> o <span className="font-mono">IN80AU</span>)
-            </p>
           </div>
 
           {/* ROOM */}
@@ -266,7 +301,7 @@ export function ConnectPanel({
               </div>
               <button
                 onClick={onJoin}
-                disabled={!callsign.trim()}
+                disabled={isAuthenticated ? !displayCallsign : !callsign.trim()}
                 className="w-full bg-green-600 hover:bg-green-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-semibold rounded-lg py-3 transition-colors"
               >
                 Entrar a la sala #{selectedRoom}
