@@ -179,7 +179,6 @@ class InactivityManager {
     // Float32 packets → local WS browser clients + remote WS clients
     const wsDone = remotePacketsPromise.then((remotePackets) => new Promise<void>((resolve) => {
       let j = 0;
-      let loggedFirst = false;
       const timer = setInterval(() => {
         if (j >= remotePackets.length) {
           clearInterval(timer);
@@ -187,14 +186,6 @@ class InactivityManager {
           return;
         }
         const pkt = remotePackets[j++];
-        if (!loggedFirst) {
-          loggedFirst = true;
-          // Use slice() to get an aligned copy — Buffer pool may have unaligned byteOffset
-          const aligned = pkt.buffer.slice(pkt.byteOffset + 1, pkt.byteOffset + pkt.length);
-          const f32 = new Float32Array(aligned);
-          let pk = 0; for (let i = 0; i < f32.length; i++) { const a = Math.abs(f32[i]); if (a > pk) pk = a; }
-          logger.info({ room, pktSize: pkt.length, floatSamples: f32.length, peak: pk.toFixed(4), opcode: pkt[0].toString(16) }, "Float32 WS audio: first packet");
-        }
         roomManager.broadcastBinToLocalWsClients(room, pkt);  // local browser clients
         roomManager.broadcastBinToRemoteRoom(room, pkt);       // ASORAPA-connected clients
       }, PACKET_INTERVAL_MS);
