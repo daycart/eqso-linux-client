@@ -161,6 +161,9 @@ class InactivityManager {
     // Do the PCM conversion in parallel so we don't delay local playback.
     const remotePacketsPromise = this.convertWavToFloat32Packets(this.audioFile);
 
+    // GSM packets → TCP clients only (Windows eQSO clients, radio gateways)
+    // Float32 packets → local WS browser clients AND remote WS clients
+    // This bypasses the JS GSM decoder which produces too-low amplitude.
     const localDone = new Promise<void>((resolve) => {
       let i = 0;
       const timer = setInterval(() => {
@@ -169,12 +172,12 @@ class InactivityManager {
           resolve();
           return;
         }
-        roomManager.broadcastToRoom(room, packets[i++]);
+        roomManager.broadcastToTcpClientsInRoom(room, packets[i++]);
       }, PACKET_INTERVAL_MS);
     });
 
-    // Send decoded audio to remote WebSocket clients at the same cadence
-    const remoteDone = remotePacketsPromise.then((remotePackets) => new Promise<void>((resolve) => {
+    // Float32 packets → local WS browser clients + remote WS clients
+    const wsDone = remotePacketsPromise.then((remotePackets) => new Promise<void>((resolve) => {
       let j = 0;
       const timer = setInterval(() => {
         if (j >= remotePackets.length) {
@@ -182,11 +185,13 @@ class InactivityManager {
           resolve();
           return;
         }
-        roomManager.broadcastBinToRemoteRoom(room, remotePackets[j++]);
+        const pkt = remotePackets[j++];
+        roomManager.broadcastBinToLocalWsClients(room, pkt);  // local browser clients
+        roomManager.broadcastBinToRemoteRoom(room, pkt);       // ASORAPA-connected clients
       }, PACKET_INTERVAL_MS);
     }));
 
-    await Promise.all([localDone, remoteDone]);
+    await Promise.all([localDone, wsDone]);
   }
 
   /** Convert WAV → Float32 PCM packets with 0x11 opcode for browser WebSocket clients */

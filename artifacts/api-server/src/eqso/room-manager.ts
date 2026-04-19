@@ -144,6 +144,32 @@ export class RoomManager extends EventEmitter {
     }
   }
 
+  /** Send data only to TCP clients in a room (skips WebSocket browser clients). */
+  broadcastToTcpClientsInRoom(room: string, data: Buffer, excludeId?: string): void {
+    const members = this.rooms.get(room);
+    if (!members) return;
+    for (const id of members) {
+      if (id === excludeId) continue;
+      const c = this.clients.get(id);
+      if (c?.protocol === "tcp") {
+        try { c.send(data); } catch { /* ignore */ }
+      }
+    }
+  }
+
+  /** Send a pre-decoded [0x11][Float32 PCM] packet directly to local WebSocket browser clients. */
+  broadcastBinToLocalWsClients(room: string, data: Buffer, excludeId?: string): void {
+    const members = this.rooms.get(room);
+    if (!members) return;
+    for (const id of members) {
+      if (id === excludeId) continue;
+      const c = this.clients.get(id);
+      if (c?.protocol === "ws") {
+        try { c.send(data); } catch { /* ignore */ }
+      }
+    }
+  }
+
   broadcastToAll(data: Buffer, excludeId?: string): void {
     for (const [id, c] of this.clients) {
       if (id === excludeId) continue;
