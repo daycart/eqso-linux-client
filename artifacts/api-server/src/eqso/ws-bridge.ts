@@ -20,6 +20,7 @@ import { validateSession } from "../lib/auth";
 import { moderationManager } from "./moderation-manager";
 import {
   FfmpegGsmEncoder,
+  FfmpegGsmDecoder,
   GSM_FRAME_SAMPLES,
   FRAMES_PER_PACKET,
   GSM_PACKET_BYTES,

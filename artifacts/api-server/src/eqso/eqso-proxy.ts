@@ -217,6 +217,13 @@ class EqsoPacketParser {
 // Without them, the server may ignore PTT requests.
 const SILENCE_INTERVAL_MS = 150;
 
+interface PendingJoin {
+  name: string;
+  room: string;
+  message: string;
+  password: string;
+}
+
 export class EqsoProxy extends EventEmitter {
   private socket: net.Socket | null = null;
   private parser = new EqsoPacketParser();
@@ -226,6 +233,7 @@ export class EqsoProxy extends EventEmitter {
   private connected = false;
   private silenceTimer: ReturnType<typeof setInterval> | null = null;
   private transmitting = false;
+  private pendingJoin: PendingJoin | null = null;
 
   constructor(host: string, port: number) {
     super();
@@ -295,9 +303,16 @@ export class EqsoProxy extends EventEmitter {
     this.socket?.destroy();
     this.socket = null;
     this.connected = false;
+    this.handshakeDone = false;
+    this.pendingJoin = null;
   }
 
   sendJoin(name: string, room: string, message: string, password = ""): void {
+    if (!this.handshakeDone) {
+      this.pendingJoin = { name, room, message, password };
+      logger.info({ name, room }, "eQSO proxy: join queued — waiting for TCP handshake");
+      return;
+    }
     const pkt = buildJoinPacket(name, room, message, password);
     logger.info(
       { name, room, hex: pkt.toString("hex") },
@@ -384,6 +399,13 @@ export class EqsoProxy extends EventEmitter {
           this.emit("event", { type: "connected" } as ProxyEvent);
           // Start sending 0x02 silence heartbeats now that handshake is done
           this.startSilenceFrames();
+          // Flush any join that arrived before the handshake was complete
+          if (this.pendingJoin) {
+            const pj = this.pendingJoin;
+            this.pendingJoin = null;
+            logger.info({ name: pj.name, room: pj.room }, "eQSO proxy: flushing queued join after handshake");
+            this.sendJoin(pj.name, pj.room, pj.message, pj.password);
+          }
         }
         break;
 

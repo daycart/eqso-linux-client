@@ -117,16 +117,11 @@ export function buildPttReleased(name: string): Buffer {
 }
 
 export function buildErrorMessage(msg: string): Buffer {
-  const errName = Buffer.from("!Error!", "ascii");
-  const msgBuf = Buffer.from(msg, "ascii");
+  const msgBuf = Buffer.from(msg.slice(0, 253), "ascii");
   return Buffer.concat([
-    Buffer.from([0x16, 0x01, 0x00, 0x00]),
-    Buffer.from([0x00, 0x00, 0x00, 0x00, 0x00]),
-    Buffer.from([errName.length]),
-    errName,
-    Buffer.from([msgBuf.length]),
+    Buffer.from([0x0b, msgBuf.length]),
     msgBuf,
-    Buffer.from([0x00]),
+    Buffer.from([0x03]),
   ]);
 }
 
