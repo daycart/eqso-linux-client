@@ -219,9 +219,12 @@ export function useEqsoClient(
 
     if (cmd === 0x16 && view.length >= 2) {
       const count = view[1];
-      if (count === 1 && view.length >= 9) {
-        const action = view[4];
-        let off = 8;
+      if (count === 1 && view.length >= 10) {
+        // eQSO single-event format:
+        //   [0x16][0x01][0x00][0x00][0x00][action][0x00][0x00][0x00][nameLen][name...]
+        // action is at index 5, nameLen is at index 9 (not 4 and 8).
+        const action = view[5];
+        let off = 9;
         if (off >= view.length) return;
         const nameLen = view[off++];
         if (off + nameLen > view.length) return;

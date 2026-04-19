@@ -287,6 +287,7 @@ function handleRemoteMode(
     status: "connecting", connectedAt: Date.now(),
     txBytes: 0, rxBytes: 0, remoteMembers: [],
     wsSend: (data: object) => { try { sendJson(ws, data); } catch { /* ignore */ } },
+    wsSendBin: (data: Buffer) => { try { sendBin(ws, data); } catch { /* ignore */ } },
   };
   roomManager.addRemoteConn(remoteConnInfo);
 

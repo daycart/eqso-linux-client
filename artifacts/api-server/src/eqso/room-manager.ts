@@ -18,6 +18,7 @@ export interface RemoteConnectionInfo {
   rxBytes: number;
   remoteMembers: RemoteMember[];
   wsSend?: (data: object) => void;
+  wsSendBin?: (data: Buffer) => void;
 }
 
 export interface ClientInfo {
@@ -190,6 +191,16 @@ export class RoomManager extends EventEmitter {
       if (conn.room !== room) continue;
       try {
         conn.wsSend?.(data);
+      } catch { /* ignore */ }
+    }
+  }
+
+  /** Broadcast a binary frame to all remote proxy WebSocket clients in the same room. */
+  broadcastBinToRemoteRoom(room: string, data: Buffer): void {
+    for (const conn of this.remoteConns.values()) {
+      if (conn.room !== room) continue;
+      try {
+        conn.wsSendBin?.(data);
       } catch { /* ignore */ }
     }
   }

@@ -4,9 +4,12 @@ import fs from "fs/promises";
 import { existsSync } from "fs";
 import { logger } from "../lib/logger";
 import { roomManager } from "./room-manager";
-import { buildPttStarted, buildPttReleased, AUDIO_PAYLOAD_SIZE } from "./protocol";
+import { buildPttStarted, buildPttReleased, buildUserJoined, buildUserLeft, AUDIO_PAYLOAD_SIZE } from "./protocol";
 
 const PACKET_INTERVAL_MS = 120; // 6 GSM frames × 20ms = 120ms per eQSO audio packet
+// Remote WebSocket clients receive Float32 PCM at 8000 Hz.
+// 960 samples = 6 GSM frames × 160 samples each (matches eQSO packet timing).
+const REMOTE_CHUNK_SAMPLES = 960;
 const SERVER_CALLSIGN = "SERVIDOR";
 const DEFAULT_TIMEOUT_MIN = 10;
 const DEFAULT_AUDIO_FILE = path.join(process.cwd(), "audio", "inactivity.wav");
@@ -118,11 +121,31 @@ class InactivityManager {
       return;
     }
 
+    const localMembers = roomManager.getRoomMembers(room);
+    logger.info({ room, localMembers: localMembers.map(c => `${c.name}(${c.protocol})`) },
+      "Inactivity playback starting — local room members");
+
+    const INACT_MSG = "Anuncio del servidor";
+
     this.playing.add(room);
     try {
+      // Add SERVIDOR as a virtual member so the UI can show VU bar animation
+      roomManager.broadcastToRoom(room, buildUserJoined(SERVER_CALLSIGN, INACT_MSG));
+      roomManager.broadcastJsonToRemoteRoom(room, { type: "user_joined", name: SERVER_CALLSIGN, message: INACT_MSG });
+
+      // PTT start
       roomManager.broadcastToRoom(room, buildPttStarted(SERVER_CALLSIGN));
+      roomManager.broadcastJsonToRemoteRoom(room, { type: "ptt_started", name: SERVER_CALLSIGN });
+
       await this.streamAudio(room);
+
+      // PTT release
       roomManager.broadcastToRoom(room, buildPttReleased(SERVER_CALLSIGN));
+      roomManager.broadcastJsonToRemoteRoom(room, { type: "ptt_released_remote", name: SERVER_CALLSIGN });
+
+      // Remove virtual member
+      roomManager.broadcastToRoom(room, buildUserLeft(SERVER_CALLSIGN));
+      roomManager.broadcastJsonToRemoteRoom(room, { type: "user_left", name: SERVER_CALLSIGN });
     } finally {
       roomManager.unlockRoom(room, "_INACTIVITY_");
       this.playing.delete(room);
@@ -134,7 +157,11 @@ class InactivityManager {
     const packets = await this.convertWavToEqsoPackets(this.audioFile);
     if (packets.length === 0) return;
 
-    return new Promise((resolve) => {
+    // Also prepare decoded Float32 packets for remote WebSocket clients.
+    // Do the PCM conversion in parallel so we don't delay local playback.
+    const remotePacketsPromise = this.convertWavToFloat32Packets(this.audioFile);
+
+    const localDone = new Promise<void>((resolve) => {
       let i = 0;
       const timer = setInterval(() => {
         if (i >= packets.length) {
@@ -144,6 +171,67 @@ class InactivityManager {
         }
         roomManager.broadcastToRoom(room, packets[i++]);
       }, PACKET_INTERVAL_MS);
+    });
+
+    // Send decoded audio to remote WebSocket clients at the same cadence
+    const remoteDone = remotePacketsPromise.then((remotePackets) => new Promise<void>((resolve) => {
+      let j = 0;
+      const timer = setInterval(() => {
+        if (j >= remotePackets.length) {
+          clearInterval(timer);
+          resolve();
+          return;
+        }
+        roomManager.broadcastBinToRemoteRoom(room, remotePackets[j++]);
+      }, PACKET_INTERVAL_MS);
+    }));
+
+    await Promise.all([localDone, remoteDone]);
+  }
+
+  /** Convert WAV → Float32 PCM packets with 0x11 opcode for browser WebSocket clients */
+  private convertWavToFloat32Packets(filePath: string): Promise<Buffer[]> {
+    return new Promise((resolve, reject) => {
+      const ff = spawn("ffmpeg", [
+        "-i", filePath,
+        "-ar", "8000",
+        "-ac", "1",
+        "-f", "s16le",
+        "pipe:1",
+      ], { stdio: ["ignore", "pipe", "pipe"] });
+
+      const chunks: Buffer[] = [];
+      ff.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
+      ff.stderr.on("data", () => {});
+
+      ff.on("error", reject);
+      ff.on("close", (code) => {
+        if (code !== 0 && code !== null) {
+          reject(new Error(`ffmpeg s16le exit ${code}`));
+          return;
+        }
+        const raw = Buffer.concat(chunks);
+        const totalSamples = raw.byteLength / 2; // s16le = 2 bytes per sample
+        const packets: Buffer[] = [];
+        const bytesPerChunk = REMOTE_CHUNK_SAMPLES * 2;
+
+        for (let off = 0; off + bytesPerChunk <= raw.byteLength; off += bytesPerChunk) {
+          const pcm16 = new Int16Array(raw.buffer, raw.byteOffset + off, REMOTE_CHUNK_SAMPLES);
+          const float32 = new Float32Array(REMOTE_CHUNK_SAMPLES);
+          for (let i = 0; i < REMOTE_CHUNK_SAMPLES; i++) {
+            float32[i] = Math.max(-0.85, Math.min(0.85, pcm16[i] / 32768));
+          }
+          const payload = Buffer.from(float32.buffer);
+          const out = Buffer.allocUnsafe(1 + payload.length);
+          out[0] = 0x11; // WS_AUDIO_REMOTE opcode
+          payload.copy(out, 1);
+          packets.push(out);
+        }
+
+        logger.info({ filePath, totalSamples, remotePackets: packets.length },
+          "WAV converted to Float32 packets for remote WebSocket clients");
+        resolve(packets);
+      });
     });
   }
 
