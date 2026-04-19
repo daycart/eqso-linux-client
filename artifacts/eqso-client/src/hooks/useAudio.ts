@@ -396,7 +396,6 @@ export function useAudio(): UseAudioReturn {
         return;
       }
 
-      console.log(`[diag] playAudio: ${float32.length} samples, ctx=${ctx.state}, gain=${gainNodeRef.current?.gain.value}`);
       const buffer = ctx.createBuffer(1, float32.length, GSM_RATE);
       buffer.getChannelData(0).set(float32);
 
