@@ -6,6 +6,7 @@ import { requireAdmin } from "../lib/adminMiddleware";
 import { hashPassword } from "../lib/auth";
 import { roomManager } from "../eqso/room-manager";
 import { inactivityManager } from "../eqso/inactivity-manager";
+import { relayManager } from "../eqso/relay-manager";
 
 const router = Router();
 router.use(requireAdmin);
@@ -240,6 +241,94 @@ router.post("/inactivity/trigger", async (req, res) => {
     res.json({ ok: true, room: target, members: members.length });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// ── Relay management ─────────────────────────────────────────────────────────
+
+// GET /api/admin/relays — list all relays with live status
+router.get("/relays", (_req, res) => {
+  res.json(relayManager.getStatus());
+});
+
+// POST /api/admin/relays — create a new relay
+router.post("/relays", async (req, res) => {
+  try {
+    const { label, callsign, server, port, room, password, message, localRoom, enabled } = req.body as Record<string, unknown>;
+    if (!label || !callsign || !server || !port || !room) {
+      res.status(400).json({ error: "Faltan campos obligatorios" });
+      return;
+    }
+    const id = await relayManager.createRelay({
+      label: String(label),
+      callsign: String(callsign),
+      server: String(server),
+      port: Number(port),
+      room: String(room),
+      password: String(password ?? ""),
+      message: String(message ?? ""),
+      localRoom: String(localRoom ?? room),
+      enabled: Boolean(enabled ?? false),
+    });
+    res.json({ ok: true, id });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// PUT /api/admin/relays/:id — update a relay
+router.put("/relays/:id", async (req, res) => {
+  try {
+    const id = Number(req.params["id"]);
+    const { label, callsign, server, port, room, password, message, localRoom, enabled } = req.body as Record<string, unknown>;
+    if (!label || !callsign || !server || !port || !room) {
+      res.status(400).json({ error: "Faltan campos obligatorios" });
+      return;
+    }
+    await relayManager.updateRelay(id, {
+      label: String(label),
+      callsign: String(callsign),
+      server: String(server),
+      port: Number(port),
+      room: String(room),
+      password: String(password ?? ""),
+      message: String(message ?? ""),
+      localRoom: String(localRoom ?? room),
+      enabled: Boolean(enabled ?? false),
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// DELETE /api/admin/relays/:id — delete a relay
+router.delete("/relays/:id", async (req, res) => {
+  try {
+    await relayManager.deleteRelay(Number(req.params["id"]));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// POST /api/admin/relays/:id/start — enable and connect
+router.post("/relays/:id/start", async (req, res) => {
+  try {
+    await relayManager.enableRelay(Number(req.params["id"]));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// POST /api/admin/relays/:id/stop — disable and disconnect
+router.post("/relays/:id/stop", async (req, res) => {
+  try {
+    await relayManager.disableRelay(Number(req.params["id"]));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
