@@ -142,6 +142,35 @@ Added April 2026. Server maintains persistent TCP connections to remote eQSO ser
 - Lista con indicador verde/rojo, uptime, paquetes RX, usuarios en sala ASORAPA
 - Formulario de alta/edicion con todos los campos
 
+## Known Bugs Fixed (April 2026)
+
+### Remote mode — no users visible + password not checked (1fd4a94)
+Two bugs caused remote eQSO mode to silently fall back to local mode:
+
+1. **`FfmpegGsmDecoder` missing import** in `ws-bridge.ts`. When a user selected a remote
+   server, `handleRemoteMode()` threw `ReferenceError`, it was swallowed by the message
+   handler try/catch, `handler` stayed null, and messages fell into the local-mode path.
+   Fix: added `FfmpegGsmDecoder` to the import from `./ffmpeg-gsm`.
+
+2. **JOIN packet dropped before TCP handshake**. `proxy.sendJoin()` was called immediately
+   after `proxy.connect()` (which is async). `socketWrite()` checked `this.connected === false`
+   and silently discarded the packet. The remote server never received the JOIN, never
+   returned a user list, and never validated the password.
+   Fix: `EqsoProxy.sendJoin()` now buffers `pendingJoin` if `handshakeDone === false`;
+   the `0x0a` handshake handler flushes it immediately after the handshake completes.
+
+3. **`buildErrorMessage` wrong opcode**. Used `0x16` (user-update) so the proxy parsed
+   it as a user called `"!Error!"` joining the room. Now uses `0x0b` (server text message),
+   which `EqsoProxy` correctly maps to `server_info` → `type: "error"` at the browser.
+
+### Password architecture (clarification)
+- `EQSO_PASSWORD` env var on VM: password for the **local TCP server** (ports 2171/8008).
+  Controls access for Windows eQSO clients connecting to the local server.
+- Remote eQSO server password (e.g. ASORAPA 193.152.83.229:8008): stored in
+  `relay_connections.password` in the DB, managed via the admin Radioenlaces panel.
+  For web users in remote mode, entered in the ConnectPanel UI and forwarded by
+  `EqsoProxy` in the JOIN packet.
+
 ## Key Commands
 
 - `pnpm run typecheck` — full typecheck across all packages
