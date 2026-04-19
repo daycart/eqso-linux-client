@@ -268,7 +268,11 @@ export function AdminPanel({ token, onClose }: AdminPanelProps) {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Error");
-      setInactMsg(`Anuncio reproducido en sala "${json.room}".`);
+      if (json.members === 0) {
+        setInactMsg(`AVISO: Sala "${json.room}" sin usuarios conectados. Nadie pudo escuchar el anuncio. Únete a la sala desde el panel principal antes de probar.`);
+      } else {
+        setInactMsg(`Anuncio reproducido en sala "${json.room}" para ${json.members} usuario(s).`);
+      }
     } catch (e: unknown) {
       setInactMsg(e instanceof Error ? e.message : "Error");
     }
@@ -447,7 +451,8 @@ export function AdminPanel({ token, onClose }: AdminPanelProps) {
 
               {/* Test trigger */}
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-                <p className="text-sm font-medium text-gray-200 mb-3">Probar anuncio ahora</p>
+                <p className="text-sm font-medium text-gray-200 mb-1">Probar anuncio ahora</p>
+                <p className="text-xs text-gray-500 mb-3">Para escuchar el anuncio debes estar conectado y unido a la sala desde el panel principal.</p>
                 <div className="flex gap-3 items-center">
                   <input
                     type="text"

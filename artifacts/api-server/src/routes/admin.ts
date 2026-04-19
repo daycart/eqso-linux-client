@@ -234,9 +234,10 @@ router.post("/inactivity/trigger", async (req, res) => {
     res.status(400).json({ error: "No hay salas activas" });
     return;
   }
+  const members = roomManager.getRoomMembers(target);
   try {
     await inactivityManager.trigger(target);
-    res.json({ ok: true, room: target });
+    res.json({ ok: true, room: target, members: members.length });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
   }

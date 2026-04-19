@@ -189,7 +189,9 @@ class InactivityManager {
         const pkt = remotePackets[j++];
         if (!loggedFirst) {
           loggedFirst = true;
-          const f32 = new Float32Array(pkt.buffer, pkt.byteOffset + 1, (pkt.length - 1) / 4);
+          // Use slice() to get an aligned copy — Buffer pool may have unaligned byteOffset
+          const aligned = pkt.buffer.slice(pkt.byteOffset + 1, pkt.byteOffset + pkt.length);
+          const f32 = new Float32Array(aligned);
           let pk = 0; for (let i = 0; i < f32.length; i++) { const a = Math.abs(f32[i]); if (a > pk) pk = a; }
           logger.info({ room, pktSize: pkt.length, floatSamples: f32.length, peak: pk.toFixed(4), opcode: pkt[0].toString(16) }, "Float32 WS audio: first packet");
         }
