@@ -396,6 +396,12 @@ export function useAudio(): UseAudioReturn {
         return;
       }
 
+      if (isFloat32) {
+        let pk = 0;
+        for (let i = 0; i < float32.length; i++) { const a = Math.abs(float32[i]); if (a > pk) pk = a; }
+        console.log(`[audio] playAudio FLOAT32: ${float32.length} samples @${GSM_RATE}Hz peak=${pk.toFixed(4)} gain=${gainNodeRef.current?.gain.value ?? 'N/A'} ctx=${ctx.state}`);
+      }
+
       const buffer = ctx.createBuffer(1, float32.length, GSM_RATE);
       buffer.getChannelData(0).set(float32);
 

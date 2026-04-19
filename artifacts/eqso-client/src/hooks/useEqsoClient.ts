@@ -203,8 +203,12 @@ export function useEqsoClient(
     // Remote audio: Float32 PCM decoded server-side from GSM
     if (cmd === WS_AUDIO_REMOTE) {
       if (view.length > 1) {
-        console.debug(`[eqso] RX audio: ${view.length - 1} bytes`);
-        onAudioRef.current?.(data.slice(1), true);
+        const payload = data.slice(1);
+        const f32 = new Float32Array(payload);
+        let peak = 0;
+        for (let i = 0; i < f32.length; i++) { const a = Math.abs(f32[i]); if (a > peak) peak = a; }
+        console.log(`[eqso] RX FLOAT32 audio: ${f32.length} samples, peak=${peak.toFixed(4)}, first5=${Array.from(f32.slice(0,5)).map(v=>v.toFixed(4)).join(',')}`);
+        onAudioRef.current?.(payload, true);
       }
       return;
     }
