@@ -18,12 +18,12 @@ import {
 import { EqsoProxy, ProxyEvent } from "./eqso-proxy";
 import { validateSession } from "../lib/auth";
 import {
-  FfmpegGsmDecoder,
   FfmpegGsmEncoder,
   GSM_FRAME_SAMPLES,
   FRAMES_PER_PACKET,
   GSM_PACKET_BYTES,
 } from "./ffmpeg-gsm";
+import { gsmDecodePacket } from "./gsm610";
 
 // Binary opcodes for browser ↔ server WebSocket protocol
 const WS_AUDIO_LOCAL  = 0x01; // local relay: Uint8 unsigned PCM
@@ -72,24 +72,6 @@ function handleLocalMode(
   onMessage: (msg: WsMessage, raw: Buffer | null) => void;
   onClose: () => void;
 } {
-  // Decoder for GSM packets arriving from inactivity manager / TCP relay.
-  // The inactivity manager broadcasts [0x01][198-byte GSM] to all room members.
-  // TCP clients understand this natively, but the browser expects Float32 PCM
-  // with a 0x11 opcode.  We decode server-side and repack before forwarding.
-  const localDecoder = new FfmpegGsmDecoder();
-  localDecoder.start();
-  localDecoder.on("pcm", (pcm: Int16Array) => {
-    const float32 = new Float32Array(pcm.length);
-    for (let i = 0; i < pcm.length; i++) {
-      float32[i] = Math.max(-0.85, Math.min(0.85, pcm[i] / 32768));
-    }
-    const payload = Buffer.from(float32.buffer);
-    const out = Buffer.allocUnsafe(1 + payload.length);
-    out[0] = 0x11; // WS_AUDIO_REMOTE
-    payload.copy(out, 1);
-    sendBin(ws, out);
-  });
-
   const clientInfo = {
     id,
     name: `_WS_${id.slice(0, 6)}`,
@@ -104,9 +86,24 @@ function handleLocalMode(
       clientInfo.txBytes += data.length;
 
       // GSM audio packet from inactivity manager or TCP relay: [0x01][198 bytes GSM]
-      // Must be decoded to Float32 PCM before the browser can play it.
+      // Decode synchronously using the pure-JS GSM 06.10 decoder and forward
+      // as [0x11][Float32 PCM] — no FFmpeg subprocess, no startup delay.
       if (data[0] === 0x01 && data.length === 1 + AUDIO_PAYLOAD_SIZE) {
-        localDecoder.decode(data.slice(1));
+        try {
+          const gsmData = new Uint8Array(data.buffer, data.byteOffset + 1, AUDIO_PAYLOAD_SIZE);
+          const pcm = gsmDecodePacket(gsmData); // Int16Array(960), synchronous
+          const float32 = new Float32Array(pcm.length);
+          for (let i = 0; i < pcm.length; i++) {
+            float32[i] = Math.max(-0.85, Math.min(0.85, pcm[i] / 32768));
+          }
+          const payload = Buffer.from(float32.buffer);
+          const out = Buffer.allocUnsafe(1 + payload.length);
+          out[0] = WS_AUDIO_REMOTE;
+          payload.copy(out, 1);
+          sendBin(ws, out);
+        } catch (err) {
+          logger.warn({ err }, "Local WS GSM decode error");
+        }
         return;
       }
 
@@ -256,7 +253,6 @@ function handleLocalMode(
 
     onClose: () => {
       clearInterval(pingTimer);
-      localDecoder.stop();
       const client = roomManager.getClient(id);
       if (client?.room && client.name) {
         roomManager.broadcastToRoom(client.room, buildUserLeft(client.name), id);
