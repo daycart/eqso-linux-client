@@ -113,6 +113,35 @@ Added in April 2026. Only registered users can access the eQSO client.
 - `AdminPanel.tsx` — admin-only panel: list/filter by status, approve, activate, deactivate, delete, create, reset password, change role. Alert badge for pending users.
 - `home.tsx` — shows admin button in header only if role='admin'. Space key disabled in admin panel.
 
+## Radioenlaces (Relay Manager)
+
+Added April 2026. Server maintains persistent TCP connections to remote eQSO servers (ASORAPA, etc.) independent of any browser session.
+
+### How it works
+- `relay-manager.ts` loads enabled `relay_connections` from DB at startup
+- For each relay: creates an `EqsoProxy` TCP connection (handshake → sendJoin → keepalive)
+- Audio from remote server (ASORAPA): GSM decoded via `FfmpegGsmDecoder` → Float32 → `broadcastBinToLocalWsClients(localRoom)`
+- Auto-reconnect with exponential backoff (3s → 60s max)
+- Status tracked in memory: connecting/connected/disconnected/stopped, usersInRoom, rxPackets
+
+### DB schema (relay_connections table)
+- id, label, callsign, server, port, room, password, message, localRoom, enabled, createdAt
+- `callsign`: relay appears as `0R-CALLSIGN` on ASORAPA
+- `localRoom`: local room where ASORAPA audio is forwarded (defaults to remote room name)
+
+### Admin API endpoints (`/api/admin/relays`)
+- `GET` — list with live status
+- `POST` — create relay
+- `PUT /:id` — update relay (restarts connection)
+- `DELETE /:id` — stop and delete
+- `POST /:id/start` — enable and connect
+- `POST /:id/stop` — disable and disconnect
+
+### Admin UI
+- Pestaña "Radioenlaces" en AdminPanel (entre Servidores y Monitor)
+- Lista con indicador verde/rojo, uptime, paquetes RX, usuarios en sala ASORAPA
+- Formulario de alta/edicion con todos los campos
+
 ## Key Commands
 
 - `pnpm run typecheck` — full typecheck across all packages
