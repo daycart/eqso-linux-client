@@ -277,6 +277,10 @@ export class RoomManager extends EventEmitter {
     };
   }
 
+  getAllClients(): ClientInfo[] {
+    return Array.from(this.clients.values());
+  }
+
   /** Legacy */
   getStats() {
     return {

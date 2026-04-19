@@ -4,7 +4,7 @@ import { logger } from "./lib/logger";
 import { startTcpServer } from "./eqso/tcp-server";
 import { startWsBridge } from "./eqso/ws-bridge";
 import { seedServers } from "./lib/seedServers";
-import { relayManager } from "./eqso/relay-manager";
+import { moderationManager } from "./eqso/moderation-manager";
 
 const rawPort = process.env["PORT"];
 
@@ -24,7 +24,7 @@ const httpServer = http.createServer(app);
 
 startWsBridge(httpServer);
 seedServers().catch((err) => logger.warn({ err }, "seedServers failed (non-fatal)"));
-relayManager.loadAndStart().catch((err) => logger.warn({ err }, "relayManager.loadAndStart failed (non-fatal)"));
+moderationManager.loadBans().catch((err) => logger.warn({ err }, "moderationManager.loadBans failed (non-fatal)"));
 
 httpServer.listen(port, (err?: Error) => {
   if (err) {

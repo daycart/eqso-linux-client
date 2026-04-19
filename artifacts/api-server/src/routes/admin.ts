@@ -6,7 +6,7 @@ import { requireAdmin } from "../lib/adminMiddleware";
 import { hashPassword } from "../lib/auth";
 import { roomManager } from "../eqso/room-manager";
 import { inactivityManager } from "../eqso/inactivity-manager";
-import { relayManager } from "../eqso/relay-manager";
+import { moderationManager } from "../eqso/moderation-manager";
 
 const router = Router();
 router.use(requireAdmin);
@@ -194,9 +194,14 @@ router.patch("/users/:id/password", async (req, res) => {
   }
 });
 
-// GET /api/admin/server/status — live server stats
+// GET /api/admin/server/status — live server stats (includes mutes and bans)
 router.get("/server/status", (_req, res) => {
-  res.json(roomManager.getServerStatus());
+  const status = roomManager.getServerStatus();
+  res.json({
+    ...status,
+    mutes: moderationManager.getMutes(),
+    bans:  moderationManager.getBans(),
+  });
 });
 
 // POST /api/admin/server/enable
@@ -244,92 +249,54 @@ router.post("/inactivity/trigger", async (req, res) => {
   }
 });
 
-// ── Relay management ─────────────────────────────────────────────────────────
+// ── Moderación — Mutes ────────────────────────────────────────────────────────
 
-// GET /api/admin/relays — list all relays with live status
-router.get("/relays", (_req, res) => {
-  res.json(relayManager.getStatus());
+// POST /api/admin/moderation/mute — silenciar indicativo
+// Body: { callsign: string, durationMs: number | null }  (null = permanente)
+router.post("/moderation/mute", (req, res) => {
+  const { callsign, durationMs } = req.body as { callsign?: string; durationMs?: number | null };
+  if (!callsign) { res.status(400).json({ error: "Falta callsign" }); return; }
+  moderationManager.mute(callsign, durationMs ?? null);
+  res.json({ ok: true });
 });
 
-// POST /api/admin/relays — create a new relay
-router.post("/relays", async (req, res) => {
-  try {
-    const { label, callsign, server, port, room, password, message, localRoom, enabled } = req.body as Record<string, unknown>;
-    if (!label || !callsign || !server || !port || !room) {
-      res.status(400).json({ error: "Faltan campos obligatorios" });
-      return;
-    }
-    const id = await relayManager.createRelay({
-      label: String(label),
-      callsign: String(callsign),
-      server: String(server),
-      port: Number(port),
-      room: String(room),
-      password: String(password ?? ""),
-      message: String(message ?? ""),
-      localRoom: String(localRoom ?? room),
-      enabled: Boolean(enabled ?? false),
-    });
-    res.json({ ok: true, id });
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
+// DELETE /api/admin/moderation/mute/:callsign — quitar silencio
+router.delete("/moderation/mute/:callsign", (req, res) => {
+  moderationManager.unmute(req.params["callsign"]);
+  res.json({ ok: true });
 });
 
-// PUT /api/admin/relays/:id — update a relay
-router.put("/relays/:id", async (req, res) => {
+// ── Moderación — Bans ─────────────────────────────────────────────────────────
+
+// POST /api/admin/moderation/ban — banear indicativo
+// Body: { callsign: string, reason?: string }
+router.post("/moderation/ban", async (req, res) => {
+  const { callsign, reason } = req.body as { callsign?: string; reason?: string };
+  if (!callsign) { res.status(400).json({ error: "Falta callsign" }); return; }
   try {
-    const id = Number(req.params["id"]);
-    const { label, callsign, server, port, room, password, message, localRoom, enabled } = req.body as Record<string, unknown>;
-    if (!label || !callsign || !server || !port || !room) {
-      res.status(400).json({ error: "Faltan campos obligatorios" });
-      return;
-    }
-    await relayManager.updateRelay(id, {
-      label: String(label),
-      callsign: String(callsign),
-      server: String(server),
-      port: Number(port),
-      room: String(room),
-      password: String(password ?? ""),
-      message: String(message ?? ""),
-      localRoom: String(localRoom ?? room),
-      enabled: Boolean(enabled ?? false),
-    });
+    await moderationManager.ban(callsign, reason ?? "", "admin");
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
-// DELETE /api/admin/relays/:id — delete a relay
-router.delete("/relays/:id", async (req, res) => {
+// DELETE /api/admin/moderation/ban/:callsign — desbanear indicativo
+router.delete("/moderation/ban/:callsign", async (req, res) => {
   try {
-    await relayManager.deleteRelay(Number(req.params["id"]));
+    await moderationManager.unban(req.params["callsign"]);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
-// POST /api/admin/relays/:id/start — enable and connect
-router.post("/relays/:id/start", async (req, res) => {
-  try {
-    await relayManager.enableRelay(Number(req.params["id"]));
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
+// ── Moderación — Kick ─────────────────────────────────────────────────────────
 
-// POST /api/admin/relays/:id/stop — disable and disconnect
-router.post("/relays/:id/stop", async (req, res) => {
-  try {
-    await relayManager.disableRelay(Number(req.params["id"]));
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
+// POST /api/admin/moderation/kick/:clientId — expulsar cliente conectado
+router.post("/moderation/kick/:clientId", (req, res) => {
+  moderationManager.kickClient(req.params["clientId"]);
+  res.json({ ok: true });
 });
 
 // POST /api/admin/inactivity/audio — upload WAV file (raw body, Content-Type: audio/wav)

@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { logger } from "../lib/logger";
 import { roomManager, ClientInfo } from "./room-manager";
 import { inactivityManager } from "./inactivity-manager";
+import { moderationManager } from "./moderation-manager";
 import {
   EQSO_COMMANDS,
   AUDIO_PAYLOAD_SIZE,
@@ -80,7 +81,7 @@ function processSingleByte(state: TcpClientState, byte: number): void {
 
   switch (byte) {
     case EQSO_COMMANDS.VOICE:
-      if (client?.room) {
+      if (client?.room && !moderationManager.isMuted(client.name)) {
         const ptt = buildPttStarted(client.name);
         roomManager.tryLockRoom(client.room, state.id);
         roomManager.broadcastToRoom(client.room, ptt, state.id);
@@ -177,7 +178,7 @@ function processMultiByte(state: TcpClientState, byte: number): void {
     case EQSO_COMMANDS.VOICE: {
       if (state.buf.length >= AUDIO_PAYLOAD_SIZE) {
         const client = roomManager.getClient(state.id);
-        if (client?.room) {
+        if (client?.room && !moderationManager.isMuted(client.name)) {
           const audioPkt = Buffer.concat([Buffer.from([0x01]), state.buf.slice(0, AUDIO_PAYLOAD_SIZE)]);
           roomManager.broadcastToRoom(client.room, audioPkt, state.id);
         }
@@ -204,6 +205,14 @@ function handleJoin(
 ): void {
   const existing = roomManager.getClient(state.id);
   const oldRoom = existing?.room ?? "";
+
+  // Ban check
+  if (moderationManager.isBanned(name)) {
+    safeWrite(state, buildErrorMessage("Acceso denegado: indicativo baneado del servidor"));
+    logger.warn({ id: state.id, name }, "TCP client rejected: banned");
+    state.socket.destroy();
+    return;
+  }
 
   const serverPassword = process.env.EQSO_PASSWORD ?? "";
   if (serverPassword && password !== serverPassword) {

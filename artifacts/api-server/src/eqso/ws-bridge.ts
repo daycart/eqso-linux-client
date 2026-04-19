@@ -17,6 +17,7 @@ import {
 } from "./protocol";
 import { EqsoProxy, ProxyEvent } from "./eqso-proxy";
 import { validateSession } from "../lib/auth";
+import { moderationManager } from "./moderation-manager";
 import {
   FfmpegGsmEncoder,
   GSM_FRAME_SAMPLES,
@@ -144,7 +145,7 @@ function handleLocalMode(
     onMessage: (msg, rawBin) => {
       if (rawBin && rawBin.length > 0 && rawBin[0] === 0x01) {
         const client = roomManager.getClient(id);
-        if (client?.room) {
+        if (client?.room && !moderationManager.isMuted(client.name)) {
           roomManager.broadcastToRoom(client.room, rawBin, id);
         }
         return;
@@ -193,6 +194,13 @@ function handleLocalMode(
             sendJson(ws, { type: "error", message: "Sala inválida (máx 20 chars)" });
             return;
           }
+          // Ban check
+          if (moderationManager.isBanned(name)) {
+            sendJson(ws, { type: "error", message: "Acceso denegado: indicativo baneado del servidor" });
+            logger.warn({ id, name }, "WS client rejected: banned");
+            ws.close();
+            return;
+          }
           if (roomManager.isNameTaken(name, id)) {
             sendJson(ws, { type: "error", message: `Indicativo "${name}" ya está en uso` });
             return;
@@ -223,6 +231,10 @@ function handleLocalMode(
         case "ptt_start": {
           const client = roomManager.getClient(id);
           if (client?.room && client.name) {
+            if (moderationManager.isMuted(client.name)) {
+              sendJson(ws, { type: "ptt_denied", reason: "Silenciado por el administrador" });
+              break;
+            }
             const locked = roomManager.tryLockRoom(client.room, id);
             if (locked) {
               roomManager.broadcastToRoom(client.room, buildPttStarted(client.name), id);
