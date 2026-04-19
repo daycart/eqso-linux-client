@@ -72,6 +72,24 @@ function handleLocalMode(
   onMessage: (msg: WsMessage, raw: Buffer | null) => void;
   onClose: () => void;
 } {
+  // Decoder for GSM packets arriving from inactivity manager / TCP relay.
+  // The inactivity manager broadcasts [0x01][198-byte GSM] to all room members.
+  // TCP clients understand this natively, but the browser expects Float32 PCM
+  // with a 0x11 opcode.  We decode server-side and repack before forwarding.
+  const localDecoder = new FfmpegGsmDecoder();
+  localDecoder.start();
+  localDecoder.on("pcm", (pcm: Int16Array) => {
+    const float32 = new Float32Array(pcm.length);
+    for (let i = 0; i < pcm.length; i++) {
+      float32[i] = Math.max(-0.85, Math.min(0.85, pcm[i] / 32768));
+    }
+    const payload = Buffer.from(float32.buffer);
+    const out = Buffer.allocUnsafe(1 + payload.length);
+    out[0] = 0x11; // WS_AUDIO_REMOTE
+    payload.copy(out, 1);
+    sendBin(ws, out);
+  });
+
   const clientInfo = {
     id,
     name: `_WS_${id.slice(0, 6)}`,
@@ -82,7 +100,16 @@ function handleLocalMode(
     txBytes: 0,
     rxBytes: 0,
     pingMs: 0,
-    send: (data: Buffer) => { clientInfo.txBytes += data.length; sendBin(ws, data); },
+    send: (data: Buffer) => {
+      clientInfo.txBytes += data.length;
+      // GSM audio packet from inactivity manager or TCP relay: [0x01][198 bytes GSM]
+      // Must be decoded to Float32 PCM before the browser can play it.
+      if (data[0] === 0x01 && data.length === 1 + AUDIO_PAYLOAD_SIZE) {
+        localDecoder.decode(data.slice(1));
+        return;
+      }
+      sendBin(ws, data);
+    },
     close: () => ws.close(),
   };
   roomManager.addClient(clientInfo);
@@ -210,6 +237,7 @@ function handleLocalMode(
 
     onClose: () => {
       clearInterval(pingTimer);
+      localDecoder.stop();
       const client = roomManager.getClient(id);
       if (client?.room && client.name) {
         roomManager.broadcastToRoom(client.room, buildUserLeft(client.name), id);
