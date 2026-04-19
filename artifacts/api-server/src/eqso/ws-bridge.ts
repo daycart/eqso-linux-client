@@ -102,12 +102,31 @@ function handleLocalMode(
     pingMs: 0,
     send: (data: Buffer) => {
       clientInfo.txBytes += data.length;
+
       // GSM audio packet from inactivity manager or TCP relay: [0x01][198 bytes GSM]
       // Must be decoded to Float32 PCM before the browser can play it.
       if (data[0] === 0x01 && data.length === 1 + AUDIO_PAYLOAD_SIZE) {
         localDecoder.decode(data.slice(1));
         return;
       }
+
+      // eQSO 0x16 single-event packet: PTT start (action=0x02) / PTT release (action=0x03)
+      // The action byte lives at offset 5, not offset 4 (client binary parser would misread it).
+      // Convert to JSON so handleTextMessage picks it up — same path as remote mode.
+      if (data[0] === 0x16 && data.length > 1 && data[1] === 0x01 && data.length >= 10) {
+        const action = data[5];
+        if (action === 0x02 || action === 0x03) {
+          const nameLen = data[9];
+          const name = data.slice(10, 10 + nameLen).toString("ascii");
+          if (action === 0x02) {
+            sendJson(ws, { type: "ptt_started", name });
+          } else {
+            sendJson(ws, { type: "ptt_released_remote", name });
+          }
+          return;
+        }
+      }
+
       sendBin(ws, data);
     },
     close: () => ws.close(),
