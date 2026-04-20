@@ -46,6 +46,11 @@ sudo tee /etc/eqso-relay/default.json > /dev/null << 'EQSO_CONFIG'
 EQSO_CONFIG
 sudo chmod 644 /etc/eqso-relay/default.json
 
+echo "==> desactivar USB autosuspend para tarjetas de audio"
+for f in /sys/bus/usb/devices/*/power/autosuspend_delay_ms; do
+  echo -1 | sudo tee "$f" > /dev/null 2>&1 || true
+done
+
 echo "==> restart services"
 sudo systemctl restart eqso
 sudo systemctl restart eqso-relay
