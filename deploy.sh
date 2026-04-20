@@ -48,19 +48,20 @@ sudo chmod 644 /etc/eqso-relay/default.json
 
 echo "==> mantener tarjetas USB de audio siempre encendidas (evitar autosuspend)"
 for dev in /sys/bus/usb/devices/*/; do
-  # power/control=on: fuerza el dispositivo a permanecer activo (no suspendido)
-  echo on  | sudo tee "${dev}power/control"             > /dev/null 2>&1 || true
+  echo on  | sudo tee "${dev}power/control"              > /dev/null 2>&1 || true
   echo -1  | sudo tee "${dev}power/autosuspend_delay_ms" > /dev/null 2>&1 || true
 done
-# Forzar ALSA a re-escanear los dispositivos por si alguno estaba dormido
-aplay -l > /dev/null 2>&1 || true
-arecord -l > /dev/null 2>&1 || true
+
+echo "==> despertar tarjeta de audio USB si estaba dormida (plughw:1,0)"
+# Abrir el dispositivo brevemente fuerza al kernel a hacer USB resume
+sudo timeout 2 arecord -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q /dev/null 2>/dev/null || true
+sleep 1
 
 echo "==> restart eqso (api-server + TCP)"
 sudo systemctl restart eqso
 
-echo "==> esperando 6s a que el puerto TCP 2171 este listo..."
-sleep 6
+echo "==> esperando 8s a que el puerto TCP 2171 este listo..."
+sleep 8
 
 echo "==> restart eqso-relay"
 sudo systemctl restart eqso-relay
