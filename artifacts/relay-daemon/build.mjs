@@ -1,4 +1,5 @@
 import { build } from "esbuild";
+import { copyFileSync, mkdirSync } from "fs";
 
 await build({
   entryPoints: ["src/main.ts"],
@@ -13,5 +14,9 @@ await build({
     js: `import { createRequire } from 'module'; const require = createRequire(import.meta.url);`,
   },
 });
+
+// Copiar el helper Python de PTT serial junto al .mjs
+mkdirSync("dist", { recursive: true });
+copyFileSync("src/ptt-helper.py", "dist/ptt-helper.py");
 
 console.log("relay-daemon build OK");

@@ -17,6 +17,12 @@ export interface ControlConfig {
   host: string;
 }
 
+export interface PttSerialConfig {
+  device:   string;          // "/dev/ttyACM0" o "" para deshabilitar
+  method:   "rts" | "dtr";  // pin que controla el PTT de la radio
+  inverted: boolean;         // true si el circuito invierte la logica
+}
+
 export interface RelayConfig {
   callsign: string;
   room: string;
@@ -28,6 +34,7 @@ export interface RelayConfig {
   reconnectMaxMs: number;
   audio: AudioConfig;
   control: ControlConfig;
+  ptt: PttSerialConfig;
 }
 
 const DEFAULTS: RelayConfig = {
@@ -52,6 +59,11 @@ const DEFAULTS: RelayConfig = {
     enabled: true,
     port: 8009,
     host: "127.0.0.1",
+  },
+  ptt: {
+    device:   "",      // vacio = solo VOX, sin control serial
+    method:   "rts",
+    inverted: false,
   },
 };
 

@@ -13,6 +13,7 @@ import { loadConfig } from "./config.js";
 import { EqsoClient } from "./eqso-client.js";
 import { AlsaAudio } from "./alsa-audio.js";
 import { Vox } from "./vox.js";
+import { SerialPtt } from "./serial-ptt.js";
 import { startControlServer, RelayStatus } from "./control-server.js";
 import { GSM_PACKET_BYTES } from "./gsm-codec.js";
 
@@ -37,13 +38,19 @@ let rxInhibitTimer: ReturnType<typeof setTimeout> | null = null;
 const RX_HANG_MS = 600; // ms de margen tras el ultimo paquete RX
 
 function setRxActive(): void {
+  const wasActive = rxActive;
   rxActive = true;
+  if (!wasActive) serialPtt.set(true); // activar PTT de la radio al inicio del RX
   if (rxInhibitTimer) clearTimeout(rxInhibitTimer);
   rxInhibitTimer = setTimeout(() => {
     rxActive = false;
     rxInhibitTimer = null;
+    serialPtt.set(false); // liberar PTT de la radio al finalizar el RX
   }, RX_HANG_MS);
 }
+
+// ─── PTT Serial (RTS/DTR en cable de control de la radio) ─────────────────────
+const serialPtt = new SerialPtt(cfg.ptt);
 
 // ─── Audio y VOX ─────────────────────────────────────────────────────────────
 const audio = new AlsaAudio(cfg.audio);
@@ -222,8 +229,10 @@ log(`  Servidor : ${cfg.server}:${cfg.port}`);
 log(`  VOX      : ${cfg.audio.vox ? `ON (umbral=${cfg.audio.voxThresholdRms} hang=${cfg.audio.voxHangMs}ms)` : "OFF"}`);
 log(`  Captura  : ${cfg.audio.captureDevice}`);
 log(`  Playback : ${cfg.audio.playbackDevice}`);
+log(`  PTT Ser. : ${cfg.ptt.device ? `${cfg.ptt.device} (${cfg.ptt.method}${cfg.ptt.inverted ? ", invertido" : ""})` : "deshabilitado"}`);
 log("=".repeat(60));
 
+if (cfg.ptt.device) serialPtt.start();
 audio.start();
 connect();
 
@@ -233,6 +242,7 @@ function shutdown(sig: string): void {
   log(`Señal ${sig} recibida — apagando…`);
   if (pttActive) { eqsoClient?.endTx(); }
   eqsoClient?.disconnect();
+  serialPtt.stop();
   audio.stop();
   process.exit(0);
 }
