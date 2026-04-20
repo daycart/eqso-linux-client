@@ -18,6 +18,9 @@ pnpm --filter @workspace/api-server run build
 echo "==> build relay-daemon"
 pnpm --filter @workspace/relay-daemon run build
 
+echo "==> asegurar que david pertenece al grupo audio"
+sudo usermod -aG audio david 2>/dev/null || true
+
 echo "==> escribir configuracion relay-daemon"
 sudo mkdir -p /etc/eqso-relay
 sudo tee /etc/eqso-relay/default.json > /dev/null << 'EQSO_CONFIG'
@@ -29,8 +32,8 @@ sudo tee /etc/eqso-relay/default.json > /dev/null << 'EQSO_CONFIG'
   "server": "127.0.0.1",
   "port": 2171,
   "audio": {
-    "captureDevice": "plughw:1,0",
-    "playbackDevice": "plughw:1,0",
+    "captureDevice": "plughw:Device,0",
+    "playbackDevice": "plughw:Device,0",
     "vox": true,
     "voxThresholdRms": 600,
     "voxHangMs": 1000,
@@ -65,33 +68,44 @@ echo "==> crear /opt/eqso-asorapa/wake-audio.sh (ExecStartPre del servicio)"
 sudo tee /opt/eqso-asorapa/wake-audio.sh > /dev/null << 'WAKE_SCRIPT'
 #!/bin/bash
 # Despierta la tarjeta USB de audio y espera a que ALSA la registre.
-# Se ejecuta como root antes de que arranque el relay-daemon.
+# Se ejecuta como root (ExecStartPre=+) antes del relay-daemon.
 
-# 1. power/control=on en todas las tarjetas de audio USB
+# 1. Permisos en /dev/snd/* para que el grupo audio acceda
+chmod -R a+rw /dev/snd/ 2>/dev/null || true
+
+# 2. power/control=on en todos los dispositivos USB de audio
 for card_sysfs in /sys/class/sound/card*/; do
   usb_dev=$(readlink -f "${card_sysfs}device" 2>/dev/null)
   for i in 1 2 3 4; do
     usb_dev=$(dirname "$usb_dev" 2>/dev/null)
     if [ -f "${usb_dev}/idVendor" ] && [ -f "${usb_dev}/power/control" ]; then
       echo on > "${usb_dev}/power/control" 2>/dev/null || true
+      echo "[wake] power/control=on: $(cat ${usb_dev}/product 2>/dev/null)" || true
       break
     fi
   done
 done
 
-# 2. Esperar hasta 10s a que la tarjeta USB aparezca en ALSA
-for i in $(seq 1 10); do
-  grep -q " 1 \[" /proc/asound/cards 2>/dev/null && break
+# 3. Esperar hasta 15s a que la tarjeta USB aparezca en ALSA
+echo "[wake] /proc/asound/cards actual:"
+cat /proc/asound/cards 2>/dev/null || echo "(vacio)"
+for i in $(seq 1 15); do
+  if grep -q " 1 \[" /proc/asound/cards 2>/dev/null; then
+    echo "[wake] Tarjeta USB lista (${i}s)"
+    break
+  fi
+  echo "[wake] Esperando tarjeta USB... (${i}s)"
   sleep 1
 done
+cat /proc/asound/cards 2>/dev/null
 
-# 3. Dar tiempo al TCP 2171 a que este escuchando
+# 4. Dar tiempo al TCP 2171 a que este escuchando
 sleep 4
 exit 0
 WAKE_SCRIPT
 sudo chmod +x /opt/eqso-asorapa/wake-audio.sh
 
-echo "==> actualizar eqso-relay.service con ExecStartPre"
+echo "==> actualizar eqso-relay.service con ExecStartPre y grupo audio"
 sudo tee /etc/systemd/system/eqso-relay.service > /dev/null << 'SERVICE_FILE'
 [Unit]
 Description=eQSO Relay Daemon
@@ -101,6 +115,7 @@ Requires=eqso.service
 [Service]
 Type=simple
 User=david
+SupplementaryGroups=audio
 WorkingDirectory=/opt/eqso-asorapa/artifacts/relay-daemon
 ExecStartPre=+/opt/eqso-asorapa/wake-audio.sh
 ExecStart=/usr/bin/node --enable-source-maps dist/main.mjs
