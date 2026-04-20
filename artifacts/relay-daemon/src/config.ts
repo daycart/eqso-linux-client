@@ -38,7 +38,7 @@ export interface RelayConfig {
 }
 
 const DEFAULTS: RelayConfig = {
-  callsign: "0R-IN7BWN",
+  callsign: "IN7BWN",
   room: "CB",
   password: "",
   message: "Radio Enlace",
@@ -108,11 +108,6 @@ export function loadConfig(): RelayConfig {
   if (process.env["RELAY_SERVER"])   merged.server   = process.env["RELAY_SERVER"];
   if (process.env["RELAY_PORT"])     merged.port     = parseInt(process.env["RELAY_PORT"], 10);
   if (process.env["CONTROL_PORT"])   merged.control.port = parseInt(process.env["CONTROL_PORT"], 10);
-
-  // Always apply 0R- prefix to callsign
-  if (!merged.callsign.startsWith("0R-")) {
-    merged.callsign = `0R-${merged.callsign}`.slice(0, 13);
-  }
 
   console.log("[config] Configuracion activa:", JSON.stringify(merged, null, 2));
   return merged;
