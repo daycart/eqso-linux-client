@@ -9,17 +9,20 @@ git pull
 echo "==> pnpm install"
 pnpm install
 
-echo "==> build api-server"
-pnpm --filter @workspace/api-server run build
-
 echo "==> build eqso-client"
 pnpm --filter @workspace/eqso-client run build
 
-echo "==> copy client to api-server/dist/public"
-rm -rf artifacts/api-server/dist/public
-cp -r artifacts/eqso-client/dist/public artifacts/api-server/dist/public
+echo "==> build api-server (copies client dist into dist/public)"
+pnpm --filter @workspace/api-server run build
 
-echo "==> restart service"
+echo "==> build relay-daemon"
+pnpm --filter @workspace/relay-daemon run build
+
+echo "==> restart services"
 sudo systemctl restart eqso
+sudo systemctl restart eqso-relay
+
+echo "==> status"
+sudo systemctl is-active eqso eqso-relay
 
 echo "==> done"
