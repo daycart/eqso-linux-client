@@ -3,7 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import { rm } from "node:fs/promises";
+import { rm, cp } from "node:fs/promises";
+import { existsSync } from "node:fs";
 
 // Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
 globalThis.require = createRequire(import.meta.url);
@@ -119,6 +120,17 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     `,
     },
   });
+
+  // Copy eqso-client static build into dist/public so the server can serve it.
+  const clientDist = path.resolve(artifactDir, "../eqso-client/dist/public");
+  const serverPublic = path.resolve(distDir, "public");
+  if (existsSync(clientDist)) {
+    await rm(serverPublic, { recursive: true, force: true });
+    await cp(clientDist, serverPublic, { recursive: true });
+    console.log(`Copied client build: ${clientDist} → ${serverPublic}`);
+  } else {
+    console.warn(`Client build not found at ${clientDist} — run 'pnpm --filter @workspace/eqso-client run build' first`);
+  }
 }
 
 buildAll().catch((err) => {
