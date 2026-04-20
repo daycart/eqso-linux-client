@@ -77,6 +77,42 @@ Audio uses GSM 06.10 (libgsm) codec: 198 bytes / 120ms / 8 kHz mono.
   - Client changes must be pushed via GitHub API (bash, not code_execution).
   - Build requires `PORT` and `BASE_PATH` env vars (handled by CI).
 
+## Relay Management System (Radioenlaces)
+
+Added April 2026. Persistent TCP connections from the server to external eQSO servers, managed independently of browser clients.
+
+### Database schema (relay_connections table)
+- id, label, callsign, server, port, local_room, remote_room, password, enabled, created_at
+
+### relay-manager.ts
+- Loads all `enabled=true` relays from DB on server startup
+- For each relay: creates an `EqsoProxy` instance and connects to the remote eQSO server
+- Uses `roomManager.addRoomListener()` to receive audio/PTT events from the local room (no virtual client registered, transparent to TCP Windows clients)
+- Inbound (Remote→Local): proxy `audio` event → `roomManager.broadcastToRoom(localRoom, [0x01][GSM])` → TCP clients play natively, WS clients decode via FfmpegGsmDecoder
+- Outbound (Local→Remote): 0x16 PTT start packet → proxy.startTransmitting(); [0x01][GSM] → proxy.sendAudio(); 0x16 PTT end → proxy.sendPttEnd()
+- PTT safety timeout: auto-releases after 5s of audio inactivity
+- Auto-reconnect with exponential backoff (2s, 4s, 8s... up to 30s)
+- Admin can start/stop relays via API without server restart
+
+### Admin API routes (/api/admin/relays)
+- GET — list all relays + live status (status, remoteUsers, rxPackets, txPackets)
+- POST — create relay
+- PUT /:id — edit relay
+- DELETE /:id — delete relay
+- POST /:id/start — enable + connect
+- POST /:id/stop — disable + disconnect
+
+### room-manager.ts extension
+- `addRoomListener(id, rooms, onData)` — subscribe to all broadcastToRoom calls for given rooms
+- `removeRoomListener(id)` — unsubscribe
+- Listeners receive `(room, data, senderId)` — senderId is the excludeId from broadcastToRoom
+
+### UI (RelaysPanel.tsx)
+- New tab "Radioenlaces" in AdminPanel between Servidores and Monitor
+- List: label, callsign, server:port, local/remote rooms, status dot, remoteUsers, rx/tx counters
+- Polled every 5s
+- Form: add/edit relay with all fields including password
+
 ## User Authentication System
 
 Added in April 2026. Only registered users can access the eQSO client.
