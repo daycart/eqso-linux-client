@@ -2,6 +2,7 @@ import net from "net";
 import { randomUUID } from "crypto";
 import { logger } from "../lib/logger";
 import { roomManager, ClientInfo } from "./room-manager";
+import { gsmDecodePacket } from "./gsm610";
 import { inactivityManager } from "./inactivity-manager";
 import { moderationManager } from "./moderation-manager";
 import {
@@ -179,8 +180,18 @@ function processMultiByte(state: TcpClientState, byte: number): void {
       if (state.buf.length >= AUDIO_PAYLOAD_SIZE) {
         const client = roomManager.getClient(state.id);
         if (client?.room && !moderationManager.isMuted(client.name)) {
-          const audioPkt = Buffer.concat([Buffer.from([0x01]), state.buf.slice(0, AUDIO_PAYLOAD_SIZE)]);
-          roomManager.broadcastToRoom(client.room, audioPkt, state.id);
+          const gsmPayload = state.buf.slice(0, AUDIO_PAYLOAD_SIZE);
+
+          // Send [0x01][GSM 198 bytes] to TCP clients and relay listeners
+          const gsmPkt = Buffer.concat([Buffer.from([0x01]), gsmPayload]);
+          roomManager.broadcastToTcpAndRelays(client.room, gsmPkt, state.id);
+
+          // Decode GSM → Int16 PCM → Float32 PCM → send [0x11][f32] to WS browser clients
+          const int16 = gsmDecodePacket(gsmPayload);
+          const float32 = new Float32Array(int16.length);
+          for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768.0;
+          const wsPkt = Buffer.concat([Buffer.from([0x11]), Buffer.from(float32.buffer)]);
+          roomManager.broadcastBinToLocalWsClients(client.room, wsPkt, state.id);
         }
         state.buf = state.buf.slice(AUDIO_PAYLOAD_SIZE);
         if (state.buf.length === 0) {

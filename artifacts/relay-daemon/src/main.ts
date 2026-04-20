@@ -29,18 +29,34 @@ let txPackets = 0;
 let usersInRoom: string[] = [];
 let forceReconnectRequested = false;
 
+// ─── Inhibicion RX (anti-feedback acustico) ───────────────────────────────────
+// Cuando la radio reproduce audio del servidor, inhibimos el VOX durante ese
+// tiempo + 600 ms de margen para que el sonido del altavoz no active el micro.
+let rxActive = false;
+let rxInhibitTimer: ReturnType<typeof setTimeout> | null = null;
+const RX_HANG_MS = 600; // ms de margen tras el ultimo paquete RX
+
+function setRxActive(): void {
+  rxActive = true;
+  if (rxInhibitTimer) clearTimeout(rxInhibitTimer);
+  rxInhibitTimer = setTimeout(() => {
+    rxActive = false;
+    rxInhibitTimer = null;
+  }, RX_HANG_MS);
+}
+
 // ─── Audio y VOX ─────────────────────────────────────────────────────────────
 const audio = new AlsaAudio(cfg.audio);
 const vox   = new Vox(cfg.audio.voxThresholdRms, cfg.audio.voxHangMs);
 
 // El audio emite chunks PCM crudos para que el VOX los analice
 audio.on("pcm_chunk", (pcm: Int16Array) => {
-  if (cfg.audio.vox) vox.processPcm(pcm);
+  if (cfg.audio.vox && !rxActive) vox.processPcm(pcm);
 });
 
 // Cuando el VOX o control HTTP activan PTT
 vox.on("ptt_start", () => {
-  if (!eqsoClient?.connected || pttActive) return;
+  if (!eqsoClient?.connected || pttActive || rxActive) return;
   pttActive = true;
   eqsoClient.startTx();
   log("VOX: PTT activado — inicio transmision");
@@ -116,6 +132,8 @@ function connect(): void {
         const pkt = ev.data as Buffer;
         if (pkt.length < 1 + GSM_PACKET_BYTES) break;
         rxPackets++;
+        // Inhibir VOX mientras reproducimos para evitar feedback acustico
+        setRxActive();
         // Extraer 198 bytes GSM (sin el byte 0x01 del opcode)
         const gsm = Buffer.from(pkt.buffer, pkt.byteOffset + 1, GSM_PACKET_BYTES);
         audio.playGsm(gsm);
