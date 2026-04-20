@@ -198,8 +198,13 @@ export class AlsaAudio extends EventEmitter {
   }
 
   private stopPlayer(): void {
-    try { this.player?.stdin.end(); this.player?.kill("SIGTERM"); } catch { /* ignore */ }
-    this.player = null;
+    if (this.player) {
+      const p = this.player;
+      this.player = null;
+      try { p.stdin.end(); } catch { /* ignore */ }
+      // Dar 200ms a aplay para que drene el buffer antes de matar el proceso
+      setTimeout(() => { try { p.kill("SIGTERM"); } catch { /* ignore */ } }, 200);
+    }
   }
 }
 

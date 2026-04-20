@@ -35,10 +35,10 @@ sudo tee /etc/eqso-relay/default.json > /dev/null << 'EQSO_CONFIG'
     "captureDevice": "plughw:Device,0",
     "playbackDevice": "plughw:Device,0",
     "vox": true,
-    "voxThresholdRms": 600,
-    "voxHangMs": 1000,
-    "inputGain": 1.0,
-    "outputGain": 1.0
+    "voxThresholdRms": 2000,
+    "voxHangMs": 1200,
+    "inputGain": 4.0,
+    "outputGain": 2.5
   },
   "ptt": {
     "device": "/dev/ttyACM0",
@@ -99,7 +99,15 @@ for i in $(seq 1 15); do
 done
 cat /proc/asound/cards 2>/dev/null
 
-# 4. Dar tiempo al TCP 2171 a que este escuchando
+# 4. Subir niveles del mixer ALSA para la tarjeta USB (card 1)
+amixer -c 1 sset "Mic" 100% cap 2>/dev/null || true
+amixer -c 1 sset "Mic Capture Volume" 100% cap 2>/dev/null || true
+amixer -c 1 sset "Capture" 100% cap 2>/dev/null || true
+amixer -c 1 sset "Speaker" 80% 2>/dev/null || true
+amixer -c 1 sset "PCM" 90% 2>/dev/null || true
+echo "[wake] Mixer ALSA card 1 ajustado"
+
+# 5. Dar tiempo al TCP 2171 a que este escuchando
 sleep 4
 exit 0
 WAKE_SCRIPT
