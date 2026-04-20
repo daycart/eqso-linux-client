@@ -46,16 +46,22 @@ sudo tee /etc/eqso-relay/default.json > /dev/null << 'EQSO_CONFIG'
 EQSO_CONFIG
 sudo chmod 644 /etc/eqso-relay/default.json
 
-echo "==> mantener tarjetas USB de audio siempre encendidas (evitar autosuspend)"
-for dev in /sys/bus/usb/devices/*/; do
-  echo on  | sudo tee "${dev}power/control"              > /dev/null 2>&1 || true
-  echo -1  | sudo tee "${dev}power/autosuspend_delay_ms" > /dev/null 2>&1 || true
-done
+echo "==> regla udev permanente: deshabilitar autosuspend en tarjetas USB de audio"
+sudo tee /etc/udev/rules.d/91-usb-audio-nosuspend.rules > /dev/null << 'UDEV_RULE'
+# Mantener encendidos todos los dispositivos USB de audio (no autosuspend)
+SUBSYSTEM=="usb", ATTR{product}=="USB Audio Device", ATTR{power/control}="on", ATTR{power/autosuspend}="-1"
+SUBSYSTEM=="usb", DRIVER=="snd-usb-audio", ATTR{power/control}="on"
+UDEV_RULE
+sudo udevadm control --reload-rules 2>/dev/null || true
 
-echo "==> despertar tarjeta de audio USB si estaba dormida (plughw:1,0)"
-# Abrir el dispositivo brevemente fuerza al kernel a hacer USB resume
-sudo timeout 2 arecord -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q /dev/null 2>/dev/null || true
+echo "==> recargar modulo snd_usb_audio para despertar la tarjeta (PCM re-enumeration)"
+sudo modprobe -r snd_usb_audio 2>/dev/null || true
 sleep 1
+sudo modprobe snd_usb_audio
+sleep 2  # dar tiempo al dispositivo a inicializarse
+
+echo "==> verificar que la tarjeta USB esta disponible"
+arecord -l 2>/dev/null || true
 
 echo "==> restart eqso (api-server + TCP)"
 sudo systemctl restart eqso
