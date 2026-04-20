@@ -46,29 +46,35 @@ sudo tee /etc/eqso-relay/default.json > /dev/null << 'EQSO_CONFIG'
 EQSO_CONFIG
 sudo chmod 644 /etc/eqso-relay/default.json
 
+echo "==> parar servicios para poder recargar el modulo de audio"
+sudo systemctl stop eqso-relay 2>/dev/null || true
+sudo systemctl stop eqso       2>/dev/null || true
+sleep 1
+
 echo "==> deshabilitar autosuspend del modulo snd_usb_audio (permanente)"
-# snd_usb_audio tiene su propio autosuspend independiente del USB core.
-# Con autosuspend=-1 el driver nunca suspende la tarjeta por inactividad.
 echo "options snd_usb_audio autosuspend=-1" \
   | sudo tee /etc/modprobe.d/usb-audio-nosuspend.conf > /dev/null
 
-echo "==> recargar snd_usb_audio con autosuspend=-1"
+echo "==> recargar snd_usb_audio con autosuspend=-1 (modulo libre ahora)"
 sudo modprobe -r snd_usb_audio 2>/dev/null || true
 sleep 1
 sudo modprobe snd_usb_audio
 sleep 2
 
+echo "==> verificar parametro autosuspend aplicado"
+cat /sys/module/snd_usb_audio/parameters/autosuspend 2>/dev/null || echo "N/A"
+
 echo "==> verificar tarjeta USB disponible"
 arecord -l 2>/dev/null || true
 
-echo "==> restart eqso (api-server + TCP)"
-sudo systemctl restart eqso
+echo "==> start eqso (api-server + TCP)"
+sudo systemctl start eqso
 
 echo "==> esperando 8s a que el puerto TCP 2171 este listo..."
 sleep 8
 
-echo "==> restart eqso-relay"
-sudo systemctl restart eqso-relay
+echo "==> start eqso-relay"
+sudo systemctl start eqso-relay
 
 echo "==> status"
 sudo systemctl is-active eqso eqso-relay
