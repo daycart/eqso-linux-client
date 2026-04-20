@@ -1,0 +1,21 @@
+sudo journalctl -u eqso-relay -n 20 --no-pager
+abr 20 22:31:14 ubuntus node[4076]: [audio] 2026-04-20T22:31:14.004Z [arecord] Terminado (code 1)
+abr 20 22:31:14 ubuntus node[4076]: [eqso] 2026-04-20T22:31:14.005Z Handshake recibido \Uffffffff conexion establecida
+abr 20 22:31:14 ubuntus node[4076]: [main] 2026-04-20T22:31:14.006Z Conectado \Uffffffff enviando JOIN\Uffffffff
+abr 20 22:31:14 ubuntus node[4076]: [eqso] 2026-04-20T22:31:14.009Z JOIN enviado: callsign="0R-IN70WN" sala="CB"
+abr 20 22:31:14 ubuntus node[4076]: [eqso] 2026-04-20T22:31:14.010Z Salas disponibles: GENERAL, CB, ASORAPA, PRUEBAS
+abr 20 22:31:14 ubuntus node[4076]: [main] 2026-04-20T22:31:14.010Z Salas: GENERAL, CB, ASORAPA, PRUEBAS
+abr 20 22:31:14 ubuntus node[4076]: [main] 2026-04-20T22:31:14.014Z Sala: 0R-IN70WN se ha unido
+abr 20 22:31:14 ubuntus node[4076]: [ptt] 2026-04-20T22:31:14.095Z PTT serial listo (/dev/ttyACM0, rts)
+abr 20 22:31:16 ubuntus node[4076]: [audio] 2026-04-20T22:31:16.005Z arecord -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 20 22:31:16 ubuntus node[4076]: [audio] 2026-04-20T22:31:16.030Z [arecord] ALSA lib confmisc.c:165:(snd_config_get_card) Cannot get card index for 1
+abr 20 22:31:16 ubuntus node[4076]: arecord: main:834: audio open error: No such file or directory
+abr 20 22:31:16 ubuntus node[4076]: [audio] 2026-04-20T22:31:16.034Z [arecord] Terminado (code 1)
+abr 20 22:31:18 ubuntus node[4076]: [audio] 2026-04-20T22:31:18.036Z arecord -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 20 22:31:18 ubuntus node[4076]: [audio] 2026-04-20T22:31:18.058Z [arecord] ALSA lib confmisc.c:165:(snd_config_get_card) Cannot get card index for 1
+abr 20 22:31:18 ubuntus node[4076]: arecord: main:834: audio open error: No such file or directory
+abr 20 22:31:18 ubuntus node[4076]: [audio] 2026-04-20T22:31:18.062Z [arecord] Terminado (code 1)
+abr 20 22:31:20 ubuntus node[4076]: [audio] 2026-04-20T22:31:20.064Z arecord -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 20 22:31:20 ubuntus node[4076]: [audio] 2026-04-20T22:31:20.089Z [arecord] ALSA lib confmisc.c:165:(snd_config_get_card) Cannot get card index for 1
+abr 20 22:31:20 ubuntus node[4076]: arecord: main:834: audio open error: No such file or directory
+abr 20 22:31:20 ubuntus node[4076]: [audio] 2026-04-20T22:31:20.092Z [arecord] Terminado (code 1)
