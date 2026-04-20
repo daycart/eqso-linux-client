@@ -61,8 +61,21 @@ sleep 1
 sudo modprobe snd_usb_audio
 sleep 2
 
-echo "==> verificar parametro autosuspend aplicado"
-cat /sys/module/snd_usb_audio/parameters/autosuspend 2>/dev/null || echo "N/A"
+echo "==> fijar power/control=on en tarjetas USB de audio para evitar autosuspend"
+# Buscar en sysfs los dispositivos de sonido que sean USB y poner power/control=on
+for card_sysfs in /sys/class/sound/card*/; do
+  usb_power=$(readlink -f "${card_sysfs}device" 2>/dev/null)
+  # Subir niveles hasta encontrar el dispositivo USB raiz (tiene idVendor)
+  for i in 1 2 3 4; do
+    usb_power=$(dirname "$usb_power" 2>/dev/null)
+    if [ -f "${usb_power}/idVendor" ] && [ -f "${usb_power}/power/control" ]; then
+      echo on | sudo tee "${usb_power}/power/control" > /dev/null
+      prod=$(cat "${usb_power}/product" 2>/dev/null || echo "desconocido")
+      echo "  power/control=on aplicado a: $prod"
+      break
+    fi
+  done
+done
 
 echo "==> verificar tarjeta USB disponible"
 arecord -l 2>/dev/null || true
