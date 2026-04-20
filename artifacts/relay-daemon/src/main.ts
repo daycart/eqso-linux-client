@@ -46,6 +46,7 @@ function setRxActive(): void {
     rxActive = false;
     rxInhibitTimer = null;
     serialPtt.set(false); // liberar PTT de la radio al finalizar el RX
+    audio.endRx();        // parar aplay para evitar underruns entre transmisiones
   }, RX_HANG_MS);
 }
 

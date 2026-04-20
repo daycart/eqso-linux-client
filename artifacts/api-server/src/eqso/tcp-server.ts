@@ -187,9 +187,13 @@ function processMultiByte(state: TcpClientState, byte: number): void {
           roomManager.broadcastToTcpAndRelays(client.room, gsmPkt, state.id);
 
           // Decode GSM → Int16 PCM → Float32 PCM → send [0x11][f32] to WS browser clients
+          // Clamp to ±0.45 so that with the browser's 2× gain node the peak is
+          // 0.9 FS — prevents hard clipping on full-scale radio audio.
           const int16 = gsmDecodePacket(gsmPayload);
           const float32 = new Float32Array(int16.length);
-          for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768.0;
+          for (let i = 0; i < int16.length; i++) {
+            float32[i] = Math.max(-0.45, Math.min(0.45, int16[i] / 32768.0));
+          }
           const wsPkt = Buffer.concat([Buffer.from([0x11]), Buffer.from(float32.buffer)]);
           roomManager.broadcastBinToLocalWsClients(client.room, wsPkt, state.id);
         }

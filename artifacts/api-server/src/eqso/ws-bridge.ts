@@ -94,9 +94,11 @@ function handleLocalMode(
         try {
           const gsmData = new Uint8Array(data.buffer, data.byteOffset + 1, AUDIO_PAYLOAD_SIZE);
           const pcm = gsmDecodePacket(gsmData); // Int16Array(960), synchronous
+          // Clamp to ±0.45 so that with the browser's 2× gain node the peak is
+          // 0.9 FS — prevents hard clipping on full-scale radio audio.
           const float32 = new Float32Array(pcm.length);
           for (let i = 0; i < pcm.length; i++) {
-            float32[i] = Math.max(-0.85, Math.min(0.85, pcm[i] / 32768));
+            float32[i] = Math.max(-0.45, Math.min(0.45, pcm[i] / 32768));
           }
           const payload = Buffer.from(float32.buffer);
           const out = Buffer.allocUnsafe(1 + payload.length);

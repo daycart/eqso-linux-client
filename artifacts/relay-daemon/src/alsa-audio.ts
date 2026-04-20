@@ -47,6 +47,15 @@ export class AlsaAudio extends EventEmitter {
     this.decoder.decode(gsm);
   }
 
+  /**
+   * Terminar sesion RX — para el proceso aplay para evitar underruns.
+   * Los ultimos 960 samples (120 ms) ya se habian escrito en stdin de aplay
+   * antes de que expire el timer de 600 ms, por lo que no se corta audio.
+   */
+  endRx(): void {
+    this.stopPlayer();
+  }
+
   /** Habilitar/deshabilitar envio de audio TX (controlado externamente por VOX o PTT). */
   setTxEnabled(enabled: boolean): void {
     // Se gestiona a nivel de main.ts — aqui solo preparamos el encoder
@@ -96,7 +105,17 @@ export class AlsaAudio extends EventEmitter {
     if (!this.player || this.player.killed) {
       this.startPlayer();
     }
-    const buf = Buffer.from(pcm.buffer, pcm.byteOffset, pcm.byteLength);
+    const gain = this.cfg.outputGain;
+    let buf: Buffer;
+    if (gain !== 1.0) {
+      const adjusted = new Int16Array(pcm.length);
+      for (let i = 0; i < pcm.length; i++) {
+        adjusted[i] = Math.max(-32768, Math.min(32767, Math.round(pcm[i] * gain)));
+      }
+      buf = Buffer.from(adjusted.buffer, adjusted.byteOffset, adjusted.byteLength);
+    } else {
+      buf = Buffer.from(pcm.buffer, pcm.byteOffset, pcm.byteLength);
+    }
     try { this.player?.stdin.write(buf); } catch { /* player may have closed */ }
   }
 
