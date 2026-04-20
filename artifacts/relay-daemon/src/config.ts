@@ -38,7 +38,7 @@ export interface RelayConfig {
 }
 
 const DEFAULTS: RelayConfig = {
-  callsign: "IN7BWN",
+  callsign: "0R-IN70WN",
   room: "CB",
   password: "",
   message: "Radio Enlace",
