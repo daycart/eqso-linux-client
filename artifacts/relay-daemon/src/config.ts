@@ -38,12 +38,12 @@ export interface RelayConfig {
 }
 
 const DEFAULTS: RelayConfig = {
-  callsign: "0R-RELAY",
+  callsign: "0R-IN7BWN",
   room: "CB",
   password: "",
   message: "Radio Enlace",
-  server: "193.152.83.229",
-  port: 8008,
+  server: "127.0.0.1",
+  port: 2171,
   reconnectMinMs: 2000,
   reconnectMaxMs: 60000,
   audio: {
