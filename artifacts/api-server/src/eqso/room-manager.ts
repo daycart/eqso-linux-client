@@ -43,6 +43,13 @@ export interface RoomEvent {
   data?: Buffer;
 }
 
+type RoomListenerCallback = (room: string, data: Buffer, senderId: string) => void;
+
+interface RoomListener {
+  rooms: Set<string>;
+  onData: RoomListenerCallback;
+}
+
 export class RoomManager extends EventEmitter {
   private clients = new Map<string, ClientInfo>();
   private rooms = new Map<string, Set<string>>();
@@ -50,6 +57,7 @@ export class RoomManager extends EventEmitter {
   private _enabled = true;
   private _startedAt = Date.now();
   private remoteConns = new Map<string, RemoteConnectionInfo>();
+  private roomListeners = new Map<string, RoomListener>();
 
   isEnabled(): boolean { return this._enabled; }
   enable(): void       { this._enabled = true; }
@@ -132,16 +140,31 @@ export class RoomManager extends EventEmitter {
 
   broadcastToRoom(room: string, data: Buffer, excludeId?: string): void {
     const members = this.rooms.get(room);
-    if (!members) return;
-    for (const id of members) {
-      if (id === excludeId) continue;
-      const c = this.clients.get(id);
-      if (c) {
-        try {
-          c.send(data); // txBytes is tracked inside each client's send() callback
-        } catch { /* ignore */ }
+    if (members) {
+      for (const id of members) {
+        if (id === excludeId) continue;
+        const c = this.clients.get(id);
+        if (c) {
+          try {
+            c.send(data); // txBytes is tracked inside each client's send() callback
+          } catch { /* ignore */ }
+        }
       }
     }
+    // Notify relay listeners subscribed to this room
+    for (const listener of this.roomListeners.values()) {
+      if (listener.rooms.has(room)) {
+        try { listener.onData(room, data, excludeId ?? ""); } catch { /* ignore */ }
+      }
+    }
+  }
+
+  addRoomListener(id: string, rooms: string[], onData: RoomListenerCallback): void {
+    this.roomListeners.set(id, { rooms: new Set(rooms), onData });
+  }
+
+  removeRoomListener(id: string): void {
+    this.roomListeners.delete(id);
   }
 
   /** Send data only to TCP clients in a room (skips WebSocket browser clients). */
