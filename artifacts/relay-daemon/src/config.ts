@@ -47,10 +47,10 @@ const DEFAULTS: RelayConfig = {
   reconnectMinMs: 2000,
   reconnectMaxMs: 60000,
   audio: {
-    captureDevice: "default",
-    playbackDevice: "default",
+    captureDevice: "plughw:1,0",
+    playbackDevice: "plughw:1,0",
     vox: true,
-    voxThresholdRms: 800,
+    voxThresholdRms: 600,
     voxHangMs: 1000,
     inputGain: 1.0,
     outputGain: 1.0,
@@ -61,7 +61,7 @@ const DEFAULTS: RelayConfig = {
     host: "127.0.0.1",
   },
   ptt: {
-    device:   "",      // vacio = solo VOX, sin control serial
+    device:   "/dev/ttyACM0",
     method:   "rts",
     inverted: false,
   },
