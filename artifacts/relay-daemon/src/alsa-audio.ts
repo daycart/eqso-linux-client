@@ -122,17 +122,22 @@ export class AlsaAudio extends EventEmitter {
   // ── arecord ───────────────────────────────────────────────────────────────
 
   private startRecorder(): void {
+    // sox: captura a la tasa nativa del hardware y remuestrea a 8 kHz con
+    // alta calidad (sinc). Esto evita los artefactos metalicos que produce
+    // el remuestreador lineal de ALSA cuando el hardware no soporta 8 kHz.
     const args = [
-      "-D", this.cfg.captureDevice,
-      "-f", "S16_LE",
-      "-r", "8000",
+      "-t", "alsa", this.cfg.captureDevice,  // entrada: ALSA a tasa nativa
+      "-t", "raw",                            // salida: PCM crudo por stdout
+      "-r", "8000",                           // frecuencia de salida: 8 kHz
+      "-e", "signed-integer",
+      "-b", "16",
       "-c", "1",
-      "-q",                  // quiet (sin spinner de progreso)
-      "--buffer-size=4096",  // buffer pequeño para latencia baja
+      "-L",                                   // little-endian
+      "-",                                    // stdout
     ];
 
-    log(`arecord ${args.join(" ")}`);
-    this.recorder = spawn("arecord", args, { stdio: ["ignore", "pipe", "pipe"] });
+    log(`sox (capture) ${args.join(" ")}`);
+    this.recorder = spawn("sox", args, { stdio: ["ignore", "pipe", "pipe"] });
 
     this.recorder.stderr.on("data", (d: Buffer) => {
       const msg = d.toString().trim();
@@ -172,16 +177,20 @@ export class AlsaAudio extends EventEmitter {
   // ── aplay ────────────────────────────────────────────────────────────────
 
   private startPlayer(): void {
+    // sox: recibe PCM a 8 kHz por stdin y reproduce a la tasa nativa del
+    // hardware con remuestreo de alta calidad (sinc).
     const args = [
-      "-D", this.cfg.playbackDevice,
-      "-f", "S16_LE",
-      "-r", "8000",
+      "-t", "raw",                             // entrada: PCM crudo por stdin
+      "-r", "8000",                            // frecuencia de entrada: 8 kHz
+      "-e", "signed-integer",
+      "-b", "16",
       "-c", "1",
-      "-q",
-      "--buffer-size=4096",
+      "-L",                                    // little-endian
+      "-",                                     // stdin
+      "-t", "alsa", this.cfg.playbackDevice,  // salida: ALSA a tasa nativa
     ];
-    log(`aplay ${args.join(" ")}`);
-    this.player = spawn("aplay", args, { stdio: ["pipe", "ignore", "pipe"] });
+    log(`sox (playback) ${args.join(" ")}`);
+    this.player = spawn("sox", args, { stdio: ["pipe", "ignore", "pipe"] });
 
     this.player.stderr.on("data", (d: Buffer) => {
       const msg = d.toString().trim();
