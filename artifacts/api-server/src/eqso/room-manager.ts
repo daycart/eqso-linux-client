@@ -167,6 +167,26 @@ export class RoomManager extends EventEmitter {
     this.roomListeners.delete(id);
   }
 
+  /** Broadcast data to TCP clients AND relay listeners (not WS browser clients).
+   *  Use this for GSM packets that must reach hardware relays and TCP eQSO clients. */
+  broadcastToTcpAndRelays(room: string, data: Buffer, excludeId?: string): void {
+    const members = this.rooms.get(room);
+    if (members) {
+      for (const id of members) {
+        if (id === excludeId) continue;
+        const c = this.clients.get(id);
+        if (c?.protocol === "tcp") {
+          try { c.send(data); } catch { /* ignore */ }
+        }
+      }
+    }
+    for (const listener of this.roomListeners.values()) {
+      if (listener.rooms.has(room)) {
+        try { listener.onData(room, data, excludeId ?? ""); } catch { /* ignore */ }
+      }
+    }
+  }
+
   /** Send data only to TCP clients in a room (skips WebSocket browser clients). */
   broadcastToTcpClientsInRoom(room: string, data: Buffer, excludeId?: string): void {
     const members = this.rooms.get(room);

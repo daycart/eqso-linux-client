@@ -25,7 +25,7 @@ import {
   FRAMES_PER_PACKET,
   GSM_PACKET_BYTES,
 } from "./ffmpeg-gsm";
-import { gsmDecodePacket } from "./gsm610";
+import { gsmDecodePacket, gsmEncodePacket } from "./gsm610";
 
 // Binary opcodes for browser ↔ server WebSocket protocol
 const WS_AUDIO_LOCAL  = 0x01; // local relay: Uint8 unsigned PCM
@@ -142,12 +142,43 @@ function handleLocalMode(
     sendJson(ws, { type: "keepalive" });
   }, KEEPALIVE_MS);
 
+  // Accumulate Uint8 PCM samples from browser until we have 960 (one GSM packet)
+  let localPcmAccum = new Uint8Array(0);
+
   return {
     onMessage: (msg, rawBin) => {
       if (rawBin && rawBin.length > 0 && rawBin[0] === 0x01) {
         const client = roomManager.getClient(id);
         if (client?.room && !moderationManager.isMuted(client.name)) {
-          roomManager.broadcastToRoom(client.room, rawBin, id);
+          // 1. Send raw Uint8 PCM to other WS browser clients (they handle it natively)
+          roomManager.broadcastBinToLocalWsClients(client.room, rawBin, id);
+
+          // 2. Encode Uint8 PCM → GSM and deliver proper 199-byte packets to TCP clients
+          //    and relay listeners.  Without this, TCP clients receive wrong-size packets
+          //    and reset the connection (ECONNRESET).
+          const newSamples = rawBin.slice(1); // strip 0x01 opcode
+          const merged = new Uint8Array(localPcmAccum.length + newSamples.length);
+          merged.set(localPcmAccum);
+          merged.set(newSamples, localPcmAccum.length);
+          localPcmAccum = merged;
+
+          while (localPcmAccum.length >= PCM_CHUNK_SAMPLES) {
+            const chunk = localPcmAccum.slice(0, PCM_CHUNK_SAMPLES);
+            localPcmAccum = localPcmAccum.slice(PCM_CHUNK_SAMPLES);
+
+            // Uint8 unsigned (0–255) → Int16 signed (-32768..32767)
+            const int16 = new Int16Array(PCM_CHUNK_SAMPLES);
+            for (let i = 0; i < PCM_CHUNK_SAMPLES; i++) {
+              int16[i] = (chunk[i] - 128) << 8;
+            }
+
+            const gsm = gsmEncodePacket(int16); // 198-byte Uint8Array
+            const gsmPkt = Buffer.allocUnsafe(1 + gsm.length);
+            gsmPkt[0] = 0x01;
+            Buffer.from(gsm).copy(gsmPkt, 1);
+
+            roomManager.broadcastToTcpAndRelays(client.room, gsmPkt, id);
+          }
         }
         return;
       }
@@ -266,6 +297,7 @@ function handleLocalMode(
 
     onClose: () => {
       clearInterval(pingTimer);
+      localPcmAccum = new Uint8Array(0);
       const client = roomManager.getClient(id);
       if (client?.room && client.name) {
         roomManager.broadcastToRoom(client.room, buildUserLeft(client.name), id);
