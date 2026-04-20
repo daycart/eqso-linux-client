@@ -61,21 +61,57 @@ sleep 1
 sudo modprobe snd_usb_audio
 sleep 2
 
-echo "==> fijar power/control=on en tarjetas USB de audio para evitar autosuspend"
-# Buscar en sysfs los dispositivos de sonido que sean USB y poner power/control=on
+echo "==> crear /opt/eqso-asorapa/wake-audio.sh (ExecStartPre del servicio)"
+sudo tee /opt/eqso-asorapa/wake-audio.sh > /dev/null << 'WAKE_SCRIPT'
+#!/bin/bash
+# Despierta la tarjeta USB de audio y espera a que ALSA la registre.
+# Se ejecuta como root antes de que arranque el relay-daemon.
+
+# 1. power/control=on en todas las tarjetas de audio USB
 for card_sysfs in /sys/class/sound/card*/; do
-  usb_power=$(readlink -f "${card_sysfs}device" 2>/dev/null)
-  # Subir niveles hasta encontrar el dispositivo USB raiz (tiene idVendor)
+  usb_dev=$(readlink -f "${card_sysfs}device" 2>/dev/null)
   for i in 1 2 3 4; do
-    usb_power=$(dirname "$usb_power" 2>/dev/null)
-    if [ -f "${usb_power}/idVendor" ] && [ -f "${usb_power}/power/control" ]; then
-      echo on | sudo tee "${usb_power}/power/control" > /dev/null
-      prod=$(cat "${usb_power}/product" 2>/dev/null || echo "desconocido")
-      echo "  power/control=on aplicado a: $prod"
+    usb_dev=$(dirname "$usb_dev" 2>/dev/null)
+    if [ -f "${usb_dev}/idVendor" ] && [ -f "${usb_dev}/power/control" ]; then
+      echo on > "${usb_dev}/power/control" 2>/dev/null || true
       break
     fi
   done
 done
+
+# 2. Esperar hasta 10s a que la tarjeta USB aparezca en ALSA
+for i in $(seq 1 10); do
+  grep -q " 1 \[" /proc/asound/cards 2>/dev/null && break
+  sleep 1
+done
+
+# 3. Dar tiempo al TCP 2171 a que este escuchando
+sleep 4
+exit 0
+WAKE_SCRIPT
+sudo chmod +x /opt/eqso-asorapa/wake-audio.sh
+
+echo "==> actualizar eqso-relay.service con ExecStartPre"
+sudo tee /etc/systemd/system/eqso-relay.service > /dev/null << 'SERVICE_FILE'
+[Unit]
+Description=eQSO Relay Daemon
+After=network.target eqso.service
+Requires=eqso.service
+
+[Service]
+Type=simple
+User=david
+WorkingDirectory=/opt/eqso-asorapa/artifacts/relay-daemon
+ExecStartPre=+/opt/eqso-asorapa/wake-audio.sh
+ExecStart=/usr/bin/node --enable-source-maps dist/main.mjs
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+SERVICE_FILE
+sudo systemctl daemon-reload
 
 echo "==> verificar tarjeta USB disponible"
 arecord -l 2>/dev/null || true
@@ -83,10 +119,10 @@ arecord -l 2>/dev/null || true
 echo "==> start eqso (api-server + TCP)"
 sudo systemctl start eqso
 
-echo "==> esperando 8s a que el puerto TCP 2171 este listo..."
-sleep 8
+echo "==> esperando 6s iniciales..."
+sleep 6
 
-echo "==> start eqso-relay"
+echo "==> start eqso-relay (wake-audio.sh esperara tarjeta + TCP)"
 sudo systemctl start eqso-relay
 
 echo "==> status"
