@@ -47,6 +47,14 @@ const RX_HANG_MS = 2000;
 let postTxSuppressUntil = 0;
 const POST_TX_SUPPRESS_MS = 800;
 
+// ─── Supresion post-RX (anti-feedback acustico tras reproduccion) ─────────────
+// Tras terminar de reproducir audio del servidor (web client, etc.), el altavoz
+// del CM108 deja eco residual en la sala. Cuando arecord se reanuda, el VOX
+// puede capturar ese eco y disparar una transmision de ruido.
+// Inhibimos el VOX durante este margen despues de que rxActive baje a false.
+let postRxVoxSuppressUntil = 0;
+const POST_RX_SUPPRESS_MS = 1500;
+
 function setRxActive(): void {
   const wasActive = rxActive;
   rxActive = true;
@@ -57,6 +65,9 @@ function setRxActive(): void {
     rxInhibitTimer = null;
     serialPtt.set(false); // liberar PTT de la radio al finalizar el RX
     audio.endRx();        // parar aplay para evitar underruns entre transmisiones
+    // Extender inhibicion VOX: el altavoz deja eco residual en la sala que
+    // arecord capturaría al reiniciarse (400ms) → VOX dispara ruido de fondo.
+    postRxVoxSuppressUntil = Date.now() + POST_RX_SUPPRESS_MS;
   }, RX_HANG_MS);
 }
 
@@ -69,7 +80,9 @@ const vox   = new Vox(cfg.audio.voxThresholdRms, cfg.audio.voxHangMs);
 
 // El audio emite chunks PCM crudos para que el VOX los analice
 audio.on("pcm_chunk", (pcm: Int16Array) => {
-  if (cfg.audio.vox && !rxActive) vox.processPcm(pcm);
+  if (cfg.audio.vox && !rxActive && Date.now() > postRxVoxSuppressUntil) {
+    vox.processPcm(pcm);
+  }
 });
 
 // Cuando el VOX o control HTTP activan PTT
