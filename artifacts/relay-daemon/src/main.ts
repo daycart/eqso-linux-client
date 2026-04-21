@@ -82,8 +82,11 @@ const vox   = new Vox(cfg.audio.voxThresholdRms, cfg.audio.voxHangMs);
 // Durante el colgado del VOX (voxHangMs) el micro captura solo ruido de fondo
 // (RMS≈6). Si lo enviamos, el navegador acumula 4s de silencio en su cola
 // y cuando llega nueva voz el buffer se desborda → efecto "bucle".
-// El gate suprime esos paquetes de ruido; la voz (RMS>>300) pasa siempre.
-const TX_GATE_RMS = 300;
+// El gate suprime esos paquetes de ruido; la voz pasa siempre.
+// IMPORTANTE: el ruido de fondo real es RMS=6. Con 30 suprimimos solo el
+// silencio absoluto y dejamos pasar todo el contenido vocal (fricativas,
+// transiciones, partes suaves de la voz que pueden bajar hasta RMS~50-200).
+const TX_GATE_RMS = 30;
 let latestPcmRms = 0;
 
 // El audio emite chunks PCM crudos para que el VOX los analice
