@@ -2,7 +2,7 @@ import net from "net";
 import { randomUUID } from "crypto";
 import { logger } from "../lib/logger";
 import { roomManager, ClientInfo } from "./room-manager";
-import { gsmDecodePacket } from "./gsm610";
+import { FfmpegGsmDecoder } from "./ffmpeg-gsm";
 import { inactivityManager } from "./inactivity-manager";
 import { moderationManager } from "./moderation-manager";
 import {
@@ -24,6 +24,9 @@ import {
 
 const SERVER_VERSION = "eQSO Linux Server v1.0";
 const KEEPALIVE_INTERVAL_MS = 30_000;
+
+// One FFmpeg GSM decoder per TCP client (keyed by client UUID)
+const tcpDecoders = new Map<string, FfmpegGsmDecoder>();
 
 interface TcpClientState {
   id: string;
@@ -186,16 +189,8 @@ function processMultiByte(state: TcpClientState, byte: number): void {
           const gsmPkt = Buffer.concat([Buffer.from([0x01]), gsmPayload]);
           roomManager.broadcastToTcpAndRelays(client.room, gsmPkt, state.id);
 
-          // Decode GSM → Int16 PCM → Float32 PCM → send [0x11][f32] to WS browser clients
-          // Clamp to ±0.45 so that with the browser's 2× gain node the peak is
-          // 0.9 FS — prevents hard clipping on full-scale radio audio.
-          const int16 = gsmDecodePacket(gsmPayload);
-          const float32 = new Float32Array(int16.length);
-          for (let i = 0; i < int16.length; i++) {
-            float32[i] = Math.max(-0.45, Math.min(0.45, int16[i] / 32768.0));
-          }
-          const wsPkt = Buffer.concat([Buffer.from([0x11]), Buffer.from(float32.buffer)]);
-          roomManager.broadcastBinToLocalWsClients(client.room, wsPkt, state.id);
+          // Feed to per-client FFmpeg decoder; WS broadcast happens in "pcm" event
+          tcpDecoders.get(state.id)?.decode(Buffer.from(gsmPayload));
         }
         state.buf = state.buf.slice(AUDIO_PAYLOAD_SIZE);
         if (state.buf.length === 0) {
@@ -308,6 +303,12 @@ function handleDisconnect(state: TcpClientState): void {
   if (state.disconnected) return; // guard: error event is always followed by close event
   state.disconnected = true;
 
+  const decoder = tcpDecoders.get(state.id);
+  if (decoder) {
+    decoder.stop();
+    tcpDecoders.delete(state.id);
+  }
+
   const client = roomManager.getClient(state.id);
   if (client?.room) {
     const leftPkt = buildUserLeft(client.name);
@@ -355,6 +356,22 @@ export function startTcpServer(port: number): net.Server {
 
     roomManager.addClient(clientInfo);
     logger.info({ id, addr: socket.remoteAddress }, "eQSO TCP client registered — waiting for handshake");
+
+    // Spawn per-client FFmpeg GSM decoder.  The 500ms startup warmup happens here
+    // so the process is ready by the time the client starts transmitting audio.
+    const decoder = new FfmpegGsmDecoder();
+    tcpDecoders.set(id, decoder);
+    decoder.on("pcm", (pcm: Int16Array) => {
+      const cli = roomManager.getClient(id);
+      if (!cli?.room) return;
+      const float32 = new Float32Array(pcm.length);
+      for (let i = 0; i < pcm.length; i++) {
+        float32[i] = Math.max(-0.45, Math.min(0.45, pcm[i] / 32768.0));
+      }
+      const wsPkt = Buffer.concat([Buffer.from([0x11]), Buffer.from(float32.buffer)]);
+      roomManager.broadcastBinToLocalWsClients(cli.room, wsPkt, id);
+    });
+    decoder.start();
 
     const keepaliveTimer = setInterval(() => {
       if (socket.destroyed) {
