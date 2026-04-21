@@ -31,6 +31,11 @@ export class AlsaAudio extends EventEmitter {
   private jitterBuf = new Int16Array(0); // buffer pre-inicio aplay
   // Semi-duplex: CM108 no soporta captura+reproduccion simultaneas
   private recorderSuspended = false;    // true mientras aplay esta activo
+  // Métricas de nivel en captura (log periódico)
+  private levelPeakRms   = 0;
+  private levelClipCount = 0;
+  private levelSamples   = 0;
+  private levelTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private cfg: AudioConfig) {
     super();
@@ -40,9 +45,12 @@ export class AlsaAudio extends EventEmitter {
     this.startDecoder();
     this.startEncoder();
     this.startRecorder();
+    // Log de nivel cada 5 segundos para calibración
+    this.levelTimer = setInterval(() => this.logLevel(), 5000);
   }
 
   stop(): void {
+    if (this.levelTimer) { clearInterval(this.levelTimer); this.levelTimer = null; }
     this.stopRecorder();
     this.stopPlayer();
     this.encoder.stop();
@@ -182,10 +190,17 @@ export class AlsaAudio extends EventEmitter {
       const gain = this.cfg.inputGain;
       const sampleCount = Math.floor(chunk.length / 2);
       const pcm = new Int16Array(sampleCount);
+      let sumSq = 0;
       for (let i = 0; i < sampleCount; i++) {
         const raw = chunk.readInt16LE(i * 2);
-        pcm[i] = Math.max(-32768, Math.min(32767, Math.round(raw * gain)));
+        const s = Math.max(-32768, Math.min(32767, Math.round(raw * gain)));
+        pcm[i] = s;
+        sumSq += s * s;
+        if (s === 32767 || s === -32768) this.levelClipCount++;
       }
+      const rms = Math.sqrt(sumSq / sampleCount);
+      if (rms > this.levelPeakRms) this.levelPeakRms = rms;
+      this.levelSamples += sampleCount;
       this.feedPcm(pcm);
     });
   }
@@ -193,6 +208,20 @@ export class AlsaAudio extends EventEmitter {
   private stopRecorder(): void {
     try { this.recorder?.kill("SIGTERM"); } catch { /* ignore */ }
     this.recorder = null;
+  }
+
+  private logLevel(): void {
+    if (this.levelSamples === 0) return; // silencio total — no loguear
+    const peakDb = this.levelPeakRms > 0
+      ? (20 * Math.log10(this.levelPeakRms / 32768)).toFixed(1)
+      : "-inf";
+    const clipPct = ((this.levelClipCount / this.levelSamples) * 100).toFixed(2);
+    const clipping = this.levelClipCount > 0 ? ` ⚠ SATURACION: ${this.levelClipCount} muestras (${clipPct}%)` : "";
+    log(`[nivel] pico RMS=${Math.round(this.levelPeakRms)} (${peakDb} dBFS)  VOXumbral=${this.cfg.voxThresholdRms}  gain=${this.cfg.inputGain}${clipping}`);
+    // Reset acumuladores
+    this.levelPeakRms   = 0;
+    this.levelClipCount = 0;
+    this.levelSamples   = 0;
   }
 
   // ── aplay ────────────────────────────────────────────────────────────────
