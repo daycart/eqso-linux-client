@@ -1,0 +1,53 @@
+# 1. Ver TODOS los controles del mixer de la tarjeta USB
+amixer -c Device
+
+# 2. Tono de prueba al 100% \Uffffffff \Uffffffffactiva el VOX de la radio?
+amixer -c Device sset "Speaker" 100% 2>/dev/null; amixer -c Device sset "PCM" 100% 2>/dev/null
+python3 -c "
+import struct, math, sys
+rate=8000; freq=1000; dur=3
+d=[int(32767*math.sin(2*math.pi*freq*i/rate)) for i in range(rate*dur)]
+sys.stdout.buffer.write(struct.pack(f'{len(d)}h',*d))
+" | aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1
+Simple mixer control 'Speaker',0
+  Capabilities: pvolume pswitch pswitch-joined
+  Playback channels: Front Left - Front Right
+  Limits: Playback 0 - 37
+  Mono:
+  Front Left: Playback 30 [81%] [-7.00dB] [on]
+  Front Right: Playback 30 [81%] [-7.00dB] [on]
+Simple mixer control 'Mic',0
+  Capabilities: pvolume pvolume-joined cvolume cvolume-joined pswitch pswitch-joined cswitch cswitch-joined
+  Playback channels: Mono
+  Capture channels: Mono
+  Limits: Playback 0 - 31 Capture 0 - 35
+  Mono: Playback 31 [100%] [8.00dB] [off] Capture 35 [100%] [23.00dB] [on]
+Simple mixer control 'Auto Gain Control',0
+  Capabilities: pswitch pswitch-joined
+  Playback channels: Mono
+  Mono: Playback [on]
+Simple mixer control 'Speaker',0
+  Capabilities: pvolume pswitch pswitch-joined
+  Playback channels: Front Left - Front Right
+  Limits: Playback 0 - 37
+  Mono:
+  Front Left: Playback 37 [100%] [0.00dB] [on]
+  Front Right: Playback 37 [100%] [0.00dB] [on]
+aplay: main:834: audio open error: Device or resource busy
+Traceback (most recent call last):
+  File "<string>", line 5, in <module>
+BrokenPipeError: [Errno 32] Broken pipe
+Error in sys.excepthook:
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/apport_python_hook.py", line 228, in partial_apport_excepthook
+    return apport_excepthook(binary, exc_type, exc_obj, exc_tb)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/apport_python_hook.py", line 114, in apport_excepthook
+    report["ExecutableTimestamp"] = str(int(os.stat(binary).st_mtime))
+                                            ^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/opt/eqso-asorapa/-c'
+
+Original exception was:
+Traceback (most recent call last):
+  File "<string>", line 5, in <module>
+BrokenPipeError: [Errno 32] Broken pipe
