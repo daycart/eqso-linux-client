@@ -25,7 +25,7 @@ import {
   FRAMES_PER_PACKET,
   GSM_PACKET_BYTES,
 } from "./ffmpeg-gsm";
-import { gsmDecodePacket, gsmEncodePacket } from "./gsm610";
+import { gsmEncodePacket } from "./gsm610";
 
 // Binary opcodes for browser ↔ server WebSocket protocol
 const WS_AUDIO_LOCAL  = 0x01; // local relay: Uint8 unsigned PCM
@@ -74,6 +74,24 @@ function handleLocalMode(
   onMessage: (msg: WsMessage, raw: Buffer | null) => void;
   onClose: () => void;
 } {
+  // FFmpeg GSM decoder for this client — same reference impl as remote mode.
+  // Pre-warmed here so the first audio packet doesn't incur a 500 ms delay.
+  const localDecoder = new FfmpegGsmDecoder();
+  localDecoder.start();
+  localDecoder.on("pcm", (pcm: Int16Array) => {
+    const float32 = new Float32Array(pcm.length);
+    for (let i = 0; i < pcm.length; i++) {
+      // Clamp to ±0.45 so that with the browser's 2× gain node the peak is
+      // 0.9 FS — prevents hard clipping on full-scale radio audio.
+      float32[i] = Math.max(-0.45, Math.min(0.45, pcm[i] / 32768));
+    }
+    const payload = Buffer.from(float32.buffer);
+    const out = Buffer.allocUnsafe(1 + payload.length);
+    out[0] = WS_AUDIO_REMOTE;
+    payload.copy(out, 1);
+    sendBin(ws, out);
+  });
+
   const clientInfo = {
     id,
     name: `_WS_${id.slice(0, 6)}`,
@@ -88,26 +106,10 @@ function handleLocalMode(
       clientInfo.txBytes += data.length;
 
       // GSM audio packet from inactivity manager or TCP relay: [0x01][198 bytes GSM]
-      // Decode synchronously using the pure-JS GSM 06.10 decoder and forward
-      // as [0x11][Float32 PCM] — no FFmpeg subprocess, no startup delay.
+      // Feed into the per-connection FFmpeg decoder (same reference impl as remote mode).
       if (data[0] === 0x01 && data.length === 1 + AUDIO_PAYLOAD_SIZE) {
-        try {
-          const gsmData = new Uint8Array(data.buffer, data.byteOffset + 1, AUDIO_PAYLOAD_SIZE);
-          const pcm = gsmDecodePacket(gsmData); // Int16Array(960), synchronous
-          // Clamp to ±0.45 so that with the browser's 2× gain node the peak is
-          // 0.9 FS — prevents hard clipping on full-scale radio audio.
-          const float32 = new Float32Array(pcm.length);
-          for (let i = 0; i < pcm.length; i++) {
-            float32[i] = Math.max(-0.45, Math.min(0.45, pcm[i] / 32768));
-          }
-          const payload = Buffer.from(float32.buffer);
-          const out = Buffer.allocUnsafe(1 + payload.length);
-          out[0] = WS_AUDIO_REMOTE;
-          payload.copy(out, 1);
-          sendBin(ws, out);
-        } catch (err) {
-          logger.warn({ err }, "Local WS GSM decode error");
-        }
+        const gsmBuf = Buffer.from(data.buffer, data.byteOffset + 1, AUDIO_PAYLOAD_SIZE);
+        localDecoder.decode(gsmBuf);
         return;
       }
 
@@ -300,6 +302,7 @@ function handleLocalMode(
     onClose: () => {
       clearInterval(pingTimer);
       localPcmAccum = new Uint8Array(0);
+      localDecoder.stop();
       const client = roomManager.getClient(id);
       if (client?.room && client.name) {
         roomManager.broadcastToRoom(client.room, buildUserLeft(client.name), id);
