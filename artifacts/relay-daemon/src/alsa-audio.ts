@@ -18,12 +18,17 @@ import {
 
 const PCM_CHUNK_SAMPLES = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET; // 960 muestras = 1920 bytes
 
+// Jitter buffer para RX: acumula muestras antes de abrir aplay
+// 400 ms × 8000 Hz = 3200 muestras mínimas antes de empezar a reproducir
+const JITTER_PRE_BUFFER_SAMPLES = 3200;
+
 export class AlsaAudio extends EventEmitter {
   private recorder: ChildProcessWithoutNullStreams | null = null;
   private player:   ChildProcessWithoutNullStreams | null = null;
   private encoder = new GsmEncoder();
   private decoder = new GsmDecoder();
-  private pcmAccum = new Int16Array(0);
+  private pcmAccum  = new Int16Array(0);
+  private jitterBuf = new Int16Array(0); // buffer pre-inicio aplay
 
   constructor(private cfg: AudioConfig) {
     super();
@@ -101,21 +106,38 @@ export class AlsaAudio extends EventEmitter {
     });
   }
 
-  private playPcm(pcm: Int16Array): void {
-    if (!this.player || this.player.killed) {
-      this.startPlayer();
-    }
+  private applyGain(pcm: Int16Array): Int16Array {
     const gain = this.cfg.outputGain;
-    let buf: Buffer;
-    if (gain !== 1.0) {
-      const adjusted = new Int16Array(pcm.length);
-      for (let i = 0; i < pcm.length; i++) {
-        adjusted[i] = Math.max(-32768, Math.min(32767, Math.round(pcm[i] * gain)));
-      }
-      buf = Buffer.from(adjusted.buffer, adjusted.byteOffset, adjusted.byteLength);
-    } else {
-      buf = Buffer.from(pcm.buffer, pcm.byteOffset, pcm.byteLength);
+    if (gain === 1.0) return pcm;
+    const out = new Int16Array(pcm.length);
+    for (let i = 0; i < pcm.length; i++) {
+      out[i] = Math.max(-32768, Math.min(32767, Math.round(pcm[i] * gain)));
     }
+    return out;
+  }
+
+  private playPcm(pcm: Int16Array): void {
+    const samples = this.applyGain(pcm);
+
+    if (!this.player || this.player.killed) {
+      // Acumular en jitter buffer hasta tener suficiente audio pre-cargado
+      const merged = new Int16Array(this.jitterBuf.length + samples.length);
+      merged.set(this.jitterBuf);
+      merged.set(samples, this.jitterBuf.length);
+      this.jitterBuf = merged;
+
+      if (this.jitterBuf.length >= JITTER_PRE_BUFFER_SAMPLES) {
+        // Buffer lleno: abrir aplay y volcar todo de golpe
+        this.startPlayer();
+        const buf = Buffer.from(this.jitterBuf.buffer, this.jitterBuf.byteOffset, this.jitterBuf.byteLength);
+        try { this.player?.stdin.write(buf); } catch { /* ignore */ }
+        this.jitterBuf = new Int16Array(0);
+      }
+      return;
+    }
+
+    // aplay ya está corriendo: escribir directamente
+    const buf = Buffer.from(samples.buffer, samples.byteOffset, samples.byteLength);
     try { this.player?.stdin.write(buf); } catch { /* player may have closed */ }
   }
 
@@ -178,7 +200,8 @@ export class AlsaAudio extends EventEmitter {
       "-r", "8000",
       "-c", "1",
       "-q",
-      "--buffer-size=1024",
+      "--buffer-size=16384",  // 2s de buffer hardware — absorbe jitter de red
+      "--period-size=2048",   // periodos de 256ms — menos interrupciones
     ];
     log(`aplay ${args.join(" ")}`);
     this.player = spawn("aplay", args, { stdio: ["pipe", "ignore", "pipe"] });
@@ -198,12 +221,13 @@ export class AlsaAudio extends EventEmitter {
   }
 
   private stopPlayer(): void {
+    this.jitterBuf = new Int16Array(0); // descartar audio pendiente
     if (this.player) {
       const p = this.player;
       this.player = null;
       try { p.stdin.end(); } catch { /* ignore */ }
-      // Dar 200ms a aplay para que drene el buffer antes de matar el proceso
-      setTimeout(() => { try { p.kill("SIGTERM"); } catch { /* ignore */ } }, 200);
+      // Dar 300ms a aplay para que drene el buffer antes de matar el proceso
+      setTimeout(() => { try { p.kill("SIGTERM"); } catch { /* ignore */ } }, 300);
     }
   }
 }
