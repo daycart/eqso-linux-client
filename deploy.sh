@@ -35,9 +35,9 @@ sudo tee /etc/eqso-relay/default.json > /dev/null << 'EQSO_CONFIG'
     "captureDevice": "plughw:Device,0",
     "playbackDevice": "plughw:Device,0",
     "vox": true,
-    "voxThresholdRms": 500,
+    "voxThresholdRms": 1000,
     "voxHangMs": 1200,
-    "inputGain": 0.5,
+    "inputGain": 2.0,
     "outputGain": 6.0
   },
   "ptt": {
@@ -100,9 +100,8 @@ done
 cat /proc/asound/cards 2>/dev/null
 
 # 4. Subir niveles del mixer ALSA para la tarjeta USB (card 1)
-amixer -c 1 sset "Mic" 30% cap 2>/dev/null || true
-amixer -c 1 sset "Mic Capture Volume" 30% cap 2>/dev/null || true
-amixer -c 1 sset "Capture" 30% cap 2>/dev/null || true
+amixer -c 1 sset "Mic" 60% cap 2>/dev/null || true
+amixer -c 1 sset "Mic Capture Volume" 60% cap 2>/dev/null || true
 amixer -c 1 sset "Speaker" 100% 2>/dev/null || true
 amixer -c 1 sset "Headphone" 100% 2>/dev/null || true
 amixer -c 1 sset "PCM" 100% 2>/dev/null || true
