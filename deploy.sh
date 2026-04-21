@@ -35,7 +35,7 @@ sudo tee /etc/eqso-relay/default.json > /dev/null << 'EQSO_CONFIG'
     "captureDevice": "plughw:Device,0",
     "playbackDevice": "plughw:Device,0",
     "vox": true,
-    "voxThresholdRms": 1000,
+    "voxThresholdRms": 2500,
     "voxHangMs": 4000,
     "inputGain": 2.0,
     "outputGain": 6.0

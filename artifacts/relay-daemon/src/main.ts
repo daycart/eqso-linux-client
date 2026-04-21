@@ -53,7 +53,7 @@ const POST_TX_SUPPRESS_MS = 800;
 // puede capturar ese eco y disparar una transmision de ruido.
 // Inhibimos el VOX durante este margen despues de que rxActive baje a false.
 let postRxVoxSuppressUntil = 0;
-const POST_RX_SUPPRESS_MS = 600;
+const POST_RX_SUPPRESS_MS = 1500;
 
 function setRxActive(): void {
   const wasActive = rxActive;
