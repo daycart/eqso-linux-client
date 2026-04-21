@@ -193,10 +193,17 @@ export class AlsaAudio extends EventEmitter {
       let sumSq = 0;
       for (let i = 0; i < sampleCount; i++) {
         const raw = chunk.readInt16LE(i * 2);
-        const s = Math.max(-32768, Math.min(32767, Math.round(raw * gain)));
+        // Limitador suave via tanh: amplifica senales debiles sin clipear las fuertes.
+        // Normalizar a [-1,+1], aplicar tanh(x*drive)/tanh(drive) y volver a S16.
+        // Drive=1.5 => saturacion suave sin distorsion apreciable hasta ~±0.7 FS.
+        const drive = 1.5;
+        const norm = (raw * gain) / 32768;
+        const limited = Math.tanh(norm * drive) / Math.tanh(drive);
+        const s = Math.round(limited * 32767);
         pcm[i] = s;
         sumSq += s * s;
-        if (s === 32767 || s === -32768) this.levelClipCount++;
+        // Con tanh nunca hay clipping duro, pero registramos muestras cerca del limite
+        if (Math.abs(s) > 30000) this.levelClipCount++;
       }
       const rms = Math.sqrt(sumSq / sampleCount);
       if (rms > this.levelPeakRms) this.levelPeakRms = rms;
