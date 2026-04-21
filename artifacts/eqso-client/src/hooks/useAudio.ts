@@ -21,8 +21,10 @@ const LOCAL_CHUNK_BYTES = 160;
 // Target sample rate for GSM encoding
 const GSM_RATE = 8000;
 
-// Maximum seconds we allow the scheduler to fall behind before resetting.
-const MAX_QUEUE_AHEAD_SEC = 1.5;
+// Maximum seconds the audio scheduler can be ahead of real time.
+// FFmpeg puede enviar rafagas de 3-5 paquetes juntos; necesitamos absorberlas
+// sin reiniciar el scheduler (el reinicio a "now" causa solapamiento).
+const MAX_QUEUE_AHEAD_SEC = 3.0;
 
 // Warmup: discard the first 80 ms of mic audio to absorb hardware startup pop.
 // 80 ms is enough; 500 ms was wasting ~400 ms of every PTT press.
@@ -399,14 +401,29 @@ export function useAudio(): UseAudioReturn {
       const buffer = ctx.createBuffer(1, float32.length, GSM_RATE);
       buffer.getChannelData(0).set(float32);
 
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(gainNodeRef.current ?? ctx.destination);
-
       const now = ctx.currentTime;
-      if (nextPlayTimeRef.current < now || nextPlayTimeRef.current > now + MAX_QUEUE_AHEAD_SEC) {
+
+      // Si el scheduler quedó atrás (silencio entre transmisiones), adelantarlo a now.
+      if (nextPlayTimeRef.current < now) {
         nextPlayTimeRef.current = now;
       }
+
+      // Si la cola ya tiene MAX_QUEUE_AHEAD_SEC de audio programado, DESCARTAR este
+      // paquete en lugar de reiniciar a "now". Reiniciar causa solapamiento con el
+      // audio ya programado → efecto "bucle". Descartar produce una pausa minima
+      // (el tiempo que tarda la cola en drenarse) sin audio doble.
+      if (nextPlayTimeRef.current > now + MAX_QUEUE_AHEAD_SEC) {
+        console.warn(`[audio] playAudio: cola llena (${(nextPlayTimeRef.current - now).toFixed(2)}s), descartando paquete`);
+        return;
+      }
+
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      const dest = gainNodeRef.current ?? ctx.destination;
+      source.connect(dest);
+      // Liberar el nodo cuando termine para no acumular recursos de audio
+      source.onended = () => source.disconnect();
+
       source.start(nextPlayTimeRef.current);
       nextPlayTimeRef.current += buffer.duration;
 
