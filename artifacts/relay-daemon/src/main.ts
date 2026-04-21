@@ -78,8 +78,21 @@ const serialPtt = new SerialPtt(cfg.ptt);
 const audio = new AlsaAudio(cfg.audio);
 const vox   = new Vox(cfg.audio.voxThresholdRms, cfg.audio.voxHangMs);
 
+// Gate de transmision: nivel minimo para enviar audio al servidor.
+// Durante el colgado del VOX (voxHangMs) el micro captura solo ruido de fondo
+// (RMS≈6). Si lo enviamos, el navegador acumula 4s de silencio en su cola
+// y cuando llega nueva voz el buffer se desborda → efecto "bucle".
+// El gate suprime esos paquetes de ruido; la voz (RMS>>300) pasa siempre.
+const TX_GATE_RMS = 300;
+let latestPcmRms = 0;
+
 // El audio emite chunks PCM crudos para que el VOX los analice
 audio.on("pcm_chunk", (pcm: Int16Array) => {
+  // Calcular RMS para el gate de transmision
+  let sum = 0;
+  for (let i = 0; i < pcm.length; i++) sum += pcm[i] * pcm[i];
+  latestPcmRms = Math.sqrt(sum / pcm.length);
+
   if (cfg.audio.vox && !rxActive && Date.now() > postRxVoxSuppressUntil) {
     vox.processPcm(pcm);
   }
@@ -107,6 +120,9 @@ vox.on("ptt_end", () => {
 // El audio emite paquetes GSM listos para enviar al servidor
 audio.on("gsm_tx", (gsm: Buffer) => {
   if (!pttActive || !eqsoClient?.connected) return;
+  // Gate de transmision: no enviar ruido de fondo durante el colgado del VOX.
+  // Impide acumulacion de silencio en el buffer del navegador.
+  if (latestPcmRms < TX_GATE_RMS) return;
   eqsoClient.sendAudio(gsm);
   txPackets++;
 });
