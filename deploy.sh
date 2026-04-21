@@ -107,9 +107,9 @@ amixer -c 1 sset "Speaker" 100% 2>/dev/null || true
 amixer -c 1 sset "Headphone" 100% 2>/dev/null || true
 amixer -c 1 sset "PCM" 100% 2>/dev/null || true
 amixer -c 1 sset "PCM Playback Volume" 100% 2>/dev/null || true
+# Desactivar AGC: puede comprimir el nivel de captura y afectar al VOX
+amixer -c 1 sset "Auto Gain Control" off 2>/dev/null || true
 echo "[wake] Mixer ALSA card 1 ajustado"
-# Mostrar controles actuales para diagnostico
-amixer -c 1 2>/dev/null || true
 
 # 5. Dar tiempo al TCP 2171 a que este escuchando
 sleep 4
