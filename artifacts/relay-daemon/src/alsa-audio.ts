@@ -29,6 +29,8 @@ export class AlsaAudio extends EventEmitter {
   private decoder = new GsmDecoder();
   private pcmAccum  = new Int16Array(0);
   private jitterBuf = new Int16Array(0); // buffer pre-inicio aplay
+  // Semi-duplex: CM108 no soporta captura+reproduccion simultaneas
+  private recorderSuspended = false;    // true mientras aplay esta activo
 
   constructor(private cfg: AudioConfig) {
     super();
@@ -169,8 +171,10 @@ export class AlsaAudio extends EventEmitter {
     this.recorder.on("close", (code) => {
       log(`[arecord] Terminado (code ${code})`);
       this.recorder = null;
-      // Reintentamos despues de 2 s para no saturar si falla continuamente
-      setTimeout(() => { if (this.recorder === null) this.startRecorder(); }, 2000);
+      // No reiniciar si fue parado intencionalmente para ceder el dispositivo a aplay
+      if (!this.recorderSuspended) {
+        setTimeout(() => { if (this.recorder === null) this.startRecorder(); }, 2000);
+      }
     });
 
     // PCM 8 kHz S16LE mono → 16000 bytes/seg → chunks de ~20ms = 320 bytes
@@ -194,6 +198,14 @@ export class AlsaAudio extends EventEmitter {
   // ── aplay ────────────────────────────────────────────────────────────────
 
   private startPlayer(): void {
+    // Semi-duplex: parar arecord para liberar el dispositivo USB antes de abrir aplay
+    if (this.recorder) {
+      log("[audio] Semi-duplex: pausando arecord para ceder dispositivo a aplay");
+      this.recorderSuspended = true;
+      try { this.recorder.kill("SIGTERM"); } catch { /* ignore */ }
+      this.recorder = null;
+    }
+
     const args = [
       "-D", this.cfg.playbackDevice,
       "-f", "S16_LE",
@@ -233,7 +245,20 @@ export class AlsaAudio extends EventEmitter {
       this.player = null;
       try { p.stdin.end(); } catch { /* ignore */ }
       // Dar 400ms a aplay para reproducir lo que queda en su buffer hardware
-      setTimeout(() => { try { p.kill("SIGTERM"); } catch { /* ignore */ } }, 400);
+      // y luego reanudar arecord (semi-duplex)
+      setTimeout(() => {
+        try { p.kill("SIGTERM"); } catch { /* ignore */ }
+        if (this.recorderSuspended) {
+          this.recorderSuspended = false;
+          log("[audio] Semi-duplex: reanudando arecord");
+          this.startRecorder();
+        }
+      }, 400);
+    } else if (this.recorderSuspended) {
+      // Player ya cerrado pero arecord sigue suspendido — reanudar
+      this.recorderSuspended = false;
+      log("[audio] Semi-duplex: reanudando arecord (player ya cerrado)");
+      this.startRecorder();
     }
   }
 }
