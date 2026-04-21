@@ -38,6 +38,10 @@ export class FfmpegGsmDecoder extends EventEmitter {
       "-f", "gsm", "-ar", "8000",
       "-i", "pipe:0",
       "-f", "s16le", "-ar", "8000",
+      // -avioflags direct desactiva el buffer de escritura AVIOContext (por defecto 32 KB).
+      // Sin esto FFmpeg acumula ~17 paquetes GSM (2 segundos) antes de hacer flush al pipe
+      // de Node.js, produciendo rafagas de audio en el navegador en lugar de flujo continuo.
+      "-avioflags", "direct",
       "pipe:1",
     ], { stdio: ["pipe", "pipe", "pipe"] });
 

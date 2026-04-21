@@ -31,6 +31,7 @@ export class GsmDecoder extends EventEmitter {
       "-f", "gsm", "-ar", "8000",
       "-i", "pipe:0",
       "-f", "s16le", "-ar", "8000",
+      "-avioflags", "direct",   // sin buffer AVIOContext — flush inmediato tras cada paquete
       "pipe:1",
     ], { stdio: ["pipe", "pipe", "pipe"] });
 
@@ -88,6 +89,7 @@ export class GsmEncoder extends EventEmitter {
       "-f", "s16le", "-ar", "8000", "-ac", "1",
       "-i", "pipe:0",
       "-f", "gsm", "-ar", "8000",
+      "-avioflags", "direct",   // sin buffer AVIOContext — flush inmediato tras cada paquete
       "pipe:1",
     ], { stdio: ["pipe", "pipe", "pipe"] });
 
