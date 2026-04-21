@@ -380,10 +380,9 @@ function handleRemoteMode(
     for (let i = 0; i < pcm.length; i++) {
       const a = Math.abs(pcm[i]);
       if (a > peak) peak = a;
-      // Soft-limit to ±0.85 FS before sending to browser:
-      // prevents clipping on the browser's 2× playback gain node for loud
-      // stations while keeping the dynamic range of normal speech intact.
-      float32[i] = Math.max(-0.85, Math.min(0.85, pcm[i] / 32768));
+      // Clamp a ±0.45 para que el nodo gain×2 del navegador no supere 0.90 FS.
+      // ±0.85 anterior causaba clipping (0.85×2=1.70) con el radioenlace amplificado.
+      float32[i] = Math.max(-0.45, Math.min(0.45, pcm[i] / 32768));
     }
     const header = Buffer.alloc(1);
     header[0] = WS_AUDIO_REMOTE;

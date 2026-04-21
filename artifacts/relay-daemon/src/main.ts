@@ -35,7 +35,9 @@ let forceReconnectRequested = false;
 // tiempo + 600 ms de margen para que el sonido del altavoz no active el micro.
 let rxActive = false;
 let rxInhibitTimer: ReturnType<typeof setTimeout> | null = null;
-const RX_HANG_MS = 600; // ms de margen tras el ultimo paquete RX
+// 2000 ms de margen: la radio necesita tiempo para bajar PTT + reverberar
+// antes de que el VOX pueda volver a capturar sin recoger el eco del altavoz.
+const RX_HANG_MS = 2000;
 
 function setRxActive(): void {
   const wasActive = rxActive;
@@ -140,6 +142,11 @@ function connect(): void {
         const pkt = ev.data as Buffer;
         if (pkt.length < 1 + GSM_PACKET_BYTES) break;
         rxPackets++;
+        // FIX CRITICO: mientras estamos transmitiendo, el servidor eQSO nos
+        // devuelve nuestro propio audio (eco de ASORAPA). Si lo reproducimos,
+        // el modo semi-duplex pausa arecord y el VOX pierde la senal CB,
+        // cortando la transmision a los ~2s (voxHangMs). Descartamos el paquete.
+        if (pttActive) break;
         // Inhibir VOX mientras reproducimos para evitar feedback acustico
         setRxActive();
         // Extraer 198 bytes GSM (sin el byte 0x01 del opcode)
