@@ -32,12 +32,20 @@ let forceReconnectRequested = false;
 
 // ─── Inhibicion RX (anti-feedback acustico) ───────────────────────────────────
 // Cuando la radio reproduce audio del servidor, inhibimos el VOX durante ese
-// tiempo + 600 ms de margen para que el sonido del altavoz no active el micro.
+// tiempo + margen para que el sonido del altavoz no active el micro.
 let rxActive = false;
 let rxInhibitTimer: ReturnType<typeof setTimeout> | null = null;
 // 2000 ms de margen: la radio necesita tiempo para bajar PTT + reverberar
 // antes de que el VOX pueda volver a capturar sin recoger el eco del altavoz.
 const RX_HANG_MS = 2000;
+
+// ─── Supresion post-TX (anti-eco del servidor) ────────────────────────────────
+// Tras liberarse el PTT, el servidor puede devolver los ultimos paquetes de
+// audio buffereados. Si los reproducimos, el semi-duplex para arecord 2s y
+// el VOX pierde la señal CB, causando "entrecorte" en transmisiones largas.
+// Descartamos paquetes RX durante este margen sin activar el semi-duplex.
+let postTxSuppressUntil = 0;
+const POST_TX_SUPPRESS_MS = 800;
 
 function setRxActive(): void {
   const wasActive = rxActive;
@@ -77,6 +85,9 @@ vox.on("ptt_end", () => {
   pttActive = false;
   audio.setTxEnabled(false);
   eqsoClient.endTx();
+  // Marcar ventana de supresion para descartar el eco buffereado del servidor
+  // sin activar el semi-duplex (que pararía arecord y cortaría la siguiente TX)
+  postTxSuppressUntil = Date.now() + POST_TX_SUPPRESS_MS;
   log("VOX: PTT liberado — fin transmision");
 });
 
@@ -142,11 +153,12 @@ function connect(): void {
         const pkt = ev.data as Buffer;
         if (pkt.length < 1 + GSM_PACKET_BYTES) break;
         rxPackets++;
-        // FIX CRITICO: mientras estamos transmitiendo, el servidor eQSO nos
-        // devuelve nuestro propio audio (eco de ASORAPA). Si lo reproducimos,
-        // el modo semi-duplex pausa arecord y el VOX pierde la senal CB,
-        // cortando la transmision a los ~2s (voxHangMs). Descartamos el paquete.
+        // Ignorar eco propio mientras transmitimos (pttActive=true)
         if (pttActive) break;
+        // Ignorar paquetes residuales del servidor justo tras liberar PTT:
+        // evita que el eco buffereado active el semi-duplex y pare arecord,
+        // lo que cortaría la siguiente transmision CB.
+        if (Date.now() < postTxSuppressUntil) break;
         // Inhibir VOX mientras reproducimos para evitar feedback acustico
         setRxActive();
         // Extraer 198 bytes GSM (sin el byte 0x01 del opcode)
