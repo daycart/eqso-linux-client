@@ -168,6 +168,10 @@ function connect(): void {
         rxPackets++;
         // Ignorar eco propio mientras transmitimos (pttActive=true)
         if (pttActive) break;
+        // Modo sin altavoz (outputGain=0): descartar silenciosamente sin activar
+        // el semi-duplex ni el temporizador RX. arecord corre continuamente y
+        // el VOX detecta la radio CB sin ningun retraso ni inhibicion.
+        if (cfg.audio.outputGain === 0) break;
         // Ignorar paquetes residuales del servidor justo tras liberar PTT:
         // evita que el eco buffereado active el semi-duplex y pare arecord,
         // lo que cortaría la siguiente transmision CB.
