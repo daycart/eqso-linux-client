@@ -19,8 +19,8 @@ import {
 const PCM_CHUNK_SAMPLES = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET; // 960 muestras = 1920 bytes
 
 // Jitter buffer para RX: acumula muestras antes de abrir aplay
-// 400 ms × 8000 Hz = 3200 muestras mínimas antes de empezar a reproducir
-const JITTER_PRE_BUFFER_SAMPLES = 3200;
+// 160 ms × 8000 Hz = 1280 muestras — absorbe jitter sin cortar mensajes cortos
+const JITTER_PRE_BUFFER_SAMPLES = 1280;
 
 export class AlsaAudio extends EventEmitter {
   private recorder: ChildProcessWithoutNullStreams | null = null;
@@ -221,13 +221,19 @@ export class AlsaAudio extends EventEmitter {
   }
 
   private stopPlayer(): void {
-    this.jitterBuf = new Int16Array(0); // descartar audio pendiente
+    // Si hay audio en el jitter buffer sin reproducir, volcarlo antes de parar
+    if (this.jitterBuf.length > 0) {
+      if (!this.player || this.player.killed) this.startPlayer();
+      const buf = Buffer.from(this.jitterBuf.buffer, this.jitterBuf.byteOffset, this.jitterBuf.byteLength);
+      try { this.player?.stdin.write(buf); } catch { /* ignore */ }
+      this.jitterBuf = new Int16Array(0);
+    }
     if (this.player) {
       const p = this.player;
       this.player = null;
       try { p.stdin.end(); } catch { /* ignore */ }
-      // Dar 300ms a aplay para que drene el buffer antes de matar el proceso
-      setTimeout(() => { try { p.kill("SIGTERM"); } catch { /* ignore */ } }, 300);
+      // Dar 400ms a aplay para reproducir lo que queda en su buffer hardware
+      setTimeout(() => { try { p.kill("SIGTERM"); } catch { /* ignore */ } }, 400);
     }
   }
 }

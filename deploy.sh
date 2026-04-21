@@ -37,7 +37,7 @@ sudo tee /etc/eqso-relay/default.json > /dev/null << 'EQSO_CONFIG'
     "vox": true,
     "voxThresholdRms": 2000,
     "voxHangMs": 1200,
-    "inputGain": 4.0,
+    "inputGain": 2.0,
     "outputGain": 2.5
   },
   "ptt": {
