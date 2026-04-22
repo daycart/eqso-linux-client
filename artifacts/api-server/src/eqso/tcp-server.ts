@@ -366,7 +366,11 @@ export function startTcpServer(port: number): net.Server {
     // Sin esto, FFmpeg puede emitir varios paquetes en el mismo tick de Node.js
     // (rafaga), el navegador los recibe todos a la vez y el scheduler Web Audio
     // API desborda → solapamiento / "bucle".
-    const AUDIO_PACE_MS = 110; // ligeramente menor que 120ms (duracion real)
+    // 120ms = duración exacta de un paquete GSM (960 samples a 8000 Hz).
+    // Usar 110ms causaba que el scheduler del navegador se adelantara ~10ms por
+    // paquete → en 12 segundos = ~1s de "cola fantasma" que se reproducía como
+    // eco de lo ya hablado tras terminar la transmisión.
+    const AUDIO_PACE_MS = 120; // igual a la duración real del paquete GSM
     const audioPaceQueue: Buffer[] = [];
     let audioPaceTimer: ReturnType<typeof setTimeout> | null = null;
 

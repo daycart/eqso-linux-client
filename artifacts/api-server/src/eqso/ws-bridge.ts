@@ -25,7 +25,6 @@ import {
   FRAMES_PER_PACKET,
   GSM_PACKET_BYTES,
 } from "./ffmpeg-gsm";
-import { gsmEncodePacket } from "./gsm610";
 
 // Binary opcodes for browser ↔ server WebSocket protocol
 const WS_AUDIO_LOCAL  = 0x01; // local relay: Uint8 unsigned PCM
@@ -78,6 +77,25 @@ function handleLocalMode(
   // Pre-warmed here so the first audio packet doesn't incur a 500 ms delay.
   const localDecoder = new FfmpegGsmDecoder();
   localDecoder.start();
+
+  // FFmpeg GSM encoder for TX: browser Uint8 PCM → GSM → TCP relay-daemon.
+  // Replaces the pure-JS gsm610.ts encoder which had LTP (long-term prediction)
+  // bugs that corrupted voice audio, causing the CB radio to receive only noise.
+  const localEncoder = new FfmpegGsmEncoder();
+  localEncoder.start();
+
+  // When the encoder produces a GSM packet, broadcast it to TCP relay-daemon
+  // clients (and relay listeners). The room is looked up at emit time so we
+  // always use the current room even if the client switched rooms.
+  localEncoder.on("gsm", (gsm: Buffer) => {
+    const client = roomManager.getClient(id);
+    if (!client?.room) return;
+    const gsmPkt = Buffer.allocUnsafe(1 + gsm.length);
+    gsmPkt[0] = 0x01;
+    gsm.copy(gsmPkt, 1);
+    roomManager.broadcastToTcpAndRelays(client.room, gsmPkt, id);
+  });
+
   localDecoder.on("pcm", (pcm: Int16Array) => {
     const float32 = new Float32Array(pcm.length);
     for (let i = 0; i < pcm.length; i++) {
@@ -176,12 +194,10 @@ function handleLocalMode(
               int16[i] = (chunk[i] - 128) << 8;
             }
 
-            const gsm = gsmEncodePacket(int16); // 198-byte Uint8Array
-            const gsmPkt = Buffer.allocUnsafe(1 + gsm.length);
-            gsmPkt[0] = 0x01;
-            Buffer.from(gsm).copy(gsmPkt, 1);
-
-            roomManager.broadcastToTcpAndRelays(client.room, gsmPkt, id);
+            // Feed to FFmpeg encoder; GSM packet is broadcast in localEncoder "gsm" event.
+            // Using FFmpeg instead of gsm610.ts (pure JS) which had LTP bugs that
+            // destroyed voice audio and made the CB radio receive only noise.
+            localEncoder.encode(int16);
           }
         }
         return;
@@ -303,6 +319,7 @@ function handleLocalMode(
       clearInterval(pingTimer);
       localPcmAccum = new Uint8Array(0);
       localDecoder.stop();
+      localEncoder.stop();
       const client = roomManager.getClient(id);
       if (client?.room && client.name) {
         roomManager.broadcastToRoom(client.room, buildUserLeft(client.name), id);
