@@ -4,8 +4,13 @@
  * Captura:  arecord → PCM S16LE 8kHz mono → GsmEncoder → EqsoClient
  * Playback: EqsoClient → GsmDecoder → PCM → aplay
  *
- * La captura se inicia siempre (para el VOX).
- * La reproduccion arranca on-demand con cada paquete RX.
+ * El CM108 USB es half-duplex: solo puede capturar O reproducir en el mismo
+ * dispositivo ALSA, no simultáneamente. Semi-duplex implementado:
+ *   1. Al iniciar RX: kill arecord → esperar cierre (evento 'close') → abrir aplay
+ *   2. Al terminar RX: stdin.end() → 300ms drain → SIGTERM aplay → reiniciar arecord
+ *
+ * El PCM recibido durante la espera del cierre de arecord se acumula en jitterBuf
+ * para no perderse. Cuando aplay abre, se vuelca todo de golpe.
  */
 
 import { spawn, ChildProcessWithoutNullStreams } from "child_process";
@@ -30,11 +35,10 @@ export class AlsaAudio extends EventEmitter {
   private decoder = new GsmDecoder();
   private pcmAccum  = new Int16Array(0);
   private jitterBuf = new Int16Array(0); // buffer pre-inicio aplay
-  // El CM108 USB soporta full duplex (streams de captura y playback independientes).
-  // No es necesario matar arecord al iniciar aplay: ambos coexisten en el mismo
-  // dispositivo plughw. La lógica semi-duplex anterior creaba una condición de
-  // carrera: aplay se lanzaba antes de que ALSA liberara el dispositivo → "no audio".
-  // Flag para distinguir parada intencional (stop()) de cierre inesperado (crash)
+  // Semi-duplex state
+  private recorderSuspended = false; // true mientras aplay está activo o arecord cerrando
+  private playerStarting    = false; // true mientras esperamos que arecord cierre (async)
+  // Flag de parada intencional (stop() llamado) — evita reinicios de arecord
   private stopping = false;
   // Métricas de nivel en captura (log periódico)
   private levelPeakRms   = 0;
@@ -71,7 +75,7 @@ export class AlsaAudio extends EventEmitter {
   /**
    * Terminar sesion RX — para el proceso aplay para evitar underruns.
    * Los ultimos 960 samples (120 ms) ya se habian escrito en stdin de aplay
-   * antes de que expire el timer de 600 ms, por lo que no se corta audio.
+   * antes de que expire el timer de RX_HANG_MS, por lo que no se corta audio.
    */
   endRx(): void {
     this.stopPlayer();
@@ -102,7 +106,7 @@ export class AlsaAudio extends EventEmitter {
     merged.set(pcm, this.pcmAccum.length);
     this.pcmAccum = merged;
 
-    // Emitir chunks PCM para que el VOX los analice
+    // Emitir chunks PCM para que el VOX los analise
     this.emit("pcm_chunk", pcm);
 
     // Enviar al encoder en paquetes de 960 muestras exactas
@@ -136,18 +140,17 @@ export class AlsaAudio extends EventEmitter {
     const samples = this.applyGain(pcm);
 
     if (!this.player || this.player.killed) {
-      // Acumular en jitter buffer hasta tener suficiente audio pre-cargado
+      // Acumular en jitter buffer, tanto en la espera pre-inicio como mientras
+      // arecord está cerrando (playerStarting=true).
       const merged = new Int16Array(this.jitterBuf.length + samples.length);
       merged.set(this.jitterBuf);
       merged.set(samples, this.jitterBuf.length);
       this.jitterBuf = merged;
 
-      if (this.jitterBuf.length >= JITTER_PRE_BUFFER_SAMPLES) {
-        // Buffer lleno: abrir aplay y volcar todo de golpe
+      // Si tenemos suficiente audio Y no estamos esperando el cierre de arecord,
+      // iniciar la secuencia semi-duplex (kill arecord → wait close → open aplay).
+      if (this.jitterBuf.length >= JITTER_PRE_BUFFER_SAMPLES && !this.playerStarting) {
         this.startPlayer();
-        const buf = Buffer.from(this.jitterBuf.buffer, this.jitterBuf.byteOffset, this.jitterBuf.byteLength);
-        try { this.player?.stdin.write(buf); } catch { /* ignore */ }
-        this.jitterBuf = new Int16Array(0);
       }
       return;
     }
@@ -185,9 +188,23 @@ export class AlsaAudio extends EventEmitter {
     this.recorder.on("close", (code) => {
       log(`[arecord] Terminado (code ${code})`);
       this.recorder = null;
-      // Reiniciar solo si no fue una parada intencional (this.stopping=true)
-      if (!this.stopping) {
-        setTimeout(() => { if (!this.stopping && this.recorder === null) this.startRecorder(); }, 2000);
+
+      if (this.playerStarting) {
+        // El cierre fue desencadenado por startPlayer() — ahora abrir aplay
+        log("[audio] arecord cerrado — abriendo aplay");
+        this.playerStarting = false;
+        this.openPlayer();
+        return;
+      }
+
+      // Cierre inesperado (crash de arecord): reiniciar con backoff si no
+      // estamos en modo suspended (aplay activo) ni en parada intencional.
+      if (!this.recorderSuspended && !this.stopping) {
+        setTimeout(() => {
+          if (!this.recorderSuspended && !this.stopping && this.recorder === null) {
+            this.startRecorder();
+          }
+        }, 2000);
       }
     });
 
@@ -229,7 +246,7 @@ export class AlsaAudio extends EventEmitter {
       ? (20 * Math.log10(this.levelPeakRms / 32768)).toFixed(1)
       : "-inf";
     const clipPct = ((this.levelClipCount / this.levelSamples) * 100).toFixed(2);
-    const clipping = this.levelClipCount > 0 ? ` ⚠ SATURACION: ${this.levelClipCount} muestras (${clipPct}%)` : "";
+    const clipping = this.levelClipCount > 0 ? ` SATURACION: ${this.levelClipCount} muestras (${clipPct}%)` : "";
     log(`[nivel] pico RMS=${Math.round(this.levelPeakRms)} (${peakDb} dBFS)  VOXumbral=${this.cfg.voxThresholdRms}  gain=${this.cfg.inputGain}${clipping}`);
     // Reset acumuladores
     this.levelPeakRms   = 0;
@@ -239,17 +256,58 @@ export class AlsaAudio extends EventEmitter {
 
   // ── aplay ────────────────────────────────────────────────────────────────
 
+  /**
+   * Inicia la secuencia semi-duplex:
+   *   1. Si hay arecord corriendo: SIGTERM + esperar 'close' (async)
+   *   2. Cuando arecord cierra: openPlayer()
+   *   3. Si no hay arecord: openPlayer() directamente
+   *
+   * El PCM sigue acumulándose en jitterBuf durante la espera (playPcm lo hace).
+   * playerStarting=true durante toda la espera para evitar llamadas duplicadas.
+   */
   private startPlayer(): void {
-    // Full duplex: arecord y aplay coexisten en el mismo dispositivo USB (CM108).
-    // No matamos arecord antes de iniciar aplay — el CM108 tiene streams de
-    // captura y playback independientes (isochronous USB endpoints separados).
+    if (this.playerStarting) return; // ya esperando cierre de arecord
+
+    if (this.recorder) {
+      log("[audio] Semi-duplex: matando arecord — esperando cierre para abrir aplay");
+      this.playerStarting    = true;
+      this.recorderSuspended = true;
+      const rec = this.recorder;
+      this.recorder = null;
+
+      // Watchdog: si SIGTERM no llega en 800ms, SIGKILL
+      const watchdog = setTimeout(() => {
+        if (this.playerStarting) {
+          log("[audio] Watchdog: SIGKILL a arecord (SIGTERM no respondido)");
+          try { rec.kill("SIGKILL"); } catch { /* ignore */ }
+        }
+      }, 800);
+
+      // El evento 'close' del recorder llamará a openPlayer() (ver startRecorder)
+      rec.once("close", () => clearTimeout(watchdog));
+      try { rec.kill("SIGTERM"); } catch {
+        // Si ya murió, el close event ya se habrá emitido o no se emitirá.
+        clearTimeout(watchdog);
+        this.playerStarting = false;
+        this.openPlayer();
+      }
+    } else {
+      // arecord no está corriendo (ya fue parado, o nunca arrancó)
+      this.openPlayer();
+    }
+  }
+
+  /** Abre aplay y vuelca el jitter buffer. Llamado cuando arecord ha cerrado. */
+  private openPlayer(): void {
+    if (this.stopping) return;
+
     const args = [
       "-D", this.cfg.playbackDevice,
       "-f", "S16_LE",
       "-r", "8000",
       "-c", "1",
       "-q",
-      "--buffer-size=2048",  // 256ms buffer hardware (antes 16384=2s → latencia enorme)
+      "--buffer-size=2048",  // 256ms buffer hardware
       "--period-size=256",   // 32ms por periodo — menor latencia de salida
     ];
     log(`aplay ${args.join(" ")}`);
@@ -268,26 +326,42 @@ export class AlsaAudio extends EventEmitter {
       log(`[aplay] Terminado (code ${code})`);
       this.player = null;
     });
+
+    // Volcar jitter buffer acumulado durante la espera
+    if (this.jitterBuf.length > 0) {
+      const buf = Buffer.from(this.jitterBuf.buffer, this.jitterBuf.byteOffset, this.jitterBuf.byteLength);
+      try { this.player.stdin.write(buf); } catch { /* ignore */ }
+      this.jitterBuf = new Int16Array(0);
+    }
   }
 
   private stopPlayer(): void {
     // Si hay audio en el jitter buffer sin reproducir, volcarlo antes de parar
-    if (this.jitterBuf.length > 0) {
-      if (!this.player || this.player.killed) this.startPlayer();
+    if (this.jitterBuf.length > 0 && this.player && !this.player.killed) {
       const buf = Buffer.from(this.jitterBuf.buffer, this.jitterBuf.byteOffset, this.jitterBuf.byteLength);
-      try { this.player?.stdin.write(buf); } catch { /* ignore */ }
+      try { this.player.stdin.write(buf); } catch { /* ignore */ }
       this.jitterBuf = new Int16Array(0);
     }
+
     if (this.player) {
       const p = this.player;
       this.player = null;
       try { p.stdin.end(); } catch { /* ignore */ }
       // Dar 300ms a aplay para reproducir lo que queda en su buffer hardware,
-      // luego terminarlo. arecord sigue corriendo (full duplex) — no hay
-      // que reanudar nada.
+      // luego matar y reanudar arecord (semi-duplex).
       setTimeout(() => {
         try { p.kill("SIGTERM"); } catch { /* ignore */ }
+        if (this.recorderSuspended && !this.stopping) {
+          this.recorderSuspended = false;
+          log("[audio] Semi-duplex: reanudando arecord");
+          this.startRecorder();
+        }
       }, 300);
+    } else if (this.recorderSuspended && !this.stopping && !this.playerStarting) {
+      // Player ya cerrado pero arecord sigue suspendido — reanudar
+      this.recorderSuspended = false;
+      log("[audio] Semi-duplex: reanudando arecord (player ya cerrado)");
+      this.startRecorder();
     }
   }
 }

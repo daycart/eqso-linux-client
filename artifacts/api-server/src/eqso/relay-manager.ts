@@ -31,7 +31,7 @@ interface RelayState {
   transmitting: boolean;
 }
 
-const MAX_RECONNECT_DELAY_MS = 30_000;
+const MAX_RECONNECT_DELAY_MS = 10_000;
 const PTT_INACTIVITY_TIMEOUT_MS = 5_000;
 
 class RelayManager {
@@ -213,7 +213,7 @@ class RelayManager {
 
   private scheduleReconnect(state: RelayState, listenerId: string): void {
     if (state.reconnectTimer) return;
-    const delay = Math.min(MAX_RECONNECT_DELAY_MS, 2000 * Math.pow(2, state.reconnectAttempts));
+    const delay = Math.min(MAX_RECONNECT_DELAY_MS, 1000 * Math.pow(2, state.reconnectAttempts));
     state.reconnectAttempts++;
     logger.info({ relay: state.config.label, delay, attempt: state.reconnectAttempts }, "RelayManager: scheduling reconnect");
     state.reconnectTimer = setTimeout(() => {
