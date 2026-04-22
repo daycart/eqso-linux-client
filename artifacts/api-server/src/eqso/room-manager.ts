@@ -134,6 +134,11 @@ export class RoomManager extends EventEmitter {
     return true;
   }
 
+  /** true si la sala ya está bloqueada por este cliente (ya había empezado a transmitir). */
+  isLockedBy(room: string, clientId: string): boolean {
+    return this.roomLocks.get(room) === clientId;
+  }
+
   unlockRoom(room: string, clientId: string): void {
     if (this.roomLocks.get(room) === clientId) this.roomLocks.delete(room);
   }

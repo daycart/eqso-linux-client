@@ -23,7 +23,7 @@ import {
 } from "./protocol";
 
 const SERVER_VERSION = "eQSO Linux Server v1.0";
-const KEEPALIVE_INTERVAL_MS = 30_000;
+const KEEPALIVE_INTERVAL_MS = 15_000;
 
 // One FFmpeg GSM decoder per TCP client (keyed by client UUID)
 const tcpDecoders = new Map<string, FfmpegGsmDecoder>();
@@ -90,9 +90,18 @@ function processSingleByte(state: TcpClientState, byte: number): void {
   switch (byte) {
     case EQSO_COMMANDS.VOICE:
       if (client?.room && !moderationManager.isMuted(client.name)) {
-        const ptt = buildPttStarted(client.name);
+        // Solo emitir ptt_started en el PRIMER paquete de cada sesión TX.
+        // tryLockRoom devuelve true tanto si acaba de bloquear como si ya estaba
+        // bloqueado por este cliente, así que usamos isLockedBy para detectar
+        // si el lock ya era nuestro antes de esta llamada.
+        // Sin esta guarda, ptt_started se emitía cada 120ms (un broadcast por
+        // cada paquete GSM), lo que hacía que los clientes eQSO externos
+        // (Windows ASORAPA) los recibieran como ráfagas y desconectaran.
+        const wasAlreadyOurs = roomManager.isLockedBy(client.room, state.id);
         roomManager.tryLockRoom(client.room, state.id);
-        roomManager.broadcastToRoom(client.room, ptt, state.id);
+        if (!wasAlreadyOurs) {
+          roomManager.broadcastToRoom(client.room, buildPttStarted(client.name), state.id);
+        }
         inactivityManager.recordActivity(client.room);
       }
       state.readMultiByte = true;
