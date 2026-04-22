@@ -61,11 +61,23 @@ const POST_TX_SUPPRESS_MS = 800;
 // (full duplex: arecord siempre activo), el VOX puede dispararse con ruido.
 // Inhibimos el VOX durante este margen despues de que rxActive baje a false.
 let postRxVoxSuppressUntil = 0;
-// 1500ms: cubre el tiempo de vaciado del buffer de aplay (300ms stop + 700ms hardware)
-// + margen para que el eco acustico de la sala se disipe antes de que el VOX
-// pueda dispararse. El eco acustico del altavoz CM108 en la sala de la radio
-// puede persistir 0.5-1s despues de que aplay termina; 1500ms da margen suficiente.
-const POST_RX_SUPPRESS_MS = 1500;
+// 3000ms: 300ms drain aplay + ~700ms hardware + 2000ms margen acustico.
+// Con 1500ms el relay volvía a transmitir demasiado pronto y el altavoz CB
+// seguía con eco residual → bucle TX→RX→TX. Con 3s el eco se disipa
+// completamente antes de re-habilitar el VOX.
+const POST_RX_SUPPRESS_MS = 3000;
+
+// ─── Supresion VOX post-TX propio (anti-eco de squelch y canal CB) ────────────
+// Cuando el relay termina su propia TX (VOX ptt_end), la radio vuelve a modo
+// RX y puede capturar:
+//   1. El "clic" de squelch de la radio al abrir desde TX→RX.
+//   2. Eco residual del canal CB de la transmision anterior.
+//   3. Eco acustico de la sala (el altavoz y el micro estan en el mismo recinto).
+// Sin esta supresion, el VOX puede dispararse < 2s despues de soltar PTT y
+// crear un bucle TX→silencio→TX que inunda el canal eQSO con ruido.
+// 1500ms es suficiente para los casos 1 y 3; el canal CB requiere mas tiempo
+// pero 2s seria demasiado restrictivo para capturas CB legitimas.
+const POST_TX_VOX_SUPPRESS_MS = 1500;
 
 function setRxActive(): void {
   const wasActive = rxActive;
@@ -134,9 +146,15 @@ vox.on("ptt_end", () => {
   pttActive = false;
   audio.setTxEnabled(false);
   eqsoClient.endTx();
-  // Marcar ventana de supresion para descartar el eco buffereado del servidor
-  // sin activar el semi-duplex (que pararía arecord y cortaría la siguiente TX)
+  // Descartar eco buffereado del servidor (800ms, sin afectar semi-duplex)
   postTxSuppressUntil = Date.now() + POST_TX_SUPPRESS_MS;
+  // Suprimir VOX tras TX propio:
+  //   - Clic de squelch de la radio al pasar TX→RX (~200ms)
+  //   - Eco acustico del altavoz/sala (~500ms)
+  //   - Eco residual del canal CB de la emision anterior (~1s)
+  // Mantenemos este margen en 1500ms: suficiente para squelch y sala, sin
+  // penalizar demasiado la captura de respuestas CB inmediatas.
+  postRxVoxSuppressUntil = Math.max(postRxVoxSuppressUntil, Date.now() + POST_TX_VOX_SUPPRESS_MS);
   log("VOX: PTT liberado — fin transmision");
 });
 

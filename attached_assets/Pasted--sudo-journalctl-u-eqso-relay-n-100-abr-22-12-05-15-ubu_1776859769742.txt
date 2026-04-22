@@ -1,0 +1,101 @@
+ sudo journalctl -u eqso-relay -n 100                
+abr 22 12:05:15 ubuntus wake-audio.sh[1612]:   Mono: Playback [off]
+abr 22 12:05:15 ubuntus wake-audio.sh[1581]: [wake] Mixer ALSA card 1 ajustado
+abr 22 12:05:19 ubuntus systemd[1]: Started eqso-relay.service - eQSO Relay Daemon.
+abr 22 12:05:20 ubuntus node[1614]: [config] Cargado: /etc/eqso-relay/default.json
+abr 22 12:05:20 ubuntus node[1614]: [config] Configuracion activa: {
+abr 22 12:05:20 ubuntus node[1614]:   "callsign": "0R-IN70WN",
+abr 22 12:05:20 ubuntus node[1614]:   "room": "CB",
+abr 22 12:05:20 ubuntus node[1614]:   "password": "",
+abr 22 12:05:20 ubuntus node[1614]:   "message": "Radio Enlace IN70WN",
+abr 22 12:05:20 ubuntus node[1614]:   "server": "127.0.0.1",
+abr 22 12:05:20 ubuntus node[1614]:   "port": 2171,
+abr 22 12:05:20 ubuntus node[1614]:   "reconnectMinMs": 2000,
+abr 22 12:05:20 ubuntus node[1614]:   "reconnectMaxMs": 60000,
+abr 22 12:05:20 ubuntus node[1614]:   "audio": {
+abr 22 12:05:20 ubuntus node[1614]:     "captureDevice": "plughw:Device,0",
+abr 22 12:05:20 ubuntus node[1614]:     "playbackDevice": "plughw:Device,0",
+abr 22 12:05:20 ubuntus node[1614]:     "vox": true,
+abr 22 12:05:20 ubuntus node[1614]:     "voxThresholdRms": 1500,
+abr 22 12:05:20 ubuntus node[1614]:     "voxHangMs": 3000,
+abr 22 12:05:20 ubuntus node[1614]:     "inputGain": 0.6,
+abr 22 12:05:20 ubuntus node[1614]:     "outputGain": 1
+abr 22 12:05:20 ubuntus node[1614]:   },
+abr 22 12:05:20 ubuntus node[1614]:   "control": {
+abr 22 12:05:20 ubuntus node[1614]:     "enabled": true,
+abr 22 12:05:20 ubuntus node[1614]:     "port": 8009,
+abr 22 12:05:20 ubuntus node[1614]:     "host": "127.0.0.1"
+abr 22 12:05:20 ubuntus node[1614]:   },
+abr 22 12:05:20 ubuntus node[1614]:   "ptt": {
+abr 22 12:05:20 ubuntus node[1614]:     "device": "/dev/ttyACM0",
+abr 22 12:05:20 ubuntus node[1614]:     "method": "rts",
+abr 22 12:05:20 ubuntus node[1614]:     "inverted": false
+abr 22 12:05:20 ubuntus node[1614]:   }
+abr 22 12:05:20 ubuntus node[1614]: }
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.444Z ============================================================
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.445Z eQSO Relay Daemon arrancado
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.445Z   Callsign : 0R-IN70WN
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.446Z   Sala     : CB
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.446Z   Servidor : 127.0.0.1:2171
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.446Z   VOX      : ON (umbral=1500 hang=3000ms)
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.447Z   Captura  : plughw:Device,0
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.447Z   Playback : plughw:Device,0
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.447Z   PTT Ser. : /dev/ttyACM0 (rts)
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.448Z ============================================================
+abr 22 12:05:20 ubuntus node[1614]: [ptt] 2026-04-22T12:05:20.450Z Iniciando PTT serial: /dev/ttyACM0 (rts)
+abr 22 12:05:20 ubuntus node[1614]: [audio] 2026-04-22T12:05:20.522Z arecord -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.551Z Conectando a 127.0.0.1:2171 como "0R-IN70WN" en sala "CB"\Uffffffff
+abr 22 12:05:20 ubuntus node[1614]: [control] 2026-04-22T12:05:20.625Z Control HTTP escuchando en http://127.0.0.1:8009
+abr 22 12:05:20 ubuntus node[1614]: [eqso] 2026-04-22T12:05:20.747Z TCP conectado a 127.0.0.1:2171
+abr 22 12:05:20 ubuntus node[1614]: [eqso] 2026-04-22T12:05:20.793Z Handshake recibido \Uffffffff conexion establecida
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.797Z Conectado \Uffffffff enviando JOIN\Uffffffff
+abr 22 12:05:20 ubuntus node[1614]: [eqso] 2026-04-22T12:05:20.816Z JOIN enviado: callsign="0R-IN70WN" sala="CB"
+abr 22 12:05:20 ubuntus node[1614]: [eqso] 2026-04-22T12:05:20.825Z Salas disponibles: GENERAL, CB, ASORAPA, PRUEBAS
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.833Z Salas: GENERAL, CB, ASORAPA, PRUEBAS
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.871Z Sala: 0R-ASORAPA se ha unido
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.871Z Sala: 0R-JN11BK se ha unido
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.872Z Sala: 0R-IN53SI se ha unido
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.891Z Sala: 0R-IN70WN se ha unido
+abr 22 12:05:20 ubuntus node[1614]: [ptt] 2026-04-22T12:05:20.450Z Iniciando PTT serial: /dev/ttyACM0 (rts)
+abr 22 12:05:20 ubuntus node[1614]: [audio] 2026-04-22T12:05:20.522Z arecord -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.551Z Conectando a 127.0.0.1:2171 como "0R-IN70WN" en sala "CB"\Uffffffff
+abr 22 12:05:20 ubuntus node[1614]: [control] 2026-04-22T12:05:20.625Z Control HTTP escuchando en http://127.0.0.1:8009
+abr 22 12:05:20 ubuntus node[1614]: [eqso] 2026-04-22T12:05:20.747Z TCP conectado a 127.0.0.1:2171
+abr 22 12:05:20 ubuntus node[1614]: [eqso] 2026-04-22T12:05:20.793Z Handshake recibido \Uffffffff conexion establecida
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.797Z Conectado \Uffffffff enviando JOIN\Uffffffff
+abr 22 12:05:20 ubuntus node[1614]: [eqso] 2026-04-22T12:05:20.816Z JOIN enviado: callsign="0R-IN70WN" sala="CB"
+abr 22 12:05:20 ubuntus node[1614]: [eqso] 2026-04-22T12:05:20.825Z Salas disponibles: GENERAL, CB, ASORAPA, PRUEBAS
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.833Z Salas: GENERAL, CB, ASORAPA, PRUEBAS
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.871Z Sala: 0R-ASORAPA se ha unido
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.871Z Sala: 0R-JN11BK se ha unido
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.872Z Sala: 0R-IN53SI se ha unido
+abr 22 12:05:20 ubuntus node[1614]: [main] 2026-04-22T12:05:20.891Z Sala: 0R-IN70WN se ha unido
+abr 22 12:05:20 ubuntus node[1614]: [ptt] 2026-04-22T12:05:20.918Z PTT serial listo (/dev/ttyACM0, rts)
+abr 22 12:05:25 ubuntus node[1614]: [audio] 2026-04-22T12:05:25.547Z [nivel] pico RMS=3910 (-18.5 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 12:05:30 ubuntus node[1614]: [audio] 2026-04-22T12:05:30.546Z [nivel] pico RMS=4 (-78.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 12:05:35 ubuntus node[1614]: [audio] 2026-04-22T12:05:35.546Z [nivel] pico RMS=4 (-78.5 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 12:05:40 ubuntus node[1614]: [audio] 2026-04-22T12:05:40.546Z [nivel] pico RMS=4 (-79.0 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 12:05:42 ubuntus node[1614]: [main] 2026-04-22T12:05:42.150Z Sala: 30RCI184 se ha unido
+abr 22 12:05:45 ubuntus node[1614]: [audio] 2026-04-22T12:05:45.548Z [nivel] pico RMS=4 (-79.2 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 12:05:47 ubuntus node[1614]: [main] 2026-04-22T12:05:47.712Z VOX: PTT activado \Uffffffff inicio transmision
+abr 22 12:05:50 ubuntus node[1614]: [audio] 2026-04-22T12:05:50.549Z [nivel] pico RMS=15018 (-6.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 12:05:55 ubuntus node[1614]: [audio] 2026-04-22T12:05:55.550Z [nivel] pico RMS=13089 (-8.0 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 12:05:56 ubuntus node[1614]: [eqso] 2026-04-22T12:05:56.982Z PTT liberado [0x0d]
+abr 22 12:05:56 ubuntus node[1614]: [main] 2026-04-22T12:05:56.984Z VOX: PTT liberado \Uffffffff fin transmision
+abr 22 12:06:00 ubuntus node[1614]: [audio] 2026-04-22T12:06:00.551Z [nivel] pico RMS=995 (-30.4 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 12:06:01 ubuntus node[1614]: [main] 2026-04-22T12:06:01.023Z VOX: PTT activado \Uffffffff inicio transmision
+abr 22 12:06:04 ubuntus node[1614]: [eqso] 2026-04-22T12:06:04.247Z PTT liberado [0x0d]
+abr 22 12:06:04 ubuntus node[1614]: [main] 2026-04-22T12:06:04.248Z VOX: PTT liberado \Uffffffff fin transmision
+abr 22 12:06:05 ubuntus node[1614]: [audio] 2026-04-22T12:06:05.552Z [nivel] pico RMS=23614 (-2.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 12:06:10 ubuntus node[1614]: [audio] 2026-04-22T12:06:10.553Z [nivel] pico RMS=4 (-78.7 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 12:06:15 ubuntus node[1614]: [audio] 2026-04-22T12:06:15.554Z [nivel] pico RMS=667 (-33.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 12:06:17 ubuntus node[1614]: [main] 2026-04-22T12:06:17.004Z Sala: 0R-ASORAPA ha salido
+abr 22 12:06:17 ubuntus node[1614]: [main] 2026-04-22T12:06:17.059Z Sala: 0R-JN11BK ha salido
+abr 22 12:06:17 ubuntus node[1614]: [main] 2026-04-22T12:06:17.140Z Sala: 0R-IN53SI ha salido
+abr 22 12:06:17 ubuntus node[1614]: [main] 2026-04-22T12:06:17.418Z VOX: PTT activado \Uffffffff inicio transmision
+abr 22 12:06:19 ubuntus node[1614]: [main] 2026-04-22T12:06:19.775Z Sala: 0R-IN53SI se ha unido
+abr 22 12:06:20 ubuntus node[1614]: [audio] 2026-04-22T12:06:20.554Z [nivel] pico RMS=23308 (-3.0 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 12:06:21 ubuntus node[1614]: [eqso] 2026-04-22T12:06:21.571Z PTT liberado [0x0d]
+abr 22 12:06:21 ubuntus node[1614]: [main] 2026-04-22T12:06:21.571Z VOX: PTT liberado \Uffffffff fin transmision
+abr 22 12:06:21 ubuntus node[1614]: [main] 2026-04-22T12:06:21.834Z Sala: 0R-ASORAPA se ha unido
+abr 22 12:06:22 ubuntus node[1614]: [main] 2026-04-22T12:06:22.467Z Sala: 0R-JN11BK se ha unido
