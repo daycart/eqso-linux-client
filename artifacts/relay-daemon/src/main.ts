@@ -85,15 +85,22 @@ const vox   = new Vox(cfg.audio.voxThresholdRms, cfg.audio.voxHangMs);
 
 // Gate de transmision: nivel minimo para enviar audio al servidor.
 // El VOX mantiene pttActive=true durante voxHangMs incluso cuando el nivel
-// baja de voxThresholdRms (2500). Durante ese hang, el audio puede estar en
-// el rango 0-2500 (ruido de fondo, fin de palabra). Si se envía, el navegador
-// acumula esos paquetes de ruido y los reproduce superpuestos sobre el audio
-// siguiente = "eco que pisa".
-// Con TX_GATE = voxThresholdRms - 100 = 2400: durante el hang (nivel<2500)
-// prácticamente nada pasa (el nivel de hang es RMS≈6-200), solo el audio
-// activo (RMS>2400 ≈ voz real) llega al servidor → cola del navegador limpia.
-const TX_GATE_RMS = 2400;
+// baja de voxThresholdRms. Durante ese hang, el audio puede estar en el rango
+// 0-voxThreshold (ruido de fondo). Si se envía, el navegador acumula ruido en
+// su cola y lo reproduce sobre el audio siguiente = "eco que pisa".
+// TX_GATE = voxThreshold - 100: durante el hang prácticamente nada pasa
+// (suelo RMS≈4-6), mientras que la voz activa (>voxThreshold) sí pasa.
+// Derivarlo del config permite ajustar voxThreshold sin cambiar código.
+const TX_GATE_RMS = Math.max(0, cfg.audio.voxThresholdRms - 100);
 let latestPcmRms = 0;
+
+// Errores de audio (ej: arecord crashea por ALSA no disponible).
+// Sin este handler, Node.js lanzaría un uncaughtException → proceso crashea →
+// systemd reinicia pero la conexion TCP al servidor se pierde temporalmente.
+audio.on("error", (err: Error) => {
+  log(`[audio] ERROR ALSA: ${err.message} — relay sigue activo, el audio se recuperará`);
+  // No lanzar: arecord se reiniciará solo con backoff (2s) en alsa-audio.ts
+});
 
 // El audio emite chunks PCM crudos para que el VOX los analice
 audio.on("pcm_chunk", (pcm: Int16Array) => {

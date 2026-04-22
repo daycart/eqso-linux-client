@@ -35,8 +35,8 @@ sudo tee /etc/eqso-relay/default.json > /dev/null << 'EQSO_CONFIG'
     "captureDevice": "plughw:Device,0",
     "playbackDevice": "plughw:Device,0",
     "vox": true,
-    "voxThresholdRms": 2500,
-    "voxHangMs": 2000,
+    "voxThresholdRms": 1500,
+    "voxHangMs": 3000,
     "inputGain": 1.0,
     "outputGain": 1.0
   },
@@ -110,10 +110,11 @@ amixer -c 1 sset "Mic Playback Volume" 0% 2>/dev/null || true
 amixer -c 1 sset "Mic Playback Switch" off 2>/dev/null || true
 #
 # --- VOLUMEN DE CAPTURA ---
-# El log muestra SATURACION con 60% → reducir a 40% para evitar que la señal
-# del radioenlace CB sature el ADC del CM108 (RMS=21000 con 60%, objetivo <10000).
-amixer -c 1 sset "Mic" 40% cap 2>/dev/null && echo "[wake] Mic capture = 40%" || true
-amixer -c 1 sset "Mic Capture Volume" 40% cap 2>/dev/null || true
+# 60%: equilibrio entre sensibilidad y riesgo de saturacion. Las saturaciones
+# anteriores eran del bucle de sidetone (ahora desactivado), no del nivel real.
+# Con el sidetone en 0, 60% da RMS≈3000-12000 para voz CB normal (umbral=1500).
+amixer -c 1 sset "Mic" 60% cap 2>/dev/null && echo "[wake] Mic capture = 60%" || true
+amixer -c 1 sset "Mic Capture Volume" 60% cap 2>/dev/null || true
 #
 # --- REPRODUCCION ---
 amixer -c 1 sset "Speaker" 90% 2>/dev/null || true

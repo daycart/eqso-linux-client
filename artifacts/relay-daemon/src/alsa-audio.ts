@@ -18,9 +18,10 @@ import {
 
 const PCM_CHUNK_SAMPLES = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET; // 960 muestras = 1920 bytes
 
-// Jitter buffer para RX: acumula muestras antes de abrir aplay
-// 160 ms × 8000 Hz = 1280 muestras — absorbe jitter sin cortar mensajes cortos
-const JITTER_PRE_BUFFER_SAMPLES = 1280;
+// Jitter buffer para RX: acumula muestras antes de abrir aplay.
+// 960 = 1 paquete GSM = 120ms. Esperar solo 1 paquete completo antes de abrir
+// aplay reduce la latencia inicial ~120ms respecto a esperar 2 paquetes (1280).
+const JITTER_PRE_BUFFER_SAMPLES = 960;
 
 export class AlsaAudio extends EventEmitter {
   private recorder: ChildProcessWithoutNullStreams | null = null;
@@ -248,8 +249,8 @@ export class AlsaAudio extends EventEmitter {
       "-r", "8000",
       "-c", "1",
       "-q",
-      "--buffer-size=16384",  // 2s de buffer hardware — absorbe jitter de red
-      "--period-size=2048",   // periodos de 256ms — menos interrupciones
+      "--buffer-size=2048",  // 256ms buffer hardware (antes 16384=2s → latencia enorme)
+      "--period-size=256",   // 32ms por periodo — menor latencia de salida
     ];
     log(`aplay ${args.join(" ")}`);
     this.player = spawn("aplay", args, { stdio: ["pipe", "ignore", "pipe"] });
