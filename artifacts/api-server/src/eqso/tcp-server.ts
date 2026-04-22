@@ -36,6 +36,10 @@ interface TcpClientState {
   multiByteCmd: number;
   handshakeDone: boolean;
   disconnected: boolean; // guard against double-disconnect (error + close both fire)
+  /** Drena inmediatamente los paquetes GSM pendientes en el pace queue.
+   *  Llamado desde processSingleByte cuando el cliente envía RELEASE_PTT (0x0d),
+   *  así los últimos frames llegan al navegador sin el retardo de 120ms/paquete. */
+  flushPaceQueue?: () => void;
 }
 
 function sendRoomList(state: TcpClientState): void {
@@ -106,6 +110,12 @@ function processSingleByte(state: TcpClientState, byte: number): void {
         safeWrite(state, Buffer.from([0x08]));
         safeWrite(state, Buffer.from([0x06, 0x00]));
         roomManager.unlockRoom(client.room, state.id);
+        // Drena inmediatamente los paquetes GSM que quedaron en el pace queue.
+        // Sin esto, los últimos 3-5 paquetes GSM del relay CB se entregan al
+        // navegador 360-600ms tarde → suena como eco/cola de la voz.
+        // Con flush: los paquetes llegan juntos (<1 tick de Node.js) y el
+        // Web Audio del navegador los encola en nextPlayTimeRef sin solapamiento.
+        state.flushPaceQueue?.();
       }
       break;
 
@@ -380,6 +390,21 @@ export function startTcpServer(port: number): net.Server {
       const room = roomManager.getClient(id)?.room;
       if (room) roomManager.broadcastBinToLocalWsClients(room, pkt, id);
       audioPaceTimer = setTimeout(sendNextAudioPkt, AUDIO_PACE_MS);
+    };
+
+    // Cuando el cliente envía RELEASE_PTT (0x0d), drenamos el pace queue sin
+    // esperar los 120ms entre paquetes. Los últimos N paquetes GSM del relay CB
+    // llegan en el mismo tick de Node.js; el navegador los encola secuencialmente
+    // en su nextPlayTimeRef (sin solapamiento) pero sin el retardo del pace timer.
+    // Efecto: el final de la transmisión llega al cliente sin cola de eco.
+    state.flushPaceQueue = () => {
+      if (audioPaceTimer) { clearTimeout(audioPaceTimer); audioPaceTimer = null; }
+      const room = roomManager.getClient(id)?.room;
+      if (!room) { audioPaceQueue.length = 0; return; }
+      while (audioPaceQueue.length > 0) {
+        const pkt = audioPaceQueue.shift()!;
+        roomManager.broadcastBinToLocalWsClients(room, pkt, id);
+      }
     };
 
     decoder.on("pcm", (pcm: Int16Array) => {

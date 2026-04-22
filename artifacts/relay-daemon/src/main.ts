@@ -43,18 +43,17 @@ let rxInhibitTimer: ReturnType<typeof setTimeout> | null = null;
 const RX_HANG_MS = 400;
 
 // ─── Supresion post-TX (anti-eco del servidor) ────────────────────────────────
-// Tras liberarse el PTT, el servidor puede devolver los ultimos paquetes de
-// audio buffereados (eco del propio relay). Descartamos mientras el servidor
-// confirme que seguimos transmitiendo (serverOwnTx) o durante el margen de
-// guarda. POST_TX_SUPPRESS_MS cubre la ventana entre endTx() local y que el
-// servidor procese el 0x0d y mande ptt_released con nuestro callsign.
+// El relay NO recibe su propio audio de vuelta del servidor (el TCP server
+// excluye al emisor de broadcastToTcpAndRelays con excludeId=state.id). Por
+// tanto, el relay nunca reproduce su propio eco. Sin embargo, durante el
+// voxHangMs (3s), el VOX mantiene pttActive=true y el TX_GATE impide enviar
+// silencio. Cuando el VOX baja el PTT, el servidor puede tener paquetes del
+// relay en el decoder queue de FFmpeg; con el flush del servidor esos paquetes
+// llegan al navegador antes que ptt_released_remote. POST_TX_SUPPRESS_MS es
+// el margen de guarda para descartar paquetes del servidor entre el 0x0d del
+// relay y cualquier audio residual de red. 800ms es suficiente.
 let postTxSuppressUntil = 0;
 const POST_TX_SUPPRESS_MS = 800;
-// Flag: el servidor nos ha confirmado que estamos transmitiendo (0x16 action=0x02
-// con nuestro callsign). Mientras sea true, todos los paquetes de audio que
-// recibamos son nuestro propio eco (el servidor re-emite nuestro audio a todos
-// los clientes incluyendonos a nosotros mismos). Los descartamos sin reproducir.
-let serverOwnTx = false;
 
 // ─── Supresion post-RX (anti-feedback acustico tras reproduccion) ─────────────
 // Tras terminar de reproducir audio del servidor (web client, etc.), el altavoz
@@ -158,9 +157,8 @@ function connect(): void {
 
   const client = new EqsoClient(cfg.server, cfg.port);
   eqsoClient = client;
-  pttActive    = false;
-  serverOwnTx  = false;  // reset en cada reconexion: nueva sesion, sin eco previo
-  usersInRoom  = [];
+  pttActive   = false;
+  usersInRoom = [];
 
   client.on("event", (ev: { type: string; data?: unknown }) => {
     switch (ev.type) {
@@ -192,27 +190,12 @@ function connect(): void {
       case "ptt_started": {
         const u = ev.data as { name: string };
         log(`TX: ${u.name} transmitiendo`);
-        // Si el servidor confirma que NOSOTROS estamos transmitiendo, los
-        // paquetes de audio que lleguen a continuacion son nuestro propio eco
-        // (el servidor re-distribuye a todos los clientes, incluyendonos).
-        if (u.name === cfg.callsign) {
-          serverOwnTx = true;
-          log("ECO: servidor confirma TX propio — descartando audio entrante");
-        }
         break;
       }
 
       case "ptt_released": {
         const u = ev.data as { name: string };
         log(`TX: ${u.name} libero canal`);
-        // El servidor ha confirmado que terminamos de transmitir. Armamos la
-        // ventana de guarda (POST_TX_SUPPRESS_MS) por si llegan paquetes
-        // residuales entre este evento y el siguiente paquete de audio real.
-        if (u.name === cfg.callsign) {
-          serverOwnTx = false;
-          postTxSuppressUntil = Date.now() + POST_TX_SUPPRESS_MS;
-          log("ECO: servidor confirma TX liberado — ventana post-TX activa");
-        }
         break;
       }
 
@@ -220,15 +203,12 @@ function connect(): void {
         const pkt = ev.data as Buffer;
         if (pkt.length < 1 + GSM_PACKET_BYTES) break;
         rxPackets++;
-        // Descartar eco propio: durante TX local o mientras el servidor confirme
-        // que seguimos en TX (serverOwnTx) o en ventana post-TX.
-        // pttActive: TX local ya iniciado pero quizas el servidor no ha mandado
-        //            ptt_started aun (race condition de red).
-        // serverOwnTx: el servidor nos ha confirmado en TX → todos los paquetes
-        //              de audio que llegan son nuestro propio eco devuelto.
-        // postTxSuppressUntil: guarda de 800ms tras ptt_released del servidor,
-        //              por si llegan paquetes residuales ya en transito.
-        if (pttActive || serverOwnTx || Date.now() < postTxSuppressUntil) break;
+        // Descartar si estamos en TX local (el servidor no nos manda nuestro
+        // propio audio — excluye al emisor en broadcastToTcpAndRelays —, así
+        // que el único audio que llega es de otros usuarios).
+        // postTxSuppressUntil: guarda de 800ms tras endTx() por si el server
+        // tiene paquetes de otros en tránsito que lleguen en ese momento.
+        if (pttActive || Date.now() < postTxSuppressUntil) break;
         // Modo sin altavoz (outputGain=0): descartar silenciosamente sin activar
         // el semi-duplex ni el temporizador RX. arecord corre continuamente y
         // el VOX detecta la radio CB sin ningun retraso ni inhibicion.
