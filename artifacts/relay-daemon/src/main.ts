@@ -35,12 +35,12 @@ let forceReconnectRequested = false;
 // tiempo + margen para que el sonido del altavoz no active el micro.
 let rxActive = false;
 let rxInhibitTimer: ReturnType<typeof setTimeout> | null = null;
-// 800 ms: tiempo suficiente para que aplay acabe sin cortar la última sílaba
-// (cada paquete = 120 ms; con buffer-size=16384/8000Hz ≈ 2 s de hardware buffer,
-// 800 ms es suficiente para que el CB cambie de TX a RX sin entrecorte).
-// Reducir de 2000 → 800 ms acorta el retardo total de "eco de respuesta" de
-// ~3.9 s a ~1.4 s, haciendo el relay mucho más reactivo.
-const RX_HANG_MS = 800;
+// 400 ms: margen mínimo para que aplay drene su buffer ALSA antes de soltar
+// el PTT hardware. Con AUDIO_PACE_MS=120ms el jitter de red es <100ms por lo
+// que 400ms cubre cualquier rafaga de paquetes sin cortar el final del audio.
+// Retardo total después de que el browser suelta PTT:
+//   400ms hang + 500ms (kill aplay + reinicio arecord) = ~900ms hasta captura
+const RX_HANG_MS = 400;
 
 // ─── Supresion post-TX (anti-eco del servidor) ────────────────────────────────
 // Tras liberarse el PTT, el servidor puede devolver los ultimos paquetes de
@@ -84,14 +84,15 @@ const audio = new AlsaAudio(cfg.audio);
 const vox   = new Vox(cfg.audio.voxThresholdRms, cfg.audio.voxHangMs);
 
 // Gate de transmision: nivel minimo para enviar audio al servidor.
-// Durante el colgado del VOX (voxHangMs) el micro captura ruido de fondo
-// (RMS≈6 suelo, hasta ~200 en ambientes ruidosos). Si lo enviamos, el
-// navegador acumula ese ruido en su cola y lo reproduce sobre el audio
-// siguiente → efecto "eco que pisa" / "bucle".
-// El gate suprime todo lo que no sea voz. La voz vocal real empieza en
-// RMS≈500-1000 mínimo; fricativas/sibilantes ≈200-400. Con 300 dejamos
-// pasar toda la voz y suprimimos el ruido de fondo inter-sílabas.
-const TX_GATE_RMS = 300;
+// El VOX mantiene pttActive=true durante voxHangMs incluso cuando el nivel
+// baja de voxThresholdRms (2500). Durante ese hang, el audio puede estar en
+// el rango 0-2500 (ruido de fondo, fin de palabra). Si se envía, el navegador
+// acumula esos paquetes de ruido y los reproduce superpuestos sobre el audio
+// siguiente = "eco que pisa".
+// Con TX_GATE = voxThresholdRms - 100 = 2400: durante el hang (nivel<2500)
+// prácticamente nada pasa (el nivel de hang es RMS≈6-200), solo el audio
+// activo (RMS>2400 ≈ voz real) llega al servidor → cola del navegador limpia.
+const TX_GATE_RMS = 2400;
 let latestPcmRms = 0;
 
 // El audio emite chunks PCM crudos para que el VOX los analice

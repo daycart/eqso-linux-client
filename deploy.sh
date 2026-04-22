@@ -99,13 +99,27 @@ for i in $(seq 1 15); do
 done
 cat /proc/asound/cards 2>/dev/null
 
-# 4. Subir niveles del mixer ALSA para la tarjeta USB (card 1)
-amixer -c 1 sset "Mic" 60% cap 2>/dev/null || true
-amixer -c 1 sset "Mic Capture Volume" 60% cap 2>/dev/null || true
-amixer -c 1 sset "Speaker" 100% 2>/dev/null || true
-amixer -c 1 sset "Headphone" 100% 2>/dev/null || true
-amixer -c 1 sset "PCM" 100% 2>/dev/null || true
-amixer -c 1 sset "PCM Playback Volume" 100% 2>/dev/null || true
+# 4. Configurar mixer ALSA de la tarjeta USB (card 1)
+#
+# --- SIDETONE / MONITOR INTERNO (CRITICO) ---
+# El CM108 mezcla internamente la entrada MIC al altavoz SPEAKER (sidetone).
+# Eso crea un bucle: CM108-SPEAKER → CB-MIC → CM108-MIC → bucle de eco.
+# Ponemos a 0 el playback del canal MIC para cortar ese bucle hardware.
+amixer -c 1 sset "Mic" 0% playback 2>/dev/null && echo "[wake] Mic playback (sidetone) = 0%" || true
+amixer -c 1 sset "Mic Playback Volume" 0% 2>/dev/null || true
+amixer -c 1 sset "Mic Playback Switch" off 2>/dev/null || true
+#
+# --- VOLUMEN DE CAPTURA ---
+# El log muestra SATURACION con 60% → reducir a 40% para evitar que la señal
+# del radioenlace CB sature el ADC del CM108 (RMS=21000 con 60%, objetivo <10000).
+amixer -c 1 sset "Mic" 40% cap 2>/dev/null && echo "[wake] Mic capture = 40%" || true
+amixer -c 1 sset "Mic Capture Volume" 40% cap 2>/dev/null || true
+#
+# --- REPRODUCCION ---
+amixer -c 1 sset "Speaker" 90% 2>/dev/null || true
+amixer -c 1 sset "Headphone" 90% 2>/dev/null || true
+amixer -c 1 sset "PCM" 90% 2>/dev/null || true
+amixer -c 1 sset "PCM Playback Volume" 90% 2>/dev/null || true
 # Desactivar AGC: puede comprimir el nivel de captura y afectar al VOX
 amixer -c 1 sset "Auto Gain Control" off 2>/dev/null || true
 echo "[wake] Mixer ALSA card 1 ajustado"
