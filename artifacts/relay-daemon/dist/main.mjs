@@ -1157,9 +1157,17 @@ audio.on("pcm_chunk", (pcm) => {
 });
 vox.on("ptt_start", () => {
   if (!eqsoClient?.connected || pttActive || rxActive) return;
+  const now = Date.now();
+  if (now < postRxVoxSuppressUntil) {
+    log5(`VOX: ptt_start BLOQUEADO \u2014 suppress activo hasta ${new Date(postRxVoxSuppressUntil).toISOString()} (restan ${postRxVoxSuppressUntil - now}ms)`);
+    setTimeout(() => {
+      if (!pttActive) vox.forcePttEnd();
+    }, 0);
+    return;
+  }
   pttActive = true;
   eqsoClient.startTx();
-  log5("VOX: PTT activado \u2014 inicio transmision");
+  log5(`VOX: PTT activado \u2014 inicio transmision (suppress was ${new Date(postRxVoxSuppressUntil).toISOString()})`);
 });
 vox.on("ptt_end", () => {
   if (!eqsoClient?.connected || !pttActive) return;
@@ -1168,10 +1176,7 @@ vox.on("ptt_end", () => {
   eqsoClient.endTx();
   postTxSuppressUntil = Date.now() + POST_TX_SUPPRESS_MS;
   postRxVoxSuppressUntil = Math.max(postRxVoxSuppressUntil, Date.now() + POST_TX_VOX_SUPPRESS_MS);
-  log5(`VOX: PTT liberado \u2014 fin transmision (suppresion VOX hasta ${new Date(postRxVoxSuppressUntil).toISOString()})`);
-});
-vox.on("ptt_start", () => {
-  log5(`VOX: ptt_start chequeado \u2014 now=${(/* @__PURE__ */ new Date()).toISOString()} suppressUntil=${new Date(postRxVoxSuppressUntil).toISOString()} rxActive=${rxActive}`);
+  log5(`VOX: PTT liberado \u2014 fin transmision (suppress hasta ${new Date(postRxVoxSuppressUntil).toISOString()})`);
 });
 audio.on("gsm_tx", (gsm) => {
   if (!pttActive || !eqsoClient?.connected) return;

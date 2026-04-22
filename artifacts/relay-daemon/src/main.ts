@@ -141,9 +141,25 @@ audio.on("pcm_chunk", (pcm: Int16Array) => {
 // Cuando el VOX o control HTTP activan PTT
 vox.on("ptt_start", () => {
   if (!eqsoClient?.connected || pttActive || rxActive) return;
+
+  // Defensa en profundidad: doble verificacion del suppress.
+  // El pcm_chunk verifica Date.now() > postRxVoxSuppressUntil antes de llamar
+  // a vox.processPcm, pero puede haber una condicion de carrera si:
+  //   1. rxInhibitTimer pone rxActive=false en el mismo tick que llega un pcm_chunk
+  //   2. El suppress ya expiro pero el rxInhibitTimer lo extiende DESPUES del tick
+  //   3. forcePttStart() desde control HTTP no verifica el suppress
+  // En todos esos casos, bloqueamos aqui antes de abrir el TX.
+  const now = Date.now();
+  if (now < postRxVoxSuppressUntil) {
+    log(`VOX: ptt_start BLOQUEADO — suppress activo hasta ${new Date(postRxVoxSuppressUntil).toISOString()} (restan ${postRxVoxSuppressUntil - now}ms)`);
+    // Resetear VOX a false para que el proximo ciclo pueda re-evaluar cuando el suppress expire
+    setTimeout(() => { if (!pttActive) vox.forcePttEnd(); }, 0);
+    return;
+  }
+
   pttActive = true;
   eqsoClient.startTx();
-  log("VOX: PTT activado — inicio transmision");
+  log(`VOX: PTT activado — inicio transmision (suppress was ${new Date(postRxVoxSuppressUntil).toISOString()})`);
 });
 
 vox.on("ptt_end", () => {
@@ -155,11 +171,7 @@ vox.on("ptt_end", () => {
   postTxSuppressUntil = Date.now() + POST_TX_SUPPRESS_MS;
   // Suprimir VOX 5s tras TX propio (squelch + eco CB + eco sala).
   postRxVoxSuppressUntil = Math.max(postRxVoxSuppressUntil, Date.now() + POST_TX_VOX_SUPPRESS_MS);
-  log(`VOX: PTT liberado — fin transmision (suppresion VOX hasta ${new Date(postRxVoxSuppressUntil).toISOString()})`);
-});
-
-vox.on("ptt_start", () => {
-  log(`VOX: ptt_start chequeado — now=${new Date().toISOString()} suppressUntil=${new Date(postRxVoxSuppressUntil).toISOString()} rxActive=${rxActive}`);
+  log(`VOX: PTT liberado — fin transmision (suppress hasta ${new Date(postRxVoxSuppressUntil).toISOString()})`);
 });
 
 // El audio emite paquetes GSM listos para enviar al servidor
