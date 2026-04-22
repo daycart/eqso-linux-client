@@ -1,0 +1,22 @@
+apa$ sudo journalctl -u eqso-relay -n 60 | grep "VOX\|nivel"
+abr 22 08:42:33 ubuntus node[7961]: [audio] 2026-04-22T08:42:33.800Z [nivel] pico RMS=6 (-74.8 dBFS)  VOXumbral=1500  gain=1
+abr 22 08:42:38 ubuntus node[7961]: [audio] 2026-04-22T08:42:38.801Z [nivel] pico RMS=19147 (-4.7 dBFS)  VOXumbral=1500  gain=1 ? SATURACION: 3 muestras (0.06%)
+abr 22 08:42:42 ubuntus node[7961]: [main] 2026-04-22T08:42:42.394Z VOX: PTT activado \Uffffffff inicio transmision
+abr 22 08:42:43 ubuntus node[7961]: [audio] 2026-04-22T08:42:43.862Z [nivel] pico RMS=12252 (-8.5 dBFS)  VOXumbral=1500  gain=1
+abr 22 08:42:48 ubuntus node[7961]: [audio] 2026-04-22T08:42:48.864Z [nivel] pico RMS=11130 (-9.4 dBFS)  VOXumbral=1500  gain=1
+abr 22 08:42:53 ubuntus node[7961]: [audio] 2026-04-22T08:42:53.864Z [nivel] pico RMS=26088 (-2.0 dBFS)  VOXumbral=1500  gain=1 ? SATURACION: 302 muestras (2.07%)
+abr 22 08:42:54 ubuntus node[7961]: [main] 2026-04-22T08:42:54.513Z VOX: PTT liberado \Uffffffff fin transmision
+abr 22 08:42:58 ubuntus node[7961]: [audio] 2026-04-22T08:42:58.864Z [nivel] pico RMS=6 (-74.4 dBFS)  VOXumbral=1500  gain=1
+abr 22 08:43:03 ubuntus node[7961]: [audio] 2026-04-22T08:43:03.865Z [nivel] pico RMS=6 (-74.8 dBFS)  VOXumbral=1500  gain=1
+abr 22 08:43:08 ubuntus node[7961]: [audio] 2026-04-22T08:43:08.867Z [nivel] pico RMS=6 (-74.4 dBFS)  VOXumbral=1500  gain=1
+abr 22 08:43:13 ubuntus node[7961]: [audio] 2026-04-22T08:43:13.867Z [nivel] pico RMS=6 (-74.1 dBFS)  VOXumbral=1500  gain=1
+abr 22 08:43:16 ubuntus node[7961]: [main] 2026-04-22T08:43:16.905Z VOX: PTT activado \Uffffffff inicio transmision
+abr 22 08:43:18 ubuntus node[7961]: [audio] 2026-04-22T08:43:18.875Z [nivel] pico RMS=21064 (-3.8 dBFS)  VOXumbral=1500  gain=1 ? SATURACION: 97 muestras (0.77%)
+abr 22 08:43:23 ubuntus node[7961]: [audio] 2026-04-22T08:43:23.877Z [nivel] pico RMS=30194 (-0.7 dBFS)  VOXumbral=1500  gain=1 ? SATURACION: 1508 muestras (9.66%)
+abr 22 08:43:25 ubuntus node[7961]: [main] 2026-04-22T08:43:25.355Z VOX: PTT liberado \Uffffffff fin transmision
+abr 22 08:43:28 ubuntus node[7961]: [audio] 2026-04-22T08:43:28.879Z [nivel] pico RMS=6 (-74.5 dBFS)  VOXumbral=1500  gain=1
+abr 22 08:43:31 ubuntus node[7961]: [main] 2026-04-22T08:43:31.398Z VOX: PTT activado \Uffffffff inicio transmision
+abr 22 08:43:33 ubuntus node[7961]: [audio] 2026-04-22T08:43:33.881Z [nivel] pico RMS=25806 (-2.1 dBFS)  VOXumbral=1500  gain=1 ? SATURACION: 523 muestras (3.71%)
+abr 22 08:43:38 ubuntus node[7961]: [audio] 2026-04-22T08:43:38.898Z [nivel] pico RMS=30171 (-0.7 dBFS)  VOXumbral=1500  gain=1 ? SATURACION: 1297 muestras (11.26%)
+abr 22 08:43:42 ubuntus node[7961]: [main] 2026-04-22T08:43:42.672Z VOX: PTT liberado \Uffffffff fin transmision
+abr 22 08:43:43 ubuntus node[7961]: [audio] 2026-04-22T08:43:43.942Z [nivel] pico RMS=25851 (-2.1 dBFS)  VOXumbral=1500  gain=1 ? SATURACION: 375 muestras (2.44%)
