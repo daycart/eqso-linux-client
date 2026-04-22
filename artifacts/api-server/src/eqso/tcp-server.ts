@@ -438,16 +438,19 @@ export function startTcpServer(port: number): net.Server {
     });
     decoder.start();
 
-    // Keepalive TCP a nivel OS: el kernel envía probes TCP cada 30s de inactividad.
-    // Esto mantiene la conexión viva para relays Windows que NO envían [0x02]
-    // silence frames (a diferencia de nuestro relay-daemon que los manda cada 150ms).
-    // Si el remoto no responde a los probes (red caída), el OS cierra el socket.
-    // Esto es transparente al protocolo eQSO — no interfiere con [0x0c] ni audio.
+    // TCP keepalive a nivel kernel: tras 30s de inactividad de aplicacion, el
+    // OS envía probes TCP al extremo remoto. Si este responde (connection alive),
+    // el kernel resetea el timer y el socket permanece abierto indefinidamente
+    // aunque no haya trafico eQSO durante horas (caso habitual en CB con poca
+    // actividad). Si el remoto no responde a los probes (maquina apagada, red
+    // cortada), el kernel cierra el socket tras ~9 reintentos × 75s ≈ 11 min.
+    //
+    // IMPORTANTE: socket.setTimeout() mide inactividad a nivel de aplicacion
+    // (datos Node.js) — los probes TCP del kernel NO lo resetean. Por eso NO
+    // usamos setTimeout: un relay silencioso horas enteras dispararía el timeout
+    // aunque la conexion TCP este perfectamente viva gracias al keepalive OS.
     socket.setKeepAlive(true, 30_000);
 
-    // Timeout de aplicación ampliado a 5 min como último recurso para conexiones
-    // completamente zombi (no responden ni a TCP keepalive ni envían ningún dato).
-    // Los relays Windows normales responderán a TCP keepalive → socket permanece.
     socket.on("data", (data: Buffer) => {
       const ci = roomManager.getClient(id);
       if (ci) ci.rxBytes += data.length;
@@ -461,12 +464,6 @@ export function startTcpServer(port: number): net.Server {
     socket.on("error", (err) => {
       logger.warn({ err, id }, "TCP socket error");
       handleDisconnect(state);
-    });
-
-    socket.setTimeout(300_000);
-    socket.on("timeout", () => {
-      logger.warn({ id }, "TCP socket timeout (300s inactivity) — cerrando conexion zombi");
-      socket.destroy();
     });
   });
 
