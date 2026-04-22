@@ -1,12 +1,13 @@
 import { Router } from "express";
 import express from "express";
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, relayConnectionsTable } from "@workspace/db";
 import { eq, ne } from "drizzle-orm";
 import { requireAdmin } from "../lib/adminMiddleware";
 import { hashPassword } from "../lib/auth";
 import { roomManager } from "../eqso/room-manager";
 import { inactivityManager } from "../eqso/inactivity-manager";
 import { moderationManager } from "../eqso/moderation-manager";
+import { relayManager } from "../eqso/relay-manager";
 
 const router = Router();
 router.use(requireAdmin);
@@ -297,6 +298,138 @@ router.delete("/moderation/ban/:callsign", async (req, res) => {
 router.post("/moderation/kick/:clientId", (req, res) => {
   moderationManager.kickClient(req.params["clientId"]);
   res.json({ ok: true });
+});
+
+// ── Radioenlaces (relay connections) ──────────────────────────────────────────
+
+// GET /api/admin/relays — list all relays with live status
+router.get("/relays", async (_req, res) => {
+  try {
+    const rows = await db.select().from(relayConnectionsTable).orderBy(relayConnectionsTable.id);
+    const liveStatus = relayManager.getStatus();
+    const statusMap = new Map(liveStatus.map(s => [s.id, s]));
+    const result = rows.map(r => ({
+      id:          r.id,
+      label:       r.label,
+      callsign:    r.callsign,
+      server:      r.server,
+      port:        r.port,
+      localRoom:   r.localRoom,
+      remoteRoom:  r.remoteRoom,
+      password:    r.password,
+      enabled:     r.enabled,
+      createdAt:   r.createdAt,
+      status:      statusMap.get(r.id)?.status      ?? "disconnected",
+      remoteUsers: statusMap.get(r.id)?.remoteUsers ?? [],
+      rxPackets:   statusMap.get(r.id)?.rxPackets   ?? 0,
+      txPackets:   statusMap.get(r.id)?.txPackets   ?? 0,
+    }));
+    res.json(result);
+  } catch {
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+});
+
+// POST /api/admin/relays — create relay connection
+router.post("/relays", async (req, res) => {
+  try {
+    const { label, callsign, server, port = 2171, localRoom = "CB", remoteRoom = "CB", password = "", enabled = false } =
+      req.body as {
+        label: string; callsign: string; server: string; port?: number;
+        localRoom?: string; remoteRoom?: string; password?: string; enabled?: boolean;
+      };
+    if (!label?.trim())    { res.status(400).json({ error: "Nombre obligatorio" }); return; }
+    if (!callsign?.trim()) { res.status(400).json({ error: "Indicativo obligatorio" }); return; }
+    if (!server?.trim())   { res.status(400).json({ error: "Servidor obligatorio" }); return; }
+
+    const [row] = await db.insert(relayConnectionsTable).values({
+      label: label.trim(),
+      callsign: callsign.trim().toUpperCase(),
+      server: server.trim(),
+      port: Number(port) || 2171,
+      localRoom: (localRoom ?? "CB").trim().toUpperCase(),
+      remoteRoom: (remoteRoom ?? "CB").trim().toUpperCase(),
+      password: (password ?? "").trim(),
+      enabled: Boolean(enabled),
+    }).returning();
+    await relayManager.reloadRelay(row.id);
+    res.json(row);
+  } catch {
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+});
+
+// PUT /api/admin/relays/:id — update relay connection
+router.put("/relays/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { label, callsign, server, port, localRoom, remoteRoom, password, enabled } =
+      req.body as {
+        label?: string; callsign?: string; server?: string; port?: number;
+        localRoom?: string; remoteRoom?: string; password?: string; enabled?: boolean;
+      };
+
+    const [existing] = await db.select().from(relayConnectionsTable).where(eq(relayConnectionsTable.id, id)).limit(1);
+    if (!existing) { res.status(404).json({ error: "Radioenlace no encontrado" }); return; }
+
+    const updates: Partial<typeof relayConnectionsTable.$inferInsert> = {};
+    if (label     !== undefined) updates.label      = label.trim();
+    if (callsign  !== undefined) updates.callsign   = callsign.trim().toUpperCase();
+    if (server    !== undefined) updates.server     = server.trim();
+    if (port      !== undefined) updates.port       = Number(port) || 2171;
+    if (localRoom !== undefined) updates.localRoom  = localRoom.trim().toUpperCase();
+    if (remoteRoom!== undefined) updates.remoteRoom = remoteRoom.trim().toUpperCase();
+    if (password  !== undefined) updates.password   = password.trim();
+    if (enabled   !== undefined) updates.enabled    = Boolean(enabled);
+
+    const [updated] = await db.update(relayConnectionsTable).set(updates).where(eq(relayConnectionsTable.id, id)).returning();
+    await relayManager.reloadRelay(id);
+    res.json(updated);
+  } catch {
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+});
+
+// DELETE /api/admin/relays/:id — delete relay connection
+router.delete("/relays/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const [existing] = await db.select().from(relayConnectionsTable).where(eq(relayConnectionsTable.id, id)).limit(1);
+    if (!existing) { res.status(404).json({ error: "Radioenlace no encontrado" }); return; }
+    relayManager.deleteRelay(id);
+    await db.delete(relayConnectionsTable).where(eq(relayConnectionsTable.id, id));
+    res.json({ deleted: true, label: existing.label });
+  } catch {
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+});
+
+// POST /api/admin/relays/:id/start — enable and connect
+router.post("/relays/:id/start", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const [existing] = await db.select().from(relayConnectionsTable).where(eq(relayConnectionsTable.id, id)).limit(1);
+    if (!existing) { res.status(404).json({ error: "Radioenlace no encontrado" }); return; }
+    await db.update(relayConnectionsTable).set({ enabled: true }).where(eq(relayConnectionsTable.id, id));
+    await relayManager.reloadRelay(id);
+    res.json({ ok: true, id, enabled: true });
+  } catch {
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+});
+
+// POST /api/admin/relays/:id/stop — disable and disconnect
+router.post("/relays/:id/stop", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const [existing] = await db.select().from(relayConnectionsTable).where(eq(relayConnectionsTable.id, id)).limit(1);
+    if (!existing) { res.status(404).json({ error: "Radioenlace no encontrado" }); return; }
+    await db.update(relayConnectionsTable).set({ enabled: false }).where(eq(relayConnectionsTable.id, id));
+    await relayManager.reloadRelay(id);
+    res.json({ ok: true, id, enabled: false });
+  } catch {
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
 });
 
 // POST /api/admin/inactivity/audio — upload WAV file (raw body, Content-Type: audio/wav)
