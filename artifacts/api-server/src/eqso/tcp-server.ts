@@ -123,11 +123,10 @@ function processSingleByte(state: TcpClientState, byte: number): void {
       break;
 
     case EQSO_COMMANDS.KEEPALIVE:
-      // El cliente nos envió [0x0c]: respondemos con [0x0c] (echo).
-      // Nosotros NO enviamos keepalive proactivo al cliente porque los relays
-      // Windows eQSO (0R-JN11BK, 0R-ASORAPA, 0R-IN53SI) lo interpretan como
-      // "servidor sin actividad → reconectar", causando drops cada 30-60s.
-      safeWrite(state, KEEPALIVE_PACKET);
+      // El cliente nos envió [0x0c]: NO hacemos eco de vuelta.
+      // El servidor envía [0x0c] PROACTIVO cada 8s (ver setInterval más abajo).
+      // Hacer eco de vuelta del [0x0c] del cliente creaba un bucle de ping-pong
+      // [0x0c]→[0x0c]→[0x0c] que causaba drops en los relays Windows cada 30-60s.
       break;
 
     case EQSO_COMMANDS.RELEASE_PTT:
@@ -462,6 +461,16 @@ export function startTcpServer(port: number): net.Server {
     // aunque la conexion TCP este perfectamente viva gracias al keepalive OS.
     socket.setKeepAlive(true, 30_000);
 
+    // Keepalive proactivo [0x0c] cada 8s: los relays Windows eQSO (JN11BK,
+    // IN53SI, ASORAPA) desconectan si no reciben ningún dato durante ~13s.
+    // El relay-daemon envía [0x02] cada 150ms pero esos son cliente→servidor;
+    // lo que los Windows relays necesitan es datos SERVIDOR→cliente.
+    // [0x0c] = keepalive estándar eQSO; lo enviamos cada 8s sin esperar
+    // respuesta (el eco del cliente se silencia en el case KEEPALIVE arriba).
+    const keepaliveInterval = setInterval(() => {
+      if (!state.disconnected) safeWrite(state, KEEPALIVE_PACKET);
+    }, 8_000);
+
     socket.on("data", (data: Buffer) => {
       const ci = roomManager.getClient(id);
       if (ci) ci.rxBytes += data.length;
@@ -469,10 +478,12 @@ export function startTcpServer(port: number): net.Server {
     });
 
     socket.on("close", () => {
+      clearInterval(keepaliveInterval);
       handleDisconnect(state);
     });
 
     socket.on("error", (err) => {
+      clearInterval(keepaliveInterval);
       logger.warn({ err, id }, "TCP socket error");
       handleDisconnect(state);
     });

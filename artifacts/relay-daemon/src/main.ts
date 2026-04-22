@@ -92,7 +92,11 @@ function setRxActive(): void {
     audio.endRx();        // parar aplay para evitar underruns entre transmisiones
     // Extender inhibicion VOX: el altavoz deja eco residual en la sala que
     // arecord capturaría al reiniciarse (400ms) → VOX dispara ruido de fondo.
-    postRxVoxSuppressUntil = Date.now() + POST_RX_SUPPRESS_MS;
+    // DIAGNÓSTICO: usar Math.max para NO reducir el suppress si post-TX lo fijó más largo.
+    const rxSuppressUntil = Date.now() + POST_RX_SUPPRESS_MS;
+    const prev = postRxVoxSuppressUntil;
+    postRxVoxSuppressUntil = Math.max(postRxVoxSuppressUntil, rxSuppressUntil);
+    log(`[rxInhibit] suppress: prev=${new Date(prev).toISOString()} new=${new Date(postRxVoxSuppressUntil).toISOString()}`);
   }, RX_HANG_MS);
 }
 
@@ -149,14 +153,13 @@ vox.on("ptt_end", () => {
   eqsoClient.endTx();
   // Descartar eco buffereado del servidor (800ms, sin afectar semi-duplex)
   postTxSuppressUntil = Date.now() + POST_TX_SUPPRESS_MS;
-  // Suprimir VOX tras TX propio:
-  //   - Clic de squelch de la radio al pasar TX→RX (~200ms)
-  //   - Eco acustico del altavoz/sala (~500ms)
-  //   - Eco residual del canal CB de la emision anterior (~1s)
-  // Mantenemos este margen en 1500ms: suficiente para squelch y sala, sin
-  // penalizar demasiado la captura de respuestas CB inmediatas.
+  // Suprimir VOX 5s tras TX propio (squelch + eco CB + eco sala).
   postRxVoxSuppressUntil = Math.max(postRxVoxSuppressUntil, Date.now() + POST_TX_VOX_SUPPRESS_MS);
-  log("VOX: PTT liberado — fin transmision");
+  log(`VOX: PTT liberado — fin transmision (suppresion VOX hasta ${new Date(postRxVoxSuppressUntil).toISOString()})`);
+});
+
+vox.on("ptt_start", () => {
+  log(`VOX: ptt_start chequeado — now=${new Date().toISOString()} suppressUntil=${new Date(postRxVoxSuppressUntil).toISOString()} rxActive=${rxActive}`);
 });
 
 // El audio emite paquetes GSM listos para enviar al servidor
