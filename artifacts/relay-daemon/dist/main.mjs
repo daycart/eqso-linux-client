@@ -597,19 +597,19 @@ var AlsaAudio = class extends EventEmitter3 {
   }
   recorder = null;
   player = null;
+  // Player siendo drenado (stdin cerrado, esperando vaciado del buffer ALSA)
+  drainPlayer = null;
+  drainTimer = null;
   encoder = new GsmEncoder();
   decoder = new GsmDecoder();
   pcmAccum = new Int16Array(0);
   jitterBuf = new Int16Array(0);
-  // buffer pre-inicio aplay
   // Semi-duplex state
   recorderSuspended = false;
-  // true mientras aplay está activo o arecord cerrando
   playerStarting = false;
-  // true mientras esperamos que arecord cierre (async)
-  // Flag de parada intencional (stop() llamado) — evita reinicios de arecord
+  // true mientras esperamos cierre de arecord o drain aplay
   stopping = false;
-  // Métricas de nivel en captura (log periódico)
+  // Metricas de nivel en captura
   levelPeakRms = 0;
   levelClipCount = 0;
   levelSamples = 0;
@@ -627,27 +627,27 @@ var AlsaAudio = class extends EventEmitter3 {
       this.levelTimer = null;
     }
     this.stopRecorder();
-    this.stopPlayer();
+    this.killDrainPlayerNow();
+    if (this.player) {
+      try {
+        this.player.kill("SIGTERM");
+      } catch {
+      }
+      this.player = null;
+    }
     this.encoder.stop();
     this.decoder.stop();
   }
   rxGsmCount = 0;
-  /** Reproducir un paquete GSM recibido del servidor eQSO. */
   playGsm(gsm) {
     this.rxGsmCount++;
     if (this.rxGsmCount <= 3 || this.rxGsmCount % 50 === 0)
       log2(`[playGsm] pkt#${this.rxGsmCount} len=${gsm.length} decoder_ready=${this.decoder.ready} player=${this.player ? "running" : "null"} playerStarting=${this.playerStarting}`);
     this.decoder.decode(gsm);
   }
-  /**
-   * Terminar sesion RX — para el proceso aplay para evitar underruns.
-   * Los ultimos 960 samples (120 ms) ya se habian escrito en stdin de aplay
-   * antes de que expire el timer de RX_HANG_MS, por lo que no se corta audio.
-   */
   endRx() {
     this.stopPlayer();
   }
-  /** Habilitar/deshabilitar envio de audio TX (controlado externamente por VOX o PTT). */
   setTxEnabled(enabled) {
     if (!enabled) {
       this.pcmAccum = new Int16Array(0);
@@ -660,7 +660,6 @@ var AlsaAudio = class extends EventEmitter3 {
       this.emit("gsm_tx", gsm);
     });
   }
-  /** Alimentar muestras PCM al encoder (llamado desde el recorder). */
   feedPcm(pcm) {
     const merged = new Int16Array(this.pcmAccum.length + pcm.length);
     merged.set(this.pcmAccum);
@@ -734,7 +733,7 @@ var AlsaAudio = class extends EventEmitter3 {
       if (msg) log2(`[arecord] ${msg}`);
     });
     this.recorder.on("error", (err) => {
-      log2(`[arecord] Error: ${err.message} \u2014 comprueba que ALSA esta disponible`);
+      log2(`[arecord] Error: ${err.message}`);
       this.emit("error", err);
     });
     this.recorder.on("close", (code) => {
@@ -798,9 +797,6 @@ var AlsaAudio = class extends EventEmitter3 {
    *   1. Si hay arecord corriendo: SIGTERM + esperar 'close' (async)
    *   2. Cuando arecord cierra: openPlayer()
    *   3. Si no hay arecord: openPlayer() directamente
-   *
-   * El PCM sigue acumulándose en jitterBuf durante la espera (playPcm lo hace).
-   * playerStarting=true durante toda la espera para evitar llamadas duplicadas.
    */
   startPlayer() {
     if (this.playerStarting) return;
@@ -831,8 +827,37 @@ var AlsaAudio = class extends EventEmitter3 {
       this.openPlayer();
     }
   }
-  /** Abre aplay y vuelca el jitter buffer. Llamado cuando arecord ha cerrado. */
+  /**
+   * Comprueba si el drainPlayer todavia esta vivo. Si es asi, lo mata con
+   * SIGKILL y espera el cierre real antes de abrir el nuevo aplay.
+   * Esto garantiza que el dispositivo ALSA este libre (evita "Device or
+   * resource busy").
+   */
   openPlayer() {
+    if (this.stopping) return;
+    if (this.drainPlayer) {
+      const old = this.drainPlayer;
+      if (this.drainTimer) {
+        clearTimeout(this.drainTimer);
+        this.drainTimer = null;
+      }
+      this.drainPlayer = null;
+      this.playerStarting = true;
+      log2("[audio] openPlayer: SIGKILL a aplay anterior \u2014 esperando cierre para liberar ALSA");
+      try {
+        old.kill("SIGKILL");
+      } catch {
+      }
+      old.once("close", () => {
+        this.playerStarting = false;
+        this.doOpenPlayer();
+      });
+      return;
+    }
+    this.doOpenPlayer();
+  }
+  /** Abre aplay y vuelca el jitter buffer. El dispositivo ALSA debe estar libre. */
+  doOpenPlayer() {
     if (this.stopping) return;
     const args = [
       "-D",
@@ -845,27 +870,33 @@ var AlsaAudio = class extends EventEmitter3 {
       "1",
       "-q",
       "--buffer-size=2048",
-      // 256ms buffer hardware
       "--period-size=256"
-      // 32ms por periodo — menor latencia de salida
     ];
     log2(`aplay ${args.join(" ")}`);
     this.player = spawn2("aplay", args, { stdio: ["pipe", "ignore", "pipe"] });
-    this.player.stderr.on("data", (d) => {
+    const p = this.player;
+    p.stderr.on("data", (d) => {
       const msg = d.toString().trim();
       if (msg) log2(`[aplay] ${msg}`);
     });
-    this.player.on("error", (err) => {
+    p.on("error", (err) => {
       log2(`[aplay] Error: ${err.message}`);
     });
-    this.player.on("close", (code) => {
+    p.on("close", (code) => {
       log2(`[aplay] Terminado (code ${code})`);
-      this.player = null;
+      if (this.player === p) {
+        this.player = null;
+        if (this.recorderSuspended && !this.stopping && !this.playerStarting && !this.drainPlayer) {
+          this.recorderSuspended = false;
+          log2("[audio] Semi-duplex: reanudando arecord (aplay cerrado inesperadamente)");
+          this.startRecorder();
+        }
+      }
     });
     if (this.jitterBuf.length > 0) {
       const buf2 = Buffer.from(this.jitterBuf.buffer, this.jitterBuf.byteOffset, this.jitterBuf.byteLength);
       try {
-        this.player.stdin.write(buf2);
+        p.stdin.write(buf2);
       } catch {
       }
       this.jitterBuf = new Int16Array(0);
@@ -883,25 +914,54 @@ var AlsaAudio = class extends EventEmitter3 {
     if (this.player) {
       const p = this.player;
       this.player = null;
+      this.killDrainPlayerNow();
+      this.drainPlayer = p;
       try {
         p.stdin.end();
       } catch {
       }
-      setTimeout(() => {
-        try {
-          p.kill("SIGTERM");
-        } catch {
-        }
-        if (this.recorderSuspended && !this.stopping) {
-          this.recorderSuspended = false;
-          log2("[audio] Semi-duplex: reanudando arecord");
-          this.startRecorder();
+      this.drainTimer = setTimeout(() => {
+        this.drainTimer = null;
+        if (this.drainPlayer === p) {
+          try {
+            p.kill("SIGTERM");
+          } catch {
+          }
         }
       }, 300);
-    } else if (this.recorderSuspended && !this.stopping && !this.playerStarting) {
+      p.once("close", () => {
+        if (this.drainTimer && this.drainPlayer === p) {
+          clearTimeout(this.drainTimer);
+          this.drainTimer = null;
+        }
+        if (this.drainPlayer === p) {
+          this.drainPlayer = null;
+          if (this.recorderSuspended && !this.stopping && !this.player && !this.playerStarting) {
+            this.recorderSuspended = false;
+            log2("[audio] Semi-duplex: reanudando arecord");
+            this.startRecorder();
+          }
+        }
+      });
+    } else if (this.recorderSuspended && !this.stopping && !this.playerStarting && !this.drainPlayer) {
       this.recorderSuspended = false;
       log2("[audio] Semi-duplex: reanudando arecord (player ya cerrado)");
       this.startRecorder();
+    }
+  }
+  /** Mata el drainPlayer inmediatamente (SIGKILL) sin esperar. */
+  killDrainPlayerNow() {
+    if (this.drainPlayer) {
+      if (this.drainTimer) {
+        clearTimeout(this.drainTimer);
+        this.drainTimer = null;
+      }
+      const p = this.drainPlayer;
+      this.drainPlayer = null;
+      try {
+        p.kill("SIGKILL");
+      } catch {
+      }
     }
   }
 };
