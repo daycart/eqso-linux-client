@@ -67,8 +67,13 @@ export class AlsaAudio extends EventEmitter {
     this.decoder.stop();
   }
 
+  private rxGsmCount = 0;
+
   /** Reproducir un paquete GSM recibido del servidor eQSO. */
   playGsm(gsm: Buffer): void {
+    this.rxGsmCount++;
+    if (this.rxGsmCount <= 3 || this.rxGsmCount % 50 === 0)
+      log(`[playGsm] pkt#${this.rxGsmCount} len=${gsm.length} decoder_ready=${this.decoder.ready} player=${this.player ? "running" : "null"} playerStarting=${this.playerStarting}`);
     this.decoder.decode(gsm);
   }
 
@@ -136,8 +141,11 @@ export class AlsaAudio extends EventEmitter {
     return out;
   }
 
+  private pcmChunkCount = 0;
+
   private playPcm(pcm: Int16Array): void {
     const samples = this.applyGain(pcm);
+    this.pcmChunkCount++;
 
     if (!this.player || this.player.killed) {
       // Acumular en jitter buffer, tanto en la espera pre-inicio como mientras
@@ -146,6 +154,9 @@ export class AlsaAudio extends EventEmitter {
       merged.set(this.jitterBuf);
       merged.set(samples, this.jitterBuf.length);
       this.jitterBuf = merged;
+
+      if (this.pcmChunkCount <= 5)
+        log(`[playPcm] chunk#${this.pcmChunkCount} → jitterBuf=${this.jitterBuf.length} playerStarting=${this.playerStarting}`);
 
       // Si tenemos suficiente audio Y no estamos esperando el cierre de arecord,
       // iniciar la secuencia semi-duplex (kill arecord → wait close → open aplay).
@@ -156,6 +167,8 @@ export class AlsaAudio extends EventEmitter {
     }
 
     // aplay ya está corriendo: escribir directamente
+    if (this.pcmChunkCount <= 5)
+      log(`[playPcm] chunk#${this.pcmChunkCount} → escribiendo ${samples.length} muestras a aplay stdin`);
     const buf = Buffer.from(samples.buffer, samples.byteOffset, samples.byteLength);
     try { this.player?.stdin.write(buf); } catch { /* player may have closed */ }
   }

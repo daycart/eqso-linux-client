@@ -631,8 +631,12 @@ var AlsaAudio = class extends EventEmitter3 {
     this.encoder.stop();
     this.decoder.stop();
   }
+  rxGsmCount = 0;
   /** Reproducir un paquete GSM recibido del servidor eQSO. */
   playGsm(gsm) {
+    this.rxGsmCount++;
+    if (this.rxGsmCount <= 3 || this.rxGsmCount % 50 === 0)
+      log2(`[playGsm] pkt#${this.rxGsmCount} len=${gsm.length} decoder_ready=${this.decoder.ready} player=${this.player ? "running" : "null"} playerStarting=${this.playerStarting}`);
     this.decoder.decode(gsm);
   }
   /**
@@ -685,18 +689,24 @@ var AlsaAudio = class extends EventEmitter3 {
     }
     return out;
   }
+  pcmChunkCount = 0;
   playPcm(pcm) {
     const samples = this.applyGain(pcm);
+    this.pcmChunkCount++;
     if (!this.player || this.player.killed) {
       const merged = new Int16Array(this.jitterBuf.length + samples.length);
       merged.set(this.jitterBuf);
       merged.set(samples, this.jitterBuf.length);
       this.jitterBuf = merged;
+      if (this.pcmChunkCount <= 5)
+        log2(`[playPcm] chunk#${this.pcmChunkCount} \u2192 jitterBuf=${this.jitterBuf.length} playerStarting=${this.playerStarting}`);
       if (this.jitterBuf.length >= JITTER_PRE_BUFFER_SAMPLES && !this.playerStarting) {
         this.startPlayer();
       }
       return;
     }
+    if (this.pcmChunkCount <= 5)
+      log2(`[playPcm] chunk#${this.pcmChunkCount} \u2192 escribiendo ${samples.length} muestras a aplay stdin`);
     const buf2 = Buffer.from(samples.buffer, samples.byteOffset, samples.byteLength);
     try {
       this.player?.stdin.write(buf2);
@@ -1240,13 +1250,28 @@ function connect() {
       }
       case "audio": {
         const pkt = ev.data;
-        if (pkt.length < 1 + GSM_PACKET_BYTES) break;
+        if (pkt.length < 1 + GSM_PACKET_BYTES) {
+          log5(`[audio] pkt demasiado corto: ${pkt.length} bytes (esperado ${1 + GSM_PACKET_BYTES})`);
+          break;
+        }
         rxPackets++;
-        if (pttActive || Date.now() < postTxSuppressUntil) break;
+        if (pttActive) {
+          if (rxPackets <= 3 || rxPackets % 20 === 0)
+            log5(`[audio] pkt#${rxPackets} DESCARTADO \u2014 pttActive=true (TX local activo)`);
+          break;
+        }
+        const suppRestMs = postTxSuppressUntil - Date.now();
+        if (suppRestMs > 0) {
+          if (rxPackets <= 3 || rxPackets % 20 === 0)
+            log5(`[audio] pkt#${rxPackets} DESCARTADO \u2014 postTxSuppress en ${suppRestMs}ms`);
+          break;
+        }
         if (cfg.audio.outputGain === 0) break;
         setRxActive();
         const gsm = Buffer.from(pkt.buffer, pkt.byteOffset + 1, GSM_PACKET_BYTES);
         audio.playGsm(gsm);
+        if (rxPackets <= 3 || rxPackets % 50 === 0)
+          log5(`[audio] pkt#${rxPackets} \u2192 playGsm OK (pttActive=${pttActive} rxActive=${rxActive})`);
         break;
       }
       case "server_msg":

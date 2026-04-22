@@ -239,14 +239,27 @@ function connect(): void {
 
       case "audio": {
         const pkt = ev.data as Buffer;
-        if (pkt.length < 1 + GSM_PACKET_BYTES) break;
+        if (pkt.length < 1 + GSM_PACKET_BYTES) {
+          log(`[audio] pkt demasiado corto: ${pkt.length} bytes (esperado ${1 + GSM_PACKET_BYTES})`);
+          break;
+        }
         rxPackets++;
         // Descartar si estamos en TX local (el servidor no nos manda nuestro
         // propio audio — excluye al emisor en broadcastToTcpAndRelays —, así
         // que el único audio que llega es de otros usuarios).
         // postTxSuppressUntil: guarda de 800ms tras endTx() por si el server
         // tiene paquetes de otros en tránsito que lleguen en ese momento.
-        if (pttActive || Date.now() < postTxSuppressUntil) break;
+        if (pttActive) {
+          if (rxPackets <= 3 || rxPackets % 20 === 0)
+            log(`[audio] pkt#${rxPackets} DESCARTADO — pttActive=true (TX local activo)`);
+          break;
+        }
+        const suppRestMs = postTxSuppressUntil - Date.now();
+        if (suppRestMs > 0) {
+          if (rxPackets <= 3 || rxPackets % 20 === 0)
+            log(`[audio] pkt#${rxPackets} DESCARTADO — postTxSuppress en ${suppRestMs}ms`);
+          break;
+        }
         // Modo sin altavoz (outputGain=0): descartar silenciosamente sin activar
         // el semi-duplex ni el temporizador RX. arecord corre continuamente y
         // el VOX detecta la radio CB sin ningun retraso ni inhibicion.
@@ -256,6 +269,8 @@ function connect(): void {
         // Extraer 198 bytes GSM (sin el byte 0x01 del opcode)
         const gsm = Buffer.from(pkt.buffer, pkt.byteOffset + 1, GSM_PACKET_BYTES);
         audio.playGsm(gsm);
+        if (rxPackets <= 3 || rxPackets % 50 === 0)
+          log(`[audio] pkt#${rxPackets} → playGsm OK (pttActive=${pttActive} rxActive=${rxActive})`);
         break;
       }
 

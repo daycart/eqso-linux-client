@@ -21,7 +21,7 @@ export const PCM_PACKET_BYTES  = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET * 2; // 1
 export class GsmDecoder extends EventEmitter {
   private proc: ChildProcessWithoutNullStreams | null = null;
   private accum = Buffer.alloc(0);
-  private ready = false;
+  ready = false;
 
   start(): void {
     if (this.proc) return;
