@@ -35,9 +35,12 @@ let forceReconnectRequested = false;
 // tiempo + margen para que el sonido del altavoz no active el micro.
 let rxActive = false;
 let rxInhibitTimer: ReturnType<typeof setTimeout> | null = null;
-// 2000 ms de margen: la radio necesita tiempo para bajar PTT + reverberar
-// antes de que el VOX pueda volver a capturar sin recoger el eco del altavoz.
-const RX_HANG_MS = 2000;
+// 800 ms: tiempo suficiente para que aplay acabe sin cortar la última sílaba
+// (cada paquete = 120 ms; con buffer-size=16384/8000Hz ≈ 2 s de hardware buffer,
+// 800 ms es suficiente para que el CB cambie de TX a RX sin entrecorte).
+// Reducir de 2000 → 800 ms acorta el retardo total de "eco de respuesta" de
+// ~3.9 s a ~1.4 s, haciendo el relay mucho más reactivo.
+const RX_HANG_MS = 800;
 
 // ─── Supresion post-TX (anti-eco del servidor) ────────────────────────────────
 // Tras liberarse el PTT, el servidor puede devolver los ultimos paquetes de
@@ -45,15 +48,17 @@ const RX_HANG_MS = 2000;
 // el VOX pierde la señal CB, causando "entrecorte" en transmisiones largas.
 // Descartamos paquetes RX durante este margen sin activar el semi-duplex.
 let postTxSuppressUntil = 0;
-const POST_TX_SUPPRESS_MS = 800;
+const POST_TX_SUPPRESS_MS = 400;
 
 // ─── Supresion post-RX (anti-feedback acustico tras reproduccion) ─────────────
 // Tras terminar de reproducir audio del servidor (web client, etc.), el altavoz
 // del CM108 deja eco residual en la sala. Cuando arecord se reanuda, el VOX
 // puede capturar ese eco y disparar una transmision de ruido.
 // Inhibimos el VOX durante este margen despues de que rxActive baje a false.
+// 600 ms es suficiente para cubrir el reinicio de arecord (400 ms) + margen.
+// Reducir de 1500 → 600 ms elimina el retraso excesivo de ~1.5 s.
 let postRxVoxSuppressUntil = 0;
-const POST_RX_SUPPRESS_MS = 1500;
+const POST_RX_SUPPRESS_MS = 600;
 
 function setRxActive(): void {
   const wasActive = rxActive;
@@ -79,14 +84,14 @@ const audio = new AlsaAudio(cfg.audio);
 const vox   = new Vox(cfg.audio.voxThresholdRms, cfg.audio.voxHangMs);
 
 // Gate de transmision: nivel minimo para enviar audio al servidor.
-// Durante el colgado del VOX (voxHangMs) el micro captura solo ruido de fondo
-// (RMS≈6). Si lo enviamos, el navegador acumula 4s de silencio en su cola
-// y cuando llega nueva voz el buffer se desborda → efecto "bucle".
-// El gate suprime esos paquetes de ruido; la voz pasa siempre.
-// IMPORTANTE: el ruido de fondo real es RMS=6. Con 30 suprimimos solo el
-// silencio absoluto y dejamos pasar todo el contenido vocal (fricativas,
-// transiciones, partes suaves de la voz que pueden bajar hasta RMS~50-200).
-const TX_GATE_RMS = 30;
+// Durante el colgado del VOX (voxHangMs) el micro captura ruido de fondo
+// (RMS≈6 suelo, hasta ~200 en ambientes ruidosos). Si lo enviamos, el
+// navegador acumula ese ruido en su cola y lo reproduce sobre el audio
+// siguiente → efecto "eco que pisa" / "bucle".
+// El gate suprime todo lo que no sea voz. La voz vocal real empieza en
+// RMS≈500-1000 mínimo; fricativas/sibilantes ≈200-400. Con 300 dejamos
+// pasar toda la voz y suprimimos el ruido de fondo inter-sílabas.
+const TX_GATE_RMS = 300;
 let latestPcmRms = 0;
 
 // El audio emite chunks PCM crudos para que el VOX los analice
