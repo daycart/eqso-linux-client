@@ -1,0 +1,20 @@
+ain] 2026-04-22T19:57:28.038Z TX: 30RCI184 transmitiendo
+abr 22 19:57:28 ubuntus node[22467]: [main] 2026-04-22T19:57:28.082Z TX: 30RCI184 libero canal
+abr 22 19:57:28 ubuntus node[22467]: [main] 2026-04-22T19:57:28.522Z TX: 30RCI184 transmitiendo
+abr 22 19:57:28 ubuntus node[22467]: [audio] 2026-04-22T19:57:28.660Z [audio] Semi-duplex: matando arecord \Uffffffff esperando cierre para abrir aplay
+abr 22 19:57:28 ubuntus node[22467]: [audio] 2026-04-22T19:57:28.662Z [arecord] arecord: pcm_read:2240:
+abr 22 19:57:28 ubuntus node[22467]: [audio] 2026-04-22T19:57:28.663Z [arecord] read error: Interrupted system call
+abr 22 19:57:28 ubuntus node[22467]: [audio] 2026-04-22T19:57:28.689Z [arecord] Terminado (code 1)
+abr 22 19:57:28 ubuntus node[22467]: [audio] 2026-04-22T19:57:28.689Z [audio] arecord cerrado \Uffffffff abriendo aplay
+abr 22 19:57:28 ubuntus node[22467]: [audio] 2026-04-22T19:57:28.690Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 19:57:29 ubuntus node[22467]: [audio] 2026-04-22T19:57:29.710Z [nivel] pico RMS=4 (-79.1 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 19:57:31 ubuntus node[22467]: [audio] 2026-04-22T19:57:31.144Z [aplay] underrun!!! (at least 2250,287 ms long)
+abr 22 19:57:31 ubuntus node[22467]: [main] 2026-04-22T19:57:31.348Z TX: 30RCI184 libero canal
+abr 22 19:57:31 ubuntus node[22467]: [main] 2026-04-22T19:57:31.389Z TX: 30RCI184 transmitiendo
+abr 22 19:57:34 ubuntus node[22467]: [main] 2026-04-22T19:57:34.657Z TX: 30RCI184 libero canal
+abr 22 19:57:35 ubuntus node[22467]: [main] 2026-04-22T19:57:35.025Z [rxInhibit] suppress: prev=2026-04-22T19:55:27.855Z new=2026-04-22T19:57:38.025Z
+abr 22 19:57:35 ubuntus node[22467]: [audio] 2026-04-22T19:57:35.326Z [audio] Semi-duplex: reanudando arecord
+abr 22 19:57:35 ubuntus node[22467]: [audio] 2026-04-22T19:57:35.327Z arecord -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 22 19:57:35 ubuntus node[22467]: [audio] 2026-04-22T19:57:35.387Z [aplay] Terminado (code 0)
+abr 22 19:57:39 ubuntus node[22467]: [audio] 2026-04-22T19:57:39.711Z [nivel] pico RMS=19997 (-4.3 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 19:57:44 ubuntus node[22467]: [audio] 2026-04-22T19:57:44.711Z [nivel] pico RMS=4 (-78.4 dBFS)  VOXumbral=1500  gain=0.6
