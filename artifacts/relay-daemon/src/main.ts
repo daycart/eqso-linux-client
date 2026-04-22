@@ -61,11 +61,13 @@ const POST_TX_SUPPRESS_MS = 800;
 // (full duplex: arecord siempre activo), el VOX puede dispararse con ruido.
 // Inhibimos el VOX durante este margen despues de que rxActive baje a false.
 let postRxVoxSuppressUntil = 0;
-// 3000ms: 300ms drain aplay + ~700ms hardware + 2000ms margen acustico.
-// Con 1500ms el relay volvía a transmitir demasiado pronto y el altavoz CB
-// seguía con eco residual → bucle TX→RX→TX. Con 3s el eco se disipa
-// completamente antes de re-habilitar el VOX.
-const POST_RX_SUPPRESS_MS = 3000;
+// 1200ms: 300ms drain aplay + ~350ms arecord restart + 550ms margen eco CB.
+// Con setup de cables fisicos (CM108 line-out → CB mic, CB speaker → CM108 line-in)
+// no hay camino acustico → el eco residual desaparece en <100ms.
+// 1200ms cubre el reinicio de arecord + margen y permite que el operador CB
+// responda rapidamente sin quedar fuera de la ventana de captura.
+// Antes de b207244 esta supresion no existia y funcionaba bien (0ms).
+const POST_RX_SUPPRESS_MS = 1200;
 
 // ─── Supresion VOX post-TX propio (anti-eco de squelch y canal CB) ────────────
 // Cuando el relay termina su propia TX (VOX ptt_end), la radio vuelve a modo

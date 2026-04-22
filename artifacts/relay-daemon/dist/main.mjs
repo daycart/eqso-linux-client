@@ -1145,7 +1145,7 @@ var RX_HANG_MS = 400;
 var postTxSuppressUntil = 0;
 var POST_TX_SUPPRESS_MS = 800;
 var postRxVoxSuppressUntil = 0;
-var POST_RX_SUPPRESS_MS = 3e3;
+var POST_RX_SUPPRESS_MS = 1200;
 var POST_TX_VOX_SUPPRESS_MS = 5e3;
 function setRxActive() {
   const wasActive = rxActive;
