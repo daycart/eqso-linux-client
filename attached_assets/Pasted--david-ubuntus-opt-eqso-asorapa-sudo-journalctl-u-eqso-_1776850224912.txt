@@ -1,0 +1,48 @@
+
+david@ubuntus:/opt/eqso-asorapa$ sudo journalctl -u eqso-relay -f | grep "VOX\|nivel"
+abr 22 09:25:37 ubuntus node[11564]: [audio] 2026-04-22T09:25:37.013Z [nivel] pico RMS=13898 (-7.4 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:25:42 ubuntus node[11564]: [audio] 2026-04-22T09:25:42.013Z [nivel] pico RMS=4 (-79.0 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:25:47 ubuntus node[11564]: [audio] 2026-04-22T09:25:47.014Z [nivel] pico RMS=4 (-78.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:25:52 ubuntus node[11564]: [audio] 2026-04-22T09:25:52.014Z [nivel] pico RMS=4 (-78.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:25:57 ubuntus node[11564]: [audio] 2026-04-22T09:25:57.015Z [nivel] pico RMS=4 (-78.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:26:02 ubuntus node[11564]: [audio] 2026-04-22T09:26:02.014Z [nivel] pico RMS=4 (-78.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:26:07 ubuntus node[11564]: [audio] 2026-04-22T09:26:07.017Z [nivel] pico RMS=4 (-79.0 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:26:12 ubuntus node[11564]: [audio] 2026-04-22T09:26:12.019Z [nivel] pico RMS=4 (-78.7 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:26:17 ubuntus node[11564]: [audio] 2026-04-22T09:26:17.021Z [nivel] pico RMS=4 (-79.0 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:26:22 ubuntus node[11564]: [audio] 2026-04-22T09:26:22.023Z [nivel] pico RMS=4 (-79.1 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:26:27 ubuntus node[11564]: [audio] 2026-04-22T09:26:27.028Z [nivel] pico RMS=4 (-78.6 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:26:32 ubuntus node[11564]: [audio] 2026-04-22T09:26:32.030Z [nivel] pico RMS=4 (-78.7 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:26:37 ubuntus node[11564]: [audio] 2026-04-22T09:26:37.031Z [nivel] pico RMS=4 (-79.0 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:26:42 ubuntus node[11564]: [audio] 2026-04-22T09:26:42.031Z [nivel] pico RMS=4 (-79.1 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:26:47 ubuntus node[11564]: [audio] 2026-04-22T09:26:47.034Z [nivel] pico RMS=4 (-78.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:26:52 ubuntus node[11564]: [audio] 2026-04-22T09:26:52.035Z [nivel] pico RMS=4 (-78.7 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:26:57 ubuntus node[11564]: [audio] 2026-04-22T09:26:57.037Z [nivel] pico RMS=4 (-78.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:27:01 ubuntus node[11564]: [main] 2026-04-22T09:27:01.386Z VOX: PTT activado \Uffffffff inicio transmision
+abr 22 09:27:02 ubuntus node[11564]: [audio] 2026-04-22T09:27:02.038Z [nivel] pico RMS=23469 (-2.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:27:04 ubuntus node[11564]: [main] 2026-04-22T09:27:04.584Z VOX: PTT liberado \Uffffffff fin transmision
+abr 22 09:27:07 ubuntus node[11564]: [audio] 2026-04-22T09:27:07.039Z [nivel] pico RMS=4 (-78.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:27:12 ubuntus node[11564]: [audio] 2026-04-22T09:27:12.040Z [nivel] pico RMS=4 (-79.1 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:27:17 ubuntus node[11564]: [audio] 2026-04-22T09:27:17.083Z [nivel] pico RMS=4 (-79.1 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:27:22 ubuntus node[11564]: [audio] 2026-04-22T09:27:22.083Z [nivel] pico RMS=4 (-79.0 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:27:27 ubuntus node[11564]: [audio] 2026-04-22T09:27:27.085Z [nivel] pico RMS=4 (-79.0 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:27:32 ubuntus node[11564]: [audio] 2026-04-22T09:27:32.086Z [nivel] pico RMS=4 (-78.5 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:27:42 ubuntus node[11564]: [audio] 2026-04-22T09:27:42.138Z [nivel] pico RMS=19997 (-4.3 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:27:47 ubuntus node[11564]: [audio] 2026-04-22T09:27:47.139Z [nivel] pico RMS=4 (-79.2 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:27:52 ubuntus node[11564]: [audio] 2026-04-22T09:27:52.140Z [nivel] pico RMS=13898 (-7.4 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:27:57 ubuntus node[11564]: [audio] 2026-04-22T09:27:57.201Z [nivel] pico RMS=19997 (-4.3 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:02 ubuntus node[11564]: [audio] 2026-04-22T09:28:02.202Z [nivel] pico RMS=4 (-79.3 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:07 ubuntus node[11564]: [audio] 2026-04-22T09:28:07.224Z [nivel] pico RMS=4 (-78.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:17 ubuntus node[11564]: [audio] 2026-04-22T09:28:17.233Z [nivel] pico RMS=13898 (-7.4 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.233Z [nivel] pico RMS=4 (-78.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:27 ubuntus node[11564]: [audio] 2026-04-22T09:28:27.234Z [nivel] pico RMS=13898 (-7.4 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:32 ubuntus node[11564]: [audio] 2026-04-22T09:28:32.266Z [nivel] pico RMS=4 (-79.1 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:37 ubuntus node[11564]: [audio] 2026-04-22T09:28:37.300Z [nivel] pico RMS=4 (-78.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:42 ubuntus node[11564]: [audio] 2026-04-22T09:28:42.299Z [nivel] pico RMS=4 (-78.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:47 ubuntus node[11564]: [audio] 2026-04-22T09:28:47.300Z [nivel] pico RMS=4 (-79.1 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:52 ubuntus node[11564]: [audio] 2026-04-22T09:28:52.301Z [nivel] pico RMS=4 (-78.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:57 ubuntus node[11564]: [audio] 2026-04-22T09:28:57.303Z [nivel] pico RMS=389 (-38.5 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:58 ubuntus node[11564]: [main] 2026-04-22T09:28:58.138Z VOX: PTT activado \Uffffffff inicio transmision
+abr 22 09:29:02 ubuntus node[11564]: [audio] 2026-04-22T09:29:02.303Z [nivel] pico RMS=23604 (-2.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:29:05 ubuntus node[11564]: [main] 2026-04-22T09:29:05.275Z VOX: PTT liberado \Uffffffff fin transmision
+abr 22 09:29:07 ubuntus node[11564]: [audio] 2026-04-22T09:29:07.305Z [nivel] pico RMS=4 (-78.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:29:12 ubuntus node[11564]: [audio] 2026-04-22T09:29:12.310Z [nivel] pico RMS=4 (-78.9 dBFS)  VOXumbral=1500  gain=0.6

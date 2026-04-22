@@ -1,0 +1,171 @@
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.351Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.453Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.472Z [aplay] aplay: main:834:
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.473Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.572Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.592Z [aplay] aplay: main:834:
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.594Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.701Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.719Z [aplay] aplay: main:834:
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.721Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.805Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.823Z [aplay] aplay: main:834:
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.827Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.937Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.956Z [aplay] aplay: main:834:
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.958Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.041Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.060Z [aplay] aplay: main:834:
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.061Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.195Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.218Z [aplay] aplay: main:834:
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.220Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.290Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.351Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.453Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.472Z [aplay] aplay: main:834:
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.473Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.572Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.592Z [aplay] aplay: main:834:
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.594Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.701Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.719Z [aplay] aplay: main:834:
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.721Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.805Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.823Z [aplay] aplay: main:834:
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.827Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.937Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.956Z [aplay] aplay: main:834:
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.958Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.041Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.060Z [aplay] aplay: main:834:
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.061Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.195Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.218Z [aplay] aplay: main:834:
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.220Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.290Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.308Z [aplay] aplay: main:834:
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.310Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.429Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.448Z [aplay] aplay: main:834:
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.449Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.528Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.550Z [aplay] aplay: main:834:
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.551Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.661Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.684Z [aplay] aplay: main:834: audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.796Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.815Z [aplay] aplay: main:834:
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.818Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.893Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.912Z [aplay] aplay: main:834:
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.914Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.002Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.021Z [aplay] aplay: main:834:
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.023Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.160Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.183Z [aplay] aplay: main:834: audio open error: Device or resource busy
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.233Z [nivel] pico RMS=4 (-78.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.272Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.292Z [aplay] aplay: main:834:
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.295Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.378Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.396Z [aplay] aplay: main:834:
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.397Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:22 ubuntus node[11564]: [main] 2026-04-22T09:28:22.448Z TX: 30RCI184 libero canal
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.807Z [audio] Semi-duplex: reanudando arecord (player ya cerrado)
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.809Z arecord -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 22 09:28:27 ubuntus node[11564]: [audio] 2026-04-22T09:28:27.234Z [nivel] pico RMS=13898 (-7.4 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:32 ubuntus node[11564]: [audio] 2026-04-22T09:28:32.266Z [nivel] pico RMS=4 (-79.1 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:37 ubuntus node[11564]: [audio] 2026-04-22T09:28:37.300Z [nivel] pico RMS=4 (-78.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.351Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.453Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.472Z [aplay] aplay: main:834:
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.473Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.572Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.592Z [aplay] aplay: main:834:
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.594Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.701Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.719Z [aplay] aplay: main:834:
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.721Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.805Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.823Z [aplay] aplay: main:834:
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.827Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.937Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.956Z [aplay] aplay: main:834:
+abr 22 09:28:20 ubuntus node[11564]: [audio] 2026-04-22T09:28:20.958Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.041Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.060Z [aplay] aplay: main:834:
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.061Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.195Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.218Z [aplay] aplay: main:834:
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.220Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.290Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.308Z [aplay] aplay: main:834:
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.310Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.429Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.448Z [aplay] aplay: main:834:
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.449Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.528Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.550Z [aplay] aplay: main:834:
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.551Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.661Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.684Z [aplay] aplay: main:834: audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.796Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.815Z [aplay] aplay: main:834:
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.818Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.893Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.912Z [aplay] aplay: main:834:
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.914Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.002Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.021Z [aplay] aplay: main:834:
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.023Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.160Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.183Z [aplay] aplay: main:834: audio open error: Device or resource busy
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.233Z [nivel] pico RMS=4 (-78.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.272Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.292Z [aplay] aplay: main:834:
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.295Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.818Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.893Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.912Z [aplay] aplay: main:834:
+abr 22 09:28:21 ubuntus node[11564]: [audio] 2026-04-22T09:28:21.914Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.002Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.021Z [aplay] aplay: main:834:
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.023Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.160Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.183Z [aplay] aplay: main:834: audio open error: Device or resource busy
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.233Z [nivel] pico RMS=4 (-78.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.272Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.292Z [aplay] aplay: main:834:
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.295Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.378Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.396Z [aplay] aplay: main:834:
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.397Z [aplay] audio open error: Device or resource busy
+abr 22 09:28:22 ubuntus node[11564]: [main] 2026-04-22T09:28:22.448Z TX: 30RCI184 libero canal
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.807Z [audio] Semi-duplex: reanudando arecord (player ya cerrado)
+abr 22 09:28:22 ubuntus node[11564]: [audio] 2026-04-22T09:28:22.809Z arecord -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 22 09:28:27 ubuntus node[11564]: [audio] 2026-04-22T09:28:27.234Z [nivel] pico RMS=13898 (-7.4 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:32 ubuntus node[11564]: [audio] 2026-04-22T09:28:32.266Z [nivel] pico RMS=4 (-79.1 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:37 ubuntus node[11564]: [audio] 2026-04-22T09:28:37.300Z [nivel] pico RMS=4 (-78.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:38 ubuntus node[11564]: [main] 2026-04-22T09:28:38.207Z TX: 0R-JN11BK libero canal
+abr 22 09:28:38 ubuntus node[11564]: [main] 2026-04-22T09:28:38.248Z Sala: 0R-JN11BK ha salido
+abr 22 09:28:38 ubuntus node[11564]: [main] 2026-04-22T09:28:38.256Z Sala: 0R-IN53SI ha salido
+abr 22 09:28:42 ubuntus node[11564]: [audio] 2026-04-22T09:28:42.299Z [nivel] pico RMS=4 (-78.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:42 ubuntus node[11564]: [main] 2026-04-22T09:28:42.425Z Sala: 0R-IN53SI se ha unido
+abr 22 09:28:43 ubuntus node[11564]: [main] 2026-04-22T09:28:43.089Z Sala: 0R-JN11BK se ha unido
+abr 22 09:28:47 ubuntus node[11564]: [audio] 2026-04-22T09:28:47.300Z [nivel] pico RMS=4 (-79.1 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:52 ubuntus node[11564]: [audio] 2026-04-22T09:28:52.301Z [nivel] pico RMS=4 (-78.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:57 ubuntus node[11564]: [audio] 2026-04-22T09:28:57.303Z [nivel] pico RMS=389 (-38.5 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:28:58 ubuntus node[11564]: [main] 2026-04-22T09:28:58.138Z VOX: PTT activado \Uffffffff inicio transmision
+abr 22 09:29:02 ubuntus node[11564]: [audio] 2026-04-22T09:29:02.303Z [nivel] pico RMS=23604 (-2.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:29:05 ubuntus node[11564]: [eqso] 2026-04-22T09:29:05.275Z PTT liberado [0x0d]
+abr 22 09:29:05 ubuntus node[11564]: [main] 2026-04-22T09:29:05.275Z VOX: PTT liberado \Uffffffff fin transmision
+abr 22 09:29:07 ubuntus node[11564]: [audio] 2026-04-22T09:29:07.305Z [nivel] pico RMS=4 (-78.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:29:12 ubuntus node[11564]: [audio] 2026-04-22T09:29:12.310Z [nivel] pico RMS=4 (-78.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:29:17 ubuntus node[11564]: [audio] 2026-04-22T09:29:17.353Z [nivel] pico RMS=4 (-79.2 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:29:17 ubuntus node[11564]: [main] 2026-04-22T09:29:17.381Z Sala: 0R-IN53SI ha salido
+abr 22 09:29:17 ubuntus node[11564]: [main] 2026-04-22T09:29:17.423Z Sala: 0R-JN11BK ha salido
+abr 22 09:29:22 ubuntus node[11564]: [audio] 2026-04-22T09:29:22.352Z [nivel] pico RMS=4 (-78.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 09:29:22 ubuntus node[11564]: [main] 2026-04-22T09:29:22.505Z Sala: 0R-IN53SI se ha unido
+abr 22 09:29:23 ubuntus node[11564]: [main] 2026-04-22T09:29:23.125Z Sala: 0R-JN11BK se ha unido

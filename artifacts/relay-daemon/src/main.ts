@@ -57,13 +57,15 @@ const POST_TX_SUPPRESS_MS = 800;
 
 // ─── Supresion post-RX (anti-feedback acustico tras reproduccion) ─────────────
 // Tras terminar de reproducir audio del servidor (web client, etc.), el altavoz
-// del CM108 deja eco residual en la sala. Cuando arecord se reanuda, el VOX
-// puede capturar ese eco y disparar una transmision de ruido.
+// del CM108 deja eco residual en la sala. Cuando arecord captura ese eco
+// (full duplex: arecord siempre activo), el VOX puede dispararse con ruido.
 // Inhibimos el VOX durante este margen despues de que rxActive baje a false.
-// 600 ms es suficiente para cubrir el reinicio de arecord (400 ms) + margen.
-// Reducir de 1500 → 600 ms elimina el retraso excesivo de ~1.5 s.
 let postRxVoxSuppressUntil = 0;
-const POST_RX_SUPPRESS_MS = 600;
+// 1500ms: cubre el tiempo de vaciado del buffer de aplay (300ms stop + 700ms hardware)
+// + margen para que el eco acustico de la sala se disipe antes de que el VOX
+// pueda dispararse. El eco acustico del altavoz CM108 en la sala de la radio
+// puede persistir 0.5-1s despues de que aplay termina; 1500ms da margen suficiente.
+const POST_RX_SUPPRESS_MS = 1500;
 
 function setRxActive(): void {
   const wasActive = rxActive;

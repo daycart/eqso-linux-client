@@ -30,8 +30,12 @@ export class AlsaAudio extends EventEmitter {
   private decoder = new GsmDecoder();
   private pcmAccum  = new Int16Array(0);
   private jitterBuf = new Int16Array(0); // buffer pre-inicio aplay
-  // Semi-duplex: CM108 no soporta captura+reproduccion simultaneas
-  private recorderSuspended = false;    // true mientras aplay esta activo
+  // El CM108 USB soporta full duplex (streams de captura y playback independientes).
+  // No es necesario matar arecord al iniciar aplay: ambos coexisten en el mismo
+  // dispositivo plughw. La lógica semi-duplex anterior creaba una condición de
+  // carrera: aplay se lanzaba antes de que ALSA liberara el dispositivo → "no audio".
+  // Flag para distinguir parada intencional (stop()) de cierre inesperado (crash)
+  private stopping = false;
   // Métricas de nivel en captura (log periódico)
   private levelPeakRms   = 0;
   private levelClipCount = 0;
@@ -51,6 +55,7 @@ export class AlsaAudio extends EventEmitter {
   }
 
   stop(): void {
+    this.stopping = true;
     if (this.levelTimer) { clearInterval(this.levelTimer); this.levelTimer = null; }
     this.stopRecorder();
     this.stopPlayer();
@@ -180,9 +185,9 @@ export class AlsaAudio extends EventEmitter {
     this.recorder.on("close", (code) => {
       log(`[arecord] Terminado (code ${code})`);
       this.recorder = null;
-      // No reiniciar si fue parado intencionalmente para ceder el dispositivo a aplay
-      if (!this.recorderSuspended) {
-        setTimeout(() => { if (this.recorder === null) this.startRecorder(); }, 2000);
+      // Reiniciar solo si no fue una parada intencional (this.stopping=true)
+      if (!this.stopping) {
+        setTimeout(() => { if (!this.stopping && this.recorder === null) this.startRecorder(); }, 2000);
       }
     });
 
@@ -235,14 +240,9 @@ export class AlsaAudio extends EventEmitter {
   // ── aplay ────────────────────────────────────────────────────────────────
 
   private startPlayer(): void {
-    // Semi-duplex: parar arecord para liberar el dispositivo USB antes de abrir aplay
-    if (this.recorder) {
-      log("[audio] Semi-duplex: pausando arecord para ceder dispositivo a aplay");
-      this.recorderSuspended = true;
-      try { this.recorder.kill("SIGTERM"); } catch { /* ignore */ }
-      this.recorder = null;
-    }
-
+    // Full duplex: arecord y aplay coexisten en el mismo dispositivo USB (CM108).
+    // No matamos arecord antes de iniciar aplay — el CM108 tiene streams de
+    // captura y playback independientes (isochronous USB endpoints separados).
     const args = [
       "-D", this.cfg.playbackDevice,
       "-f", "S16_LE",
@@ -264,7 +264,8 @@ export class AlsaAudio extends EventEmitter {
       log(`[aplay] Error: ${err.message}`);
     });
 
-    this.player.on("close", () => {
+    this.player.on("close", (code) => {
+      log(`[aplay] Terminado (code ${code})`);
       this.player = null;
     });
   }
@@ -281,21 +282,12 @@ export class AlsaAudio extends EventEmitter {
       const p = this.player;
       this.player = null;
       try { p.stdin.end(); } catch { /* ignore */ }
-      // Dar 400ms a aplay para reproducir lo que queda en su buffer hardware
-      // y luego reanudar arecord (semi-duplex)
+      // Dar 300ms a aplay para reproducir lo que queda en su buffer hardware,
+      // luego terminarlo. arecord sigue corriendo (full duplex) — no hay
+      // que reanudar nada.
       setTimeout(() => {
         try { p.kill("SIGTERM"); } catch { /* ignore */ }
-        if (this.recorderSuspended) {
-          this.recorderSuspended = false;
-          log("[audio] Semi-duplex: reanudando arecord");
-          this.startRecorder();
-        }
-      }, 400);
-    } else if (this.recorderSuspended) {
-      // Player ya cerrado pero arecord sigue suspendido — reanudar
-      this.recorderSuspended = false;
-      log("[audio] Semi-duplex: reanudando arecord (player ya cerrado)");
-      this.startRecorder();
+      }, 300);
     }
   }
 }
