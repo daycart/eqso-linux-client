@@ -59940,7 +59940,7 @@ var AUDIO_PAYLOAD_SIZE = 198;
 var HANDSHAKE_CLIENT = Buffer.from([10, 130, 0, 0, 0]);
 var HANDSHAKE_SERVER = Buffer.from([10, 250, 0, 0, 0]);
 var KEEPALIVE_PACKET = Buffer.from([12]);
-var SILENCE_FRAME = Buffer.from([2, 0, 0, 0, 0]);
+var SILENCE_FRAME = Buffer.from([2]);
 function buildRoomList(rooms) {
   const parts = [
     Buffer.from([20, rooms.length & 255, 0, 0, 0])

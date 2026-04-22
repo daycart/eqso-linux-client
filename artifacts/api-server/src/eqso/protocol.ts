@@ -22,10 +22,13 @@ export const AUDIO_PAYLOAD_SIZE = 198;
 export const HANDSHAKE_CLIENT = Buffer.from([0x0a, 0x82, 0x00, 0x00, 0x00]);
 export const HANDSHAKE_SERVER = Buffer.from([0x0a, 0xfa, 0x00, 0x00, 0x00]);
 export const KEEPALIVE_PACKET = Buffer.from([0x0c]);
-// Silence frame: [0x02] + 4 bytes payload. Sent by idle clients to server; server MUST echo
-// the same 5-byte frame back so that Windows eQSO relays know the server is alive.
-// Without this echo, Windows relays disconnect after ~10-15 s of audio inactivity.
-export const SILENCE_FRAME = Buffer.from([0x02, 0x00, 0x00, 0x00, 0x00]);
+// Silence frame: a single [0x02] byte sent by idle clients every ~150ms.
+// The server rebroadcasts [0x02] to other room members so Windows eQSO relays
+// know the server is alive and don't disconnect after ~10-15 s of inactivity.
+// NOTE: the relay-daemon (eqso-client.ts) sends this as 1 byte, NOT 5.
+// Using 5 bytes would delay the broadcast by 750ms and send corrupt 0x00
+// bytes that break the Windows relay parser.
+export const SILENCE_FRAME = Buffer.from([0x02]);
 
 export function buildServerInfo(serverMsg: string): Buffer {
   const nameBytes = Buffer.from(SERVER_NAME, "ascii");
