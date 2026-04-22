@@ -23,7 +23,6 @@ import {
 } from "./protocol";
 
 const SERVER_VERSION = "eQSO Linux Server v1.0";
-const KEEPALIVE_INTERVAL_MS = 15_000;
 
 // One FFmpeg GSM decoder per TCP client (keyed by client UUID)
 const tcpDecoders = new Map<string, FfmpegGsmDecoder>();
@@ -112,12 +111,22 @@ function processSingleByte(state: TcpClientState, byte: number): void {
     case EQSO_COMMANDS.IGNORE:
       break;
 
+    case EQSO_COMMANDS.KEEPALIVE:
+      // El cliente nos envió [0x0c]: respondemos con [0x0c] (echo).
+      // Nosotros NO enviamos keepalive proactivo al cliente porque los relays
+      // Windows eQSO (0R-JN11BK, 0R-ASORAPA, 0R-IN53SI) lo interpretan como
+      // "servidor sin actividad → reconectar", causando drops cada 30-60s.
+      safeWrite(state, KEEPALIVE_PACKET);
+      break;
+
     case EQSO_COMMANDS.RELEASE_PTT:
       if (client?.room) {
         const rel = buildPttReleased(client.name);
         roomManager.broadcastToRoom(client.room, rel, state.id);
+        // Solo [0x08] (canal liberado OK). El [0x06, 0x00] que enviábamos antes
+        // hacía que los relays Windows eQSO se desconectaran 17ms después de
+        // liberar PTT (lo interpretaban como "expulsado de sala").
         safeWrite(state, Buffer.from([0x08]));
-        safeWrite(state, Buffer.from([0x06, 0x00]));
         roomManager.unlockRoom(client.room, state.id);
         // Drena inmediatamente los paquetes GSM que quedaron en el pace queue.
         // Sin esto, los últimos 3-5 paquetes GSM del relay CB se entregan al
@@ -429,13 +438,12 @@ export function startTcpServer(port: number): net.Server {
     });
     decoder.start();
 
-    const keepaliveTimer = setInterval(() => {
-      if (socket.destroyed) {
-        clearInterval(keepaliveTimer);
-        return;
-      }
-      safeWrite(state, KEEPALIVE_PACKET);
-    }, KEEPALIVE_INTERVAL_MS);
+    // NO enviamos [0x0c] proactivo. Los relays Windows eQSO lo interpretan
+    // como "servidor inactivo" cuando no hay audio → provocaban reconexión
+    // cada ~30-60s en silencio. Los clientes mantienen el socket vivo con
+    // sus propios [0x02] silence frames (cada 150ms), y si ellos envían
+    // [0x0c] respondemos en processSingleByte (KEEPALIVE case).
+    // El socket.setTimeout(120s) cubre el caso extremo de inactividad total.
 
     socket.on("data", (data: Buffer) => {
       const ci = roomManager.getClient(id);
@@ -444,13 +452,11 @@ export function startTcpServer(port: number): net.Server {
     });
 
     socket.on("close", () => {
-      clearInterval(keepaliveTimer);
       handleDisconnect(state);
     });
 
     socket.on("error", (err) => {
       logger.warn({ err, id }, "TCP socket error");
-      clearInterval(keepaliveTimer);
       handleDisconnect(state);
     });
 

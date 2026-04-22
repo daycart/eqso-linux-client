@@ -1,0 +1,88 @@
+-asorapa$ sudo journalctl -u eqso-relay -n 100
+abr 22 10:58:29 ubuntus node[16918]: [eqso] 2026-04-22T10:58:29.120Z Handshake recibido \Uffffffff conexion establecida
+abr 22 10:58:29 ubuntus node[16918]: [main] 2026-04-22T10:58:29.124Z Conectado \Uffffffff enviando JOIN\Uffffffff
+abr 22 10:58:29 ubuntus node[16918]: [eqso] 2026-04-22T10:58:29.136Z JOIN enviado: callsign="0R-IN70WN" sala="CB"
+abr 22 10:58:29 ubuntus node[16918]: [eqso] 2026-04-22T10:58:29.137Z Salas disponibles: GENERAL, CB, ASORAPA, PRUEBAS
+abr 22 10:58:29 ubuntus node[16918]: [main] 2026-04-22T10:58:29.143Z Salas: GENERAL, CB, ASORAPA, PRUEBAS
+abr 22 10:58:29 ubuntus node[16918]: [main] 2026-04-22T10:58:29.151Z Sala: 0R-IN53SI se ha unido
+abr 22 10:58:29 ubuntus node[16918]: [main] 2026-04-22T10:58:29.152Z Sala: 0R-JN11BK se ha unido
+abr 22 10:58:29 ubuntus node[16918]: [main] 2026-04-22T10:58:29.152Z Sala: 0R-ASORAPA se ha unido
+abr 22 10:58:29 ubuntus node[16918]: [main] 2026-04-22T10:58:29.152Z Sala: 0R-IN70WN se ha unido
+abr 22 10:58:29 ubuntus node[16918]: [ptt] 2026-04-22T10:58:29.167Z PTT serial listo (/dev/ttyACM0, rts)
+abr 22 10:58:33 ubuntus node[16918]: [audio] 2026-04-22T10:58:33.963Z [nivel] pico RMS=13898 (-7.4 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 10:58:38 ubuntus node[16918]: [audio] 2026-04-22T10:58:38.963Z [nivel] pico RMS=4 (-79.1 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 10:58:43 ubuntus node[16918]: [audio] 2026-04-22T10:58:43.965Z [nivel] pico RMS=4 (-78.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 10:58:48 ubuntus node[16918]: [audio] 2026-04-22T10:58:48.966Z [nivel] pico RMS=4 (-78.6 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 10:58:53 ubuntus node[16918]: [main] 2026-04-22T10:58:53.377Z Sala: 30RCI184 se ha unido
+abr 22 10:58:54 ubuntus node[16918]: [audio] 2026-04-22T10:58:54.035Z [nivel] pico RMS=4 (-79.0 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 10:58:59 ubuntus node[16918]: [audio] 2026-04-22T10:58:59.040Z [nivel] pico RMS=1328 (-27.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 10:58:59 ubuntus node[16918]: [main] 2026-04-22T10:58:59.774Z VOX: PTT activado \Uffffffff inicio transmision
+abr 22 10:59:03 ubuntus node[16918]: [eqso] 2026-04-22T10:59:03.195Z PTT liberado [0x0d]
+abr 22 10:59:03 ubuntus node[16918]: [main] 2026-04-22T10:59:03.195Z VOX: PTT liberado \Uffffffff fin transmision
+abr 22 10:59:04 ubuntus node[16918]: [audio] 2026-04-22T10:59:04.042Z [nivel] pico RMS=23793 (-2.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 10:59:07 ubuntus node[16918]: [main] 2026-04-22T10:59:07.149Z VOX: PTT activado \Uffffffff inicio transmision
+abr 22 10:59:09 ubuntus node[16918]: [audio] 2026-04-22T10:59:09.043Z [nivel] pico RMS=4718 (-16.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 10:59:14 ubuntus node[16918]: [audio] 2026-04-22T10:59:14.044Z [nivel] pico RMS=11366 (-9.2 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 10:59:18 ubuntus node[16918]: [eqso] 2026-04-22T10:59:18.171Z PTT liberado [0x0d]
+abr 22 10:59:18 ubuntus node[16918]: [main] 2026-04-22T10:59:18.171Z VOX: PTT liberado \Uffffffff fin transmision
+abr 22 10:59:19 ubuntus node[16918]: [audio] 2026-04-22T10:59:19.045Z [nivel] pico RMS=22767 (-3.2 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 10:59:24 ubuntus node[16918]: [audio] 2026-04-22T10:59:24.202Z [nivel] pico RMS=4 (-78.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 10:59:29 ubuntus node[16918]: [audio] 2026-04-22T10:59:29.203Z [nivel] pico RMS=4 (-78.7 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 10:59:29 ubuntus node[16918]: [main] 2026-04-22T10:59:29.926Z Sala: 0R-JN11BK ha salido
+abr 22 10:59:29 ubuntus node[16918]: [main] 2026-04-22T10:59:29.970Z Sala: 0R-ASORAPA ha salido
+abr 22 10:59:29 ubuntus node[16918]: [main] 2026-04-22T10:59:29.977Z Sala: 0R-IN53SI ha salido
+abr 22 10:59:32 ubuntus node[16918]: [main] 2026-04-22T10:59:32.547Z VOX: PTT activado \Uffffffff inicio transmision
+abr 22 10:59:32 ubuntus node[16918]: [main] 2026-04-22T10:59:32.575Z Sala: 0R-ASORAPA se ha unido
+abr 22 10:59:33 ubuntus node[16918]: [main] 2026-04-22T10:59:33.958Z Sala: 0R-JN11BK se ha unido
+abr 22 10:59:34 ubuntus node[16918]: [main] 2026-04-22T10:59:34.112Z Sala: 0R-IN53SI se ha unido
+abr 22 10:59:34 ubuntus node[16918]: [audio] 2026-04-22T10:59:34.204Z [nivel] pico RMS=14611 (-7.0 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 10:59:39 ubuntus node[16918]: [audio] 2026-04-22T10:59:39.251Z [nivel] pico RMS=24029 (-2.7 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 10:59:39 ubuntus node[16918]: [eqso] 2026-04-22T10:59:39.810Z PTT liberado [0x0d]
+abr 22 10:59:39 ubuntus node[16918]: [main] 2026-04-22T10:59:39.811Z VOX: PTT liberado \Uffffffff fin transmision
+abr 22 10:59:40 ubuntus node[16918]: [main] 2026-04-22T10:59:40.851Z VOX: PTT activado \Uffffffff inicio transmision
+abr 22 10:59:44 ubuntus node[16918]: [audio] 2026-04-22T10:59:44.296Z [nivel] pico RMS=23532 (-2.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 10:59:44 ubuntus node[16918]: [eqso] 2026-04-22T10:59:44.298Z PTT liberado [0x0d]
+abr 22 10:59:44 ubuntus node[16918]: [main] 2026-04-22T10:59:44.298Z VOX: PTT liberado \Uffffffff fin transmision
+abr 22 10:59:49 ubuntus node[16918]: [audio] 2026-04-22T10:59:49.326Z [nivel] pico RMS=4 (-78.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 10:59:54 ubuntus node[16918]: [audio] 2026-04-22T10:59:54.328Z [nivel] pico RMS=4 (-78.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 10:59:56 ubuntus node[16918]: [main] 2026-04-22T10:59:56.951Z TX: 0R-JN11BK libero canal
+abr 22 10:59:56 ubuntus node[16918]: [main] 2026-04-22T10:59:56.968Z Sala: 0R-JN11BK ha salido
+abr 22 10:59:57 ubuntus node[16918]: [main] 2026-04-22T10:59:57.112Z Sala: 0R-IN53SI ha salido
+abr 22 10:59:57 ubuntus node[16918]: [main] 2026-04-22T10:59:57.242Z Sala: 0R-ASORAPA ha salido
+abr 22 10:59:57 ubuntus node[16918]: [main] 2026-04-22T10:59:57.377Z TX: 30RCI184 transmitiendo
+abr 22 10:59:57 ubuntus node[16918]: [audio] 2026-04-22T10:59:57.781Z [audio] Semi-duplex: matando arecord \Uffffffff esperando cierre para abrir aplay
+abr 22 10:59:57 ubuntus node[16918]: [audio] 2026-04-22T10:59:57.785Z [arecord] arecord: pcm_read:2240:
+abr 22 10:59:57 ubuntus node[16918]: [audio] 2026-04-22T10:59:57.786Z [arecord] read error: Interrupted system call
+abr 22 10:59:57 ubuntus node[16918]: [audio] 2026-04-22T10:59:57.821Z [arecord] Terminado (code 1)
+abr 22 10:59:57 ubuntus node[16918]: [audio] 2026-04-22T10:59:57.821Z [audio] arecord cerrado \Uffffffff abriendo aplay
+abr 22 10:59:57 ubuntus node[16918]: [audio] 2026-04-22T10:59:57.822Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 10:59:58 ubuntus node[16918]: [main] 2026-04-22T10:59:58.940Z Sala: 0R-JN11BK se ha unido
+abr 22 10:59:59 ubuntus node[16918]: [main] 2026-04-22T10:59:59.186Z Sala: 0R-IN53SI se ha unido
+abr 22 10:59:59 ubuntus node[16918]: [audio] 2026-04-22T10:59:59.331Z [nivel] pico RMS=4 (-78.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 11:00:00 ubuntus node[16918]: [main] 2026-04-22T11:00:00.108Z TX: 30RCI184 libero canal
+abr 22 11:00:00 ubuntus node[16918]: [audio] 2026-04-22T11:00:00.430Z [aplay] Terminado (code 0)
+abr 22 11:00:00 ubuntus node[16918]: [audio] 2026-04-22T11:00:00.720Z [audio] Semi-duplex: reanudando arecord
+abr 22 11:00:00 ubuntus node[16918]: [audio] 2026-04-22T11:00:00.720Z arecord -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 22 11:00:02 ubuntus node[16918]: [main] 2026-04-22T11:00:02.139Z Sala: 0R-ASORAPA se ha unido
+abr 22 11:00:04 ubuntus node[16918]: [audio] 2026-04-22T11:00:04.331Z [nivel] pico RMS=13898 (-7.4 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 11:00:09 ubuntus node[16918]: [audio] 2026-04-22T11:00:09.371Z [nivel] pico RMS=4 (-79.0 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 11:00:10 ubuntus node[16918]: [main] 2026-04-22T11:00:10.198Z TX: 30RCI184 transmitiendo
+abr 22 11:00:10 ubuntus node[16918]: [audio] 2026-04-22T11:00:10.338Z [audio] Semi-duplex: matando arecord \Uffffffff esperando cierre para abrir aplay
+abr 22 11:00:10 ubuntus node[16918]: [audio] 2026-04-22T11:00:10.341Z [arecord] arecord: pcm_read:2240: read error: Interrupted system call
+abr 22 11:00:10 ubuntus node[16918]: [audio] 2026-04-22T11:00:10.368Z [arecord] Terminado (code 1)
+abr 22 11:00:10 ubuntus node[16918]: [audio] 2026-04-22T11:00:10.369Z [audio] arecord cerrado \Uffffffff abriendo aplay
+abr 22 11:00:10 ubuntus node[16918]: [audio] 2026-04-22T11:00:10.369Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 11:00:13 ubuntus node[16918]: [main] 2026-04-22T11:00:13.486Z TX: 30RCI184 libero canal
+abr 22 11:00:13 ubuntus node[16918]: [audio] 2026-04-22T11:00:13.889Z [aplay] Terminado (code 0)
+abr 22 11:00:14 ubuntus node[16918]: [audio] 2026-04-22T11:00:14.206Z [audio] Semi-duplex: reanudando arecord
+abr 22 11:00:14 ubuntus node[16918]: [audio] 2026-04-22T11:00:14.207Z arecord -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 22 11:00:14 ubuntus node[16918]: [audio] 2026-04-22T11:00:14.371Z [nivel] pico RMS=13898 (-7.4 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 11:00:19 ubuntus node[16918]: [audio] 2026-04-22T11:00:19.371Z [nivel] pico RMS=4 (-79.2 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 11:00:24 ubuntus node[16918]: [audio] 2026-04-22T11:00:24.374Z [nivel] pico RMS=4 (-79.2 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 11:00:29 ubuntus node[16918]: [main] 2026-04-22T11:00:29.278Z Sala: 0R-JN11BK ha salido
+abr 22 11:00:29 ubuntus node[16918]: [audio] 2026-04-22T11:00:29.380Z [nivel] pico RMS=4 (-79.1 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 11:00:29 ubuntus node[16918]: [main] 2026-04-22T11:00:29.382Z Sala: 0R-IN53SI ha salido
+abr 22 11:00:29 ubuntus node[16918]: [main] 2026-04-22T11:00:29.463Z Sala: 0R-ASORAPA ha salido
+abr 22 11:00:32 ubuntus node[16918]: [main] 2026-04-22T11:00:32.432Z Sala: 0R-ASORAPA se ha unido
+abr 22 11:00:34 ubuntus node[16918]: [main] 2026-04-22T11:00:34.002Z Sala: 0R-JN11BK se ha unido
+abr 22 11:00:34 ubuntus node[16918]: [main] 2026-04-22T11:00:34.257Z Sala: 0R-IN53SI se ha unido
