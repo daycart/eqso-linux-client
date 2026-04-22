@@ -1,0 +1,25 @@
+sudo journalctl -u eqso-relay.service -f | grep -E "\[audio\]|\[playGsm\]|\[playPcm\]|aplay|arecord"
+abr 22 20:27:55 ubuntus node[24635]: [audio] 2026-04-22T20:27:55.353Z [nivel] pico RMS=13898 (-7.4 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 20:28:00 ubuntus node[24635]: [audio] 2026-04-22T20:28:00.354Z [nivel] pico RMS=4 (-79.1 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 20:28:05 ubuntus node[24635]: [audio] 2026-04-22T20:28:05.356Z [nivel] pico RMS=4 (-79.0 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 20:28:10 ubuntus node[24635]: [audio] 2026-04-22T20:28:10.357Z [nivel] pico RMS=4 (-79.2 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 20:28:15 ubuntus node[24635]: [audio] 2026-04-22T20:28:15.358Z [nivel] pico RMS=4 (-78.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 20:28:20 ubuntus node[24635]: [audio] 2026-04-22T20:28:20.359Z [nivel] pico RMS=4 (-78.6 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 20:28:25 ubuntus node[24635]: [audio] 2026-04-22T20:28:25.359Z [nivel] pico RMS=4 (-78.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 20:28:30 ubuntus node[24635]: [audio] 2026-04-22T20:28:30.359Z [nivel] pico RMS=4 (-79.1 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 20:28:35 ubuntus node[24635]: [audio] 2026-04-22T20:28:35.359Z [nivel] pico RMS=4 (-78.7 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 20:28:40 ubuntus node[24635]: [audio] 2026-04-22T20:28:40.360Z [nivel] pico RMS=4 (-79.0 dBFS)  VOXumbral=1500  gain=0.6
+abr 22 20:28:43 ubuntus node[24635]: [audio] 2026-04-22T20:28:43.889Z [playGsm] pkt#1 len=198 decoder_ready=true player=null playerStarting=false
+abr 22 20:28:43 ubuntus node[24635]: [main] 2026-04-22T20:28:43.893Z [audio] pkt#1 ? playGsm OK (pttActive=false rxActive=true)
+abr 22 20:28:43 ubuntus node[24635]: [audio] 2026-04-22T20:28:43.916Z [playPcm] chunk#1 ? jitterBuf=960 playerStarting=false
+abr 22 20:28:43 ubuntus node[24635]: [audio] 2026-04-22T20:28:43.917Z [audio] Semi-duplex: matando arecord \Uffffffff esperando cierre para abrir aplay
+abr 22 20:28:43 ubuntus node[24635]: [audio] 2026-04-22T20:28:43.920Z [arecord] arecord: pcm_read:2240:
+abr 22 20:28:43 ubuntus node[24635]: [audio] 2026-04-22T20:28:43.920Z [arecord] read error: Interrupted system call
+abr 22 20:28:43 ubuntus node[24635]: [audio] 2026-04-22T20:28:43.955Z [arecord] Terminado (code 1)
+abr 22 20:28:43 ubuntus node[24635]: [audio] 2026-04-22T20:28:43.955Z [audio] arecord cerrado \Uffffffff abriendo aplay
+abr 22 20:28:43 ubuntus node[24635]: [audio] 2026-04-22T20:28:43.956Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 22 20:28:43 ubuntus node[24635]: [audio] 2026-04-22T20:28:43.992Z [playGsm] pkt#2 len=198 decoder_ready=true player=running playerStarting=false
+abr 22 20:28:43 ubuntus node[24635]: [main] 2026-04-22T20:28:43.992Z [audio] pkt#2 ? playGsm OK (pttActive=false rxActive=true)
+abr 22 20:28:43 ubuntus node[24635]: [audio] 2026-04-22T20:28:43.998Z [playPcm] chunk#2 ? escribiendo 960 muestras a aplay stdin
+abr 22 20:28:44 ubuntus node[24635]: [audio] 2026-04-22T20:28:44.123Z [playGsm] pkt#3 len=198 decoder_ready=true player=running playerStarting=false
+abr 22 20:28:44 ubuntus node[24635]: [main] 
