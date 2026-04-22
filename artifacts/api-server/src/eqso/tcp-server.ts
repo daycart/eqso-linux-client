@@ -20,7 +20,6 @@ import {
   buildErrorMessage,
   tryParseJoin,
   KEEPALIVE_PACKET,
-  SILENCE_FRAME,
 } from "./protocol";
 
 const SERVER_VERSION = "eQSO Linux Server v1.0";
@@ -110,12 +109,17 @@ function processSingleByte(state: TcpClientState, byte: number): void {
       break;
 
     case EQSO_COMMANDS.IGNORE:
-      // [0x02] silence frame: 5 bytes (cmd + 4 bytes payload).
-      // Consumimos los 4 bytes en processMultiByte, donde el frame se
-      // reenvía a todos los demás miembros de la sala (ver case IGNORE allí).
-      state.readMultiByte = true;
-      state.multiByteCmd = EQSO_COMMANDS.IGNORE;
-      state.buf = Buffer.alloc(0);
+      // [0x02] silence frame — el relay-daemon lo envía como 1 BYTE solo (cada 150ms).
+      // Lo reenviamos inmediatamente a todos los demás miembros de la sala.
+      // Los relays Windows eQSO usan este byte como indicador "servidor vivo":
+      // si no reciben datos en ~10-15s, se desconectan. Con 7 frames/s (150ms)
+      // el timer de desconexión Windows nunca se dispara.
+      // NOTA: NO entramos en modo multi-byte — consumir los 4 [0x02] siguientes
+      // como "payload" retrasaba el broadcast a 750ms y enviaba 4 bytes [0x00]
+      // extra que podían corromper el parser de los relays Windows.
+      if (client?.room) {
+        roomManager.broadcastToRoom(client.room, Buffer.from([0x02]), state.id);
+      }
       break;
 
     case EQSO_COMMANDS.KEEPALIVE:
@@ -182,25 +186,6 @@ function processMultiByte(state: TcpClientState, byte: number): void {
           sendRoomList(state);
         } else {
           logger.warn({ id: state.id, hex: state.buf.toString("hex") }, "eQSO TCP bad handshake bytes");
-        }
-        state.readMultiByte = false;
-        state.multiByteCmd = 0;
-        state.buf = Buffer.alloc(0);
-      }
-      break;
-    }
-
-    case EQSO_COMMANDS.IGNORE: {
-      // [0x02] silence frame: 5 bytes total (cmd + 4 payload).
-      // Protocolo eQSO correcto: el servidor REENVÍA el silence frame a todos los
-      // demás miembros de la sala (NO lo echa de vuelta al emisor).
-      // Esto da heartbeat a los Windows relays (JN11BK, IN53SI, ASORAPA): el
-      // relay-daemon (IN70WN) manda [0x02] cada 150ms → servidor lo reenvía →
-      // Windows relays reciben ~7 frames/s → no disparan su timer de desconexion.
-      if (state.buf.length >= 4) {
-        const client = roomManager.getClient(state.id);
-        if (client?.room) {
-          roomManager.broadcastToRoom(client.room, SILENCE_FRAME, state.id);
         }
         state.readMultiByte = false;
         state.multiByteCmd = 0;

@@ -70,14 +70,15 @@ const POST_RX_SUPPRESS_MS = 3000;
 // ─── Supresion VOX post-TX propio (anti-eco de squelch y canal CB) ────────────
 // Cuando el relay termina su propia TX (VOX ptt_end), la radio vuelve a modo
 // RX y puede capturar:
-//   1. El "clic" de squelch de la radio al abrir desde TX→RX.
-//   2. Eco residual del canal CB de la transmision anterior.
-//   3. Eco acustico de la sala (el altavoz y el micro estan en el mismo recinto).
+//   1. El "clic" de squelch de la radio al abrir desde TX→RX (~100-300ms).
+//   2. Eco residual del canal CB de la transmision anterior (~1-2s).
+//   3. Eco acustico de la sala (altavoz → micro, ~200-500ms).
 // Sin esta supresion, el VOX puede dispararse < 2s despues de soltar PTT y
-// crear un bucle TX→silencio→TX que inunda el canal eQSO con ruido.
-// 1500ms es suficiente para los casos 1 y 3; el canal CB requiere mas tiempo
-// pero 2s seria demasiado restrictivo para capturas CB legitimas.
-const POST_TX_VOX_SUPPRESS_MS = 1500;
+// crear un bucle TX→silencio→TX que inunda el canal eQSO con ruido ("eco").
+// Observado en logs: re-trigger a 1066ms pese a ventana de 1500ms → se sube
+// a 5000ms para cubrir holgadamente todos los casos. En CB la pausa tipica
+// entre transmisiones es >5s, por lo que no penaliza el uso normal.
+const POST_TX_VOX_SUPPRESS_MS = 5000;
 
 function setRxActive(): void {
   const wasActive = rxActive;
