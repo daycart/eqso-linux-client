@@ -152,8 +152,10 @@ vox.on("ptt_start", () => {
   const now = Date.now();
   if (now < postRxVoxSuppressUntil) {
     log(`VOX: ptt_start BLOQUEADO — suppress activo hasta ${new Date(postRxVoxSuppressUntil).toISOString()} (restan ${postRxVoxSuppressUntil - now}ms)`);
-    // Resetear VOX a false para que el proximo ciclo pueda re-evaluar cuando el suppress expire
-    setTimeout(() => { if (!pttActive) vox.forcePttEnd(); }, 0);
+    // Resetear estado VOX sin emitir ptt_end: evita que el TX se bloquee
+    // ni que postTxSuppressUntil/postRxVoxSuppressUntil se extiendan.
+    // pttActive permanece false → el audio eQSO->CB sigue funcionando.
+    vox.resetState();
     return;
   }
 

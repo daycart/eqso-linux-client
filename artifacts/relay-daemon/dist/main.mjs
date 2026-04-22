@@ -951,6 +951,20 @@ var Vox = class extends EventEmitter4 {
       this.emit("ptt_end");
     }
   }
+  /**
+   * Resetear estado interno del VOX sin emitir ptt_end.
+   * Usar cuando queremos cancelar un ciclo de activacion bloqueado
+   * (ej: ptt_start suprimido) para que el VOX pueda re-evaluar
+   * en el siguiente ciclo sin disparar efectos secundarios de ptt_end
+   * (pttActive, postTxSuppressUntil, postRxVoxSuppressUntil).
+   */
+  resetState() {
+    if (this.hangTimer) {
+      clearTimeout(this.hangTimer);
+      this.hangTimer = null;
+    }
+    this.active = false;
+  }
   get isActive() {
     return this.active;
   }
@@ -1160,9 +1174,7 @@ vox.on("ptt_start", () => {
   const now = Date.now();
   if (now < postRxVoxSuppressUntil) {
     log5(`VOX: ptt_start BLOQUEADO \u2014 suppress activo hasta ${new Date(postRxVoxSuppressUntil).toISOString()} (restan ${postRxVoxSuppressUntil - now}ms)`);
-    setTimeout(() => {
-      if (!pttActive) vox.forcePttEnd();
-    }, 0);
+    vox.resetState();
     return;
   }
   pttActive = true;

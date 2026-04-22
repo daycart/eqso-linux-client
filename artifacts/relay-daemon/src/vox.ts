@@ -55,6 +55,18 @@ export class Vox extends EventEmitter {
     if (this.active) { this.active = false; this.emit("ptt_end"); }
   }
 
+  /**
+   * Resetear estado interno del VOX sin emitir ptt_end.
+   * Usar cuando queremos cancelar un ciclo de activacion bloqueado
+   * (ej: ptt_start suprimido) para que el VOX pueda re-evaluar
+   * en el siguiente ciclo sin disparar efectos secundarios de ptt_end
+   * (pttActive, postTxSuppressUntil, postRxVoxSuppressUntil).
+   */
+  resetState(): void {
+    if (this.hangTimer) { clearTimeout(this.hangTimer); this.hangTimer = null; }
+    this.active = false;
+  }
+
   get isActive(): boolean { return this.active; }
 }
 
