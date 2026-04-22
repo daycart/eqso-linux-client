@@ -110,11 +110,9 @@ function processSingleByte(state: TcpClientState, byte: number): void {
       break;
 
     case EQSO_COMMANDS.IGNORE:
-      // [0x02] silence frame es 5 bytes: [0x02] + 4 bytes de payload.
-      // Consumimos los 4 bytes siguientes en processMultiByte y echamos
-      // [0x02 0x00 0x00 0x00 0x00] de vuelta. Sin este eco, el servidor
-      // Windows eQSO (192.168.1.33) detecta "servidor muerto" tras ~13s
-      // de silencio y desconecta todos sus relays enlazados (JN11BK, etc.).
+      // [0x02] silence frame: 5 bytes (cmd + 4 bytes payload).
+      // Consumimos los 4 bytes en processMultiByte, donde el frame se
+      // reenvía a todos los demás miembros de la sala (ver case IGNORE allí).
       state.readMultiByte = true;
       state.multiByteCmd = EQSO_COMMANDS.IGNORE;
       state.buf = Buffer.alloc(0);
@@ -193,10 +191,17 @@ function processMultiByte(state: TcpClientState, byte: number): void {
     }
 
     case EQSO_COMMANDS.IGNORE: {
-      // Silence frame payload: 4 bytes after the [0x02] command byte.
-      // Echo SILENCE_FRAME back so the remote eQSO server/relay knows we are alive.
+      // [0x02] silence frame: 5 bytes total (cmd + 4 payload).
+      // Protocolo eQSO correcto: el servidor REENVÍA el silence frame a todos los
+      // demás miembros de la sala (NO lo echa de vuelta al emisor).
+      // Esto da heartbeat a los Windows relays (JN11BK, IN53SI, ASORAPA): el
+      // relay-daemon (IN70WN) manda [0x02] cada 150ms → servidor lo reenvía →
+      // Windows relays reciben ~7 frames/s → no disparan su timer de desconexion.
       if (state.buf.length >= 4) {
-        safeWrite(state, SILENCE_FRAME);
+        const client = roomManager.getClient(state.id);
+        if (client?.room) {
+          roomManager.broadcastToRoom(client.room, SILENCE_FRAME, state.id);
+        }
         state.readMultiByte = false;
         state.multiByteCmd = 0;
         state.buf = Buffer.alloc(0);
