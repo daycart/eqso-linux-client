@@ -361,6 +361,23 @@ export function startTcpServer(port: number): net.Server {
     // so the process is ready by the time the client starts transmitting audio.
     const decoder = new FfmpegGsmDecoder();
     tcpDecoders.set(id, decoder);
+
+    // Cola de paquetes PCM con limitador de tasa: un paquete cada AUDIO_PACE_MS.
+    // Sin esto, FFmpeg puede emitir varios paquetes en el mismo tick de Node.js
+    // (rafaga), el navegador los recibe todos a la vez y el scheduler Web Audio
+    // API desborda → solapamiento / "bucle".
+    const AUDIO_PACE_MS = 110; // ligeramente menor que 120ms (duracion real)
+    const audioPaceQueue: Buffer[] = [];
+    let audioPaceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const sendNextAudioPkt = () => {
+      const pkt = audioPaceQueue.shift();
+      if (!pkt) { audioPaceTimer = null; return; }
+      const room = roomManager.getClient(id)?.room;
+      if (room) roomManager.broadcastBinToLocalWsClients(room, pkt, id);
+      audioPaceTimer = setTimeout(sendNextAudioPkt, AUDIO_PACE_MS);
+    };
+
     decoder.on("pcm", (pcm: Int16Array) => {
       const cli = roomManager.getClient(id);
       if (!cli?.room) return;
@@ -369,7 +386,8 @@ export function startTcpServer(port: number): net.Server {
         float32[i] = Math.max(-0.45, Math.min(0.45, pcm[i] / 32768.0));
       }
       const wsPkt = Buffer.concat([Buffer.from([0x11]), Buffer.from(float32.buffer)]);
-      roomManager.broadcastBinToLocalWsClients(cli.room, wsPkt, id);
+      audioPaceQueue.push(wsPkt);
+      if (!audioPaceTimer) sendNextAudioPkt(); // primer paquete sale inmediatamente
     });
     decoder.start();
 
