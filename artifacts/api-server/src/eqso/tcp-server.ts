@@ -20,6 +20,7 @@ import {
   buildErrorMessage,
   tryParseJoin,
   KEEPALIVE_PACKET,
+  SILENCE_FRAME,
 } from "./protocol";
 
 const SERVER_VERSION = "eQSO Linux Server v1.0";
@@ -109,6 +110,14 @@ function processSingleByte(state: TcpClientState, byte: number): void {
       break;
 
     case EQSO_COMMANDS.IGNORE:
+      // [0x02] silence frame es 5 bytes: [0x02] + 4 bytes de payload.
+      // Consumimos los 4 bytes siguientes en processMultiByte y echamos
+      // [0x02 0x00 0x00 0x00 0x00] de vuelta. Sin este eco, el servidor
+      // Windows eQSO (192.168.1.33) detecta "servidor muerto" tras ~13s
+      // de silencio y desconecta todos sus relays enlazados (JN11BK, etc.).
+      state.readMultiByte = true;
+      state.multiByteCmd = EQSO_COMMANDS.IGNORE;
+      state.buf = Buffer.alloc(0);
       break;
 
     case EQSO_COMMANDS.KEEPALIVE:
@@ -176,6 +185,18 @@ function processMultiByte(state: TcpClientState, byte: number): void {
         } else {
           logger.warn({ id: state.id, hex: state.buf.toString("hex") }, "eQSO TCP bad handshake bytes");
         }
+        state.readMultiByte = false;
+        state.multiByteCmd = 0;
+        state.buf = Buffer.alloc(0);
+      }
+      break;
+    }
+
+    case EQSO_COMMANDS.IGNORE: {
+      // Silence frame payload: 4 bytes after the [0x02] command byte.
+      // Echo SILENCE_FRAME back so the remote eQSO server/relay knows we are alive.
+      if (state.buf.length >= 4) {
+        safeWrite(state, SILENCE_FRAME);
         state.readMultiByte = false;
         state.multiByteCmd = 0;
         state.buf = Buffer.alloc(0);
