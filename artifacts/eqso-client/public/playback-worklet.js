@@ -14,13 +14,19 @@
  *    de alta prioridad (audio thread), independiente del main thread.
  */
 
-const BUFFER_SAMPLES = 24000;   // capacidad: 3s a 8kHz
+const BUFFER_SAMPLES = 8000;    // capacidad: 1s a 8kHz
 const SRC_RATE       = 8000;    // tasa de las muestras entrantes (GSM 06.10)
 
 // Pre-fill: esperar esta cantidad de muestras antes de empezar a reproducir.
-// Con 8000 muestras (1s a 8kHz) el buffer puede absorber hasta 1s de jitter
-// sin llegar a cero (silencio). El inicio de cada transmision tiene ~1s de latencia.
-const PRE_FILL_SAMPLES = 8000;
+// 2400 muestras = 300ms a 8kHz. Absorbe jitter de hasta ~300ms sin silencio.
+// Valor pequeño para minimizar latencia; el buffer protege contra fluctuaciones
+// puntuales pero no acumula audio indefinidamente (no hay "cola creciente").
+const PRE_FILL_SAMPLES = 2400;
+
+// Limite maximo de buffer. Si hay mas de este numero de muestras acumuladas,
+// descartar las nuevas entrantes para evitar que la latencia crezca sin limite.
+// 4800 = 600ms: cubre rafagas de 3-4 paquetes seguidos del servidor.
+const MAX_BUFFER_SAMPLES = 4800;
 
 class PlaybackProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -36,12 +42,13 @@ class PlaybackProcessor extends AudioWorkletProcessor {
       if (data.type !== "push") return;
       const samples = new Float32Array(data.buffer);
       for (let i = 0; i < samples.length; i++) {
-        if (this._available < BUFFER_SAMPLES) {
+        if (this._available < MAX_BUFFER_SAMPLES) {
+          // Solo aceptar si no hemos superado el maximo (anti-acumulacion).
+          // Descartar el resto para que la latencia no crezca indefinidamente.
           this._buf[this._writeIdx] = samples[i];
           this._writeIdx = (this._writeIdx + 1) % BUFFER_SAMPLES;
           this._available++;
         }
-        // buffer lleno: descartar (prefiere silencio a acumulacion ilimitada)
       }
       // Salir del modo starved cuando tenemos suficiente pre-fill
       if (this._starved && this._available >= PRE_FILL_SAMPLES) {
