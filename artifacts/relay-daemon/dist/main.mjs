@@ -1121,11 +1121,16 @@ var SerialPtt = class extends EventEmitter5 {
   /** Activar (true) o desactivar (false) el PTT. */
   set(active) {
     const cmd = active ? "1" : "0";
-    if (!this.enabled) return;
+    if (!this.enabled) {
+      log3(`PTT set(${active}) ignorado \u2014 PTT serial deshabilitado (device vacio en config)`);
+      return;
+    }
     if (!this.ready) {
+      log3(`PTT set(${active}) \u2192 pendingCmd=${cmd} (helper no listo aun)`);
       this.pendingCmd = cmd;
       return;
     }
+    log3(`PTT set(${active}) \u2192 escribiendo "${cmd}" al helper`);
     this._write(cmd);
   }
   stop() {

@@ -1,0 +1,102 @@
+sudo journalctl -u eqso-relay.service -n 100 --no-pager
+abr 23 11:53:57 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:53:57.584Z [arecord] arecord: pcm_read:2240:
+abr 23 11:53:57 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:53:57.586Z [arecord] read error: Interrupted system call
+abr 23 11:53:57 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:53:57.607Z [arecord] Terminado (code 1)
+abr 23 11:53:57 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:53:57.608Z [audio] arecord cerrado \Uffffffff abriendo aplay
+abr 23 11:53:57 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:53:57.608Z aplay -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 23 11:53:58 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:53:58.737Z [rxInhibit] suppress: prev=2026-04-23T11:54:02.273Z new=2026-04-23T11:54:02.273Z
+abr 23 11:53:59 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:53:59.336Z [aplay] Terminado (code 0)
+abr 23 11:53:59 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:53:59.336Z [audio] Semi-duplex: reanudando arecord
+abr 23 11:53:59 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:53:59.336Z arecord -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 23 11:54:00 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:00.412Z [nivel] pico RMS=30730 (-0.6 dBFS)  VOXumbral=600  gain=1 SATURACION: 1678 muestras (16.35%)
+abr 23 11:54:02 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:54:02.415Z VOX: PTT activado \Uffffffff inicio transmision (suppress was 2026-04-23T11:54:02.273Z)
+abr 23 11:54:03 ubuntus eqso-relay-[1013]: [eqso] 2026-04-23T11:54:03.447Z PTT liberado [0x0d]
+abr 23 11:54:03 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:54:03.447Z VOX: PTT liberado \Uffffffff fin transmision (suppress hasta 2026-04-23T11:54:08.447Z)
+abr 23 11:54:03 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:03.814Z [audio] Semi-duplex: matando arecord \Uffffffff esperando cierre para abrir aplay
+abr 23 11:54:03 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:03.816Z [arecord] arecord: pcm_read:2240:
+abr 23 11:54:03 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:03.817Z [arecord] read error: Interrupted system call
+abr 23 11:54:03 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:03.831Z [arecord] Terminado (code 1)
+abr 23 11:54:03 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:03.832Z [audio] arecord cerrado \Uffffffff abriendo aplay
+abr 23 11:54:03 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:03.832Z aplay -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 23 11:54:04 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:04.190Z [playGsm] pkt#150 len=198 decoder_ready=true player=running playerStarting=false
+abr 23 11:54:04 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:54:04.191Z [audio] pkt#150 ? playGsm OK (pttActive=false rxActive=true)
+abr 23 11:54:04 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:54:04.954Z [rxInhibit] suppress: prev=2026-04-23T11:54:08.447Z new=2026-04-23T11:54:08.447Z
+abr 23 11:54:05 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:05.413Z [nivel] pico RMS=30291 (-0.7 dBFS)  VOXumbral=600  gain=1 SATURACION: 2134 muestras (23.82%)
+abr 23 11:54:05 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:05.479Z [aplay] Terminado (code 0)
+abr 23 11:54:05 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:05.479Z [audio] Semi-duplex: reanudando arecord
+abr 23 11:54:05 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:05.479Z arecord -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 23 11:54:08 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:54:08.567Z VOX: PTT activado \Uffffffff inicio transmision (suppress was 2026-04-23T11:54:08.447Z)
+abr 23 11:54:10 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:10.467Z [nivel] pico RMS=30229 (-0.7 dBFS)  VOXumbral=600  gain=1 SATURACION: 5143 muestras (35.82%)
+abr 23 11:54:10 ubuntus eqso-relay-[1013]: [eqso] 2026-04-23T11:54:10.610Z PTT liberado [0x0d]
+abr 23 11:54:10 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:54:10.610Z VOX: PTT liberado \Uffffffff fin transmision (suppress hasta 2026-04-23T11:54:15.610Z)
+abr 23 11:54:10 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:10.919Z [audio] Semi-duplex: matando arecord \Uffffffff esperando cierre para abrir aplay
+abr 23 11:54:10 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:10.922Z [arecord] arecord: pcm_read:2240: read error: Interrupted system call
+abr 23 11:54:10 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:10.936Z [arecord] Terminado (code 1)
+abr 23 11:54:10 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:10.937Z [audio] arecord cerrado \Uffffffff abriendo aplay
+abr 23 11:54:10 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:10.937Z aplay -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 23 11:54:12 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:54:12.043Z [rxInhibit] suppress: prev=2026-04-23T11:54:15.610Z new=2026-04-23T11:54:15.610Z
+abr 23 11:54:12 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:12.649Z [aplay] Terminado (code 0)
+abr 23 11:54:12 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:12.650Z [audio] Semi-duplex: reanudando arecord
+abr 23 11:54:12 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:12.650Z arecord -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 23 11:54:15 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:15.530Z [nivel] pico RMS=30220 (-0.7 dBFS)  VOXumbral=600  gain=1 SATURACION: 987 muestras (10.99%)
+abr 23 11:54:15 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:54:15.748Z VOX: PTT activado \Uffffffff inicio transmision (suppress was 2026-04-23T11:54:15.610Z)
+abr 23 11:54:17 ubuntus eqso-relay-[1013]: [eqso] 2026-04-23T11:54:17.770Z PTT liberado [0x0d]
+abr 23 11:54:17 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:54:17.770Z VOX: PTT liberado \Uffffffff fin transmision (suppress hasta 2026-04-23T11:54:22.770Z)
+abr 23 11:54:18 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:18.078Z [audio] Semi-duplex: matando arecord \Uffffffff esperando cierre para abrir aplay
+abr 23 11:54:18 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:18.081Z [arecord] arecord: pcm_read:2240: read error: Interrupted system call
+abr 23 11:54:18 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:18.096Z [arecord] Terminado (code 1)
+abr 23 11:54:18 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:18.096Z [audio] arecord cerrado \Uffffffff abriendo aplay
+abr 23 11:54:18 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:18.096Z aplay -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 23 11:54:19 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:54:19.206Z [rxInhibit] suppress: prev=2026-04-23T11:54:22.770Z new=2026-04-23T11:54:22.770Z
+abr 23 11:54:19 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:19.816Z [aplay] Terminado (code 0)
+abr 23 11:54:19 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:19.816Z [audio] Semi-duplex: reanudando arecord
+abr 23 11:54:19 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:19.816Z arecord -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 23 11:54:20 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:20.538Z [nivel] pico RMS=21869 (-3.5 dBFS)  VOXumbral=600  gain=1 SATURACION: 122 muestras (1.01%)
+abr 23 11:54:25 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:25.539Z [nivel] pico RMS=6 (-74.5 dBFS)  VOXumbral=600  gain=1
+abr 23 11:54:27 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:54:27.010Z VOX: PTT activado \Uffffffff inicio transmision (suppress was 2026-04-23T11:54:22.770Z)
+abr 23 11:54:30 ubuntus eqso-relay-[1013]: [eqso] 2026-04-23T11:54:30.069Z PTT liberado [0x0d]
+abr 23 11:54:30 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:54:30.069Z VOX: PTT liberado \Uffffffff fin transmision (suppress hasta 2026-04-23T11:54:35.069Z)
+abr 23 11:54:30 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:30.405Z [audio] Semi-duplex: matando arecord \Uffffffff esperando cierre para abrir aplay
+abr 23 11:54:30 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:30.407Z [arecord] arecord: pcm_read:2240:
+abr 23 11:54:30 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:30.407Z [arecord] read error: Interrupted system call
+abr 23 11:54:30 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:30.423Z [arecord] Terminado (code 1)
+abr 23 11:54:30 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:30.423Z [audio] arecord cerrado \Uffffffff abriendo aplay
+abr 23 11:54:30 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:30.423Z aplay -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 23 11:54:30 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:30.546Z [nivel] pico RMS=30279 (-0.7 dBFS)  VOXumbral=600  gain=1 SATURACION: 2106 muestras (17.50%)
+abr 23 11:54:31 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:54:31.577Z [rxInhibit] suppress: prev=2026-04-23T11:54:35.069Z new=2026-04-23T11:54:35.069Z
+abr 23 11:54:32 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:32.105Z [aplay] Terminado (code 0)
+abr 23 11:54:32 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:32.105Z [audio] Semi-duplex: reanudando arecord
+abr 23 11:54:32 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:32.105Z arecord -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 23 11:54:35 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:35.547Z [nivel] pico RMS=25329 (-2.2 dBFS)  VOXumbral=600  gain=1 SATURACION: 400 muestras (4.00%)
+abr 23 11:54:37 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:54:37.170Z TX: 30RCI184 transmitiendo
+abr 23 11:54:37 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:37.310Z [audio] Semi-duplex: matando arecord \Uffffffff esperando cierre para abrir aplay
+abr 23 11:54:37 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:37.312Z [arecord] arecord: pcm_read:2240:
+abr 23 11:54:37 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:37.313Z [arecord] read error: Interrupted system call
+abr 23 11:54:37 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:37.335Z [arecord] Terminado (code 1)
+abr 23 11:54:37 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:37.336Z [audio] arecord cerrado \Uffffffff abriendo aplay
+abr 23 11:54:37 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:37.337Z aplay -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 23 11:54:39 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:54:39.756Z TX: 30RCI184 libero canal
+abr 23 11:54:40 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:54:40.100Z [rxInhibit] suppress: prev=2026-04-23T11:54:35.069Z new=2026-04-23T11:54:41.300Z
+abr 23 11:54:40 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:40.298Z [aplay] Terminado (code 0)
+abr 23 11:54:40 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:40.298Z [audio] Semi-duplex: reanudando arecord
+abr 23 11:54:40 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:40.298Z arecord -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 23 11:54:40 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:40.548Z [nivel] pico RMS=19147 (-4.7 dBFS)  VOXumbral=600  gain=1 SATURACION: 3 muestras (0.07%)
+abr 23 11:54:45 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:45.549Z [nivel] pico RMS=6 (-74.1 dBFS)  VOXumbral=600  gain=1
+abr 23 11:54:46 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:54:46.065Z TX: 30RCI184 transmitiendo
+abr 23 11:54:46 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:46.194Z [audio] Semi-duplex: matando arecord \Uffffffff esperando cierre para abrir aplay
+abr 23 11:54:46 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:46.194Z [arecord] arecord: pcm_read:2240:
+abr 23 11:54:46 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:46.196Z [arecord] read error: Interrupted system call
+abr 23 11:54:46 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:46.209Z [arecord] Terminado (code 1)
+abr 23 11:54:46 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:46.209Z [audio] arecord cerrado \Uffffffff abriendo aplay
+abr 23 11:54:46 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:46.209Z aplay -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 23 11:54:46 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:46.673Z [playGsm] pkt#200 len=198 decoder_ready=true player=running playerStarting=false
+abr 23 11:54:46 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:54:46.674Z [audio] pkt#200 ? playGsm OK (pttActive=false rxActive=true)
+abr 23 11:54:49 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:54:49.172Z TX: 30RCI184 libero canal
+abr 23 11:54:49 ubuntus eqso-relay-[1013]: [main] 2026-04-23T11:54:49.498Z [rxInhibit] suppress: prev=2026-04-23T11:54:41.300Z new=2026-04-23T11:54:50.698Z
+abr 23 11:54:49 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:49.501Z [aplay] underrun!!! (at least 3065,936 ms long)
+abr 23 11:54:50 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:50.536Z [aplay] Terminado (code 0)
+abr 23 11:54:50 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:50.536Z [audio] Semi-duplex: reanudando arecord
+abr 23 11:54:50 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:50.536Z arecord -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 23 11:54:50 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:50.550Z [nivel] pico RMS=6 (-74.4 dBFS)  VOXumbral=600  gain=1
+abr 23 11:54:55 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T11:54:55.559Z [nivel] pico RMS=19147 (-4.7 dBFS)  VOXumbral=600  gain=1 SATURACION: 3 muestras (0.03%)
+david@ubuntus:/opt/eqso-asorapa$ 

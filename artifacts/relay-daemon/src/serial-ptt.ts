@@ -82,11 +82,16 @@ export class SerialPtt extends EventEmitter {
   /** Activar (true) o desactivar (false) el PTT. */
   set(active: boolean): void {
     const cmd = active ? "1" : "0";
-    if (!this.enabled) return;
+    if (!this.enabled) {
+      log(`PTT set(${active}) ignorado — PTT serial deshabilitado (device vacio en config)`);
+      return;
+    }
     if (!this.ready) {
+      log(`PTT set(${active}) → pendingCmd=${cmd} (helper no listo aun)`);
       this.pendingCmd = cmd;
       return;
     }
+    log(`PTT set(${active}) → escribiendo "${cmd}" al helper`);
     this._write(cmd);
   }
 
