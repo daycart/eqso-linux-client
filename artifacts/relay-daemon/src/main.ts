@@ -42,43 +42,30 @@ let rxInhibitTimer: ReturnType<typeof setTimeout> | null = null;
 //   400ms hang + 500ms (kill aplay + reinicio arecord) = ~900ms hasta captura
 const RX_HANG_MS = 400;
 
-// ─── Supresion post-TX (anti-eco del servidor) ────────────────────────────────
-// El relay NO recibe su propio audio de vuelta del servidor (el TCP server
-// excluye al emisor de broadcastToTcpAndRelays con excludeId=state.id). Por
-// tanto, el relay nunca reproduce su propio eco. Ya no hay buffer FFmpeg que
-// retrase paquetes. Un guarda mínimo de 100ms cubre jitter de red residual
-// sin bloquear el beep de cortesía (que llega 300ms tras el 0x0d).
+// ─── Supresion post-TX (descartar audio del servidor tras soltar VOX) ─────────
+// El relay NO recibe su propio eco (broadcastToTcpAndRelays excluye al emisor).
+// PERO sí recibe el pitido de cortesía del servidor ~200-300ms tras el 0x0d.
+// El pitido desencadena setRxActive() → mata arecord → aplay ~120ms → underrun
+// → rxInhibitTimer → POST_RX_SUPPRESS → ~2.2s de bloqueo adicional por pausa.
+// Con 600ms descartamos el pitido de cortesía sin bloquear voz real posterior.
 let postTxSuppressUntil = 0;
-const POST_TX_SUPPRESS_MS = 100;
+const POST_TX_SUPPRESS_MS = 600;
 
 // ─── Supresion post-RX (anti-feedback acustico tras reproduccion) ─────────────
-// Tras terminar de reproducir audio del servidor (web client, etc.), el altavoz
-// del CM108 deja eco residual en la sala. Cuando arecord captura ese eco
-// (full duplex: arecord siempre activo), el VOX puede dispararse con ruido.
-// Inhibimos el VOX durante este margen despues de que rxActive baje a false.
+// Tras terminar de reproducir audio del servidor, la radio CB necesita tiempo
+// para volver a RX y que arecord se reinicie (~350ms).
+// Con cableado directo (CM108 line-out→CB mic, CB speaker→CM108 line-in) no
+// hay camino acustico; 400ms cubre el reinicio de arecord con margen.
 let postRxVoxSuppressUntil = 0;
-// 1200ms: 300ms drain aplay + ~350ms arecord restart + 550ms margen eco CB.
-// Con setup de cables fisicos (CM108 line-out → CB mic, CB speaker → CM108 line-in)
-// no hay camino acustico → el eco residual desaparece en <100ms.
-// 1200ms cubre el reinicio de arecord + margen y permite que el operador CB
-// responda rapidamente sin quedar fuera de la ventana de captura.
-// Antes de b207244 esta supresion no existia y funcionaba bien (0ms).
-const POST_RX_SUPPRESS_MS = 1200;
+const POST_RX_SUPPRESS_MS = 400;
 
 // ─── Supresion VOX post-TX propio (anti-eco de squelch y canal CB) ────────────
-// Cuando el relay termina su propia TX (VOX ptt_end), la radio vuelve a modo
-// RX y puede capturar:
-//   1. El "clic" de squelch de la radio al abrir desde TX→RX (~100-300ms).
-//   2. Eco residual del canal CB de la transmision anterior (~1-2s).
-//   3. Eco acustico de la sala (altavoz → micro, ~200-500ms).
-// Sin esta supresion, el VOX puede dispararse < 2s despues de soltar PTT y
-// crear un bucle TX→silencio→TX que inunda el canal eQSO con ruido ("eco").
-// Observado en logs: re-trigger a 1066ms pese a ventana de 1500ms.
-// NOTA: voxHangMs=2500ms hace que las pausas naturales del habla no rompan
-// el TX; el suppress post-TX solo se activa cuando el operador realmente
-// para. 1500ms cubre squelch click (100-300ms) + eco RF residual (300-700ms)
-// sin bloquear al operador si vuelve a hablar inmediatamente.
-const POST_TX_VOX_SUPPRESS_MS = 1500;
+// Cuando el relay termina su propia TX (VOX ptt_end), la radio vuelve a RX y
+// puede capturar el clic de squelch (~100-300ms) o eco RF residual (~300-500ms).
+// 800ms cubre ambos casos sin bloquear al operador si vuelve a hablar pronto.
+// El pitido de cortesía ya queda cubierto por POST_TX_SUPPRESS_MS, por lo que
+// ya no es necesario un margen tan largo aquí.
+const POST_TX_VOX_SUPPRESS_MS = 800;
 
 function setRxActive(): void {
   const wasActive = rxActive;
