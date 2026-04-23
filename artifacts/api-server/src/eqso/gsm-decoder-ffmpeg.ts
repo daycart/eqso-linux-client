@@ -28,7 +28,12 @@ export class GsmFfmpegDecoder extends EventEmitter {
 
   start(): void {
     if (this.proc) return;
-    this.proc = spawn("ffmpeg", [
+    // stdbuf -o0: deshabilita el buffer stdio de glibc en stdout de ffmpeg.
+    // Sin esto, ffmpeg acumula ~4096 bytes antes del flush real al pipe,
+    // causando que Node.js reciba paquetes en parejas (240ms audio + 120ms
+    // silencio equidistante en el browser). Con -o0 cada paquete llega
+    // inmediatamente al handler stdout.on("data").
+    this.proc = spawn("stdbuf", ["-o0", "ffmpeg",
       "-hide_banner", "-loglevel", "quiet",
       "-probesize", "32", "-analyzeduration", "0",
       "-f", "gsm", "-ar", "8000",

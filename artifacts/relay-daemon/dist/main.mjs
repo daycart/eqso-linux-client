@@ -448,7 +448,9 @@ var GsmDecoder = class extends EventEmitter2 {
   ready = false;
   start() {
     if (this.proc) return;
-    this.proc = spawn("ffmpeg", [
+    this.proc = spawn("stdbuf", [
+      "-o0",
+      "ffmpeg",
       "-hide_banner",
       "-loglevel",
       "quiet",
@@ -468,7 +470,6 @@ var GsmDecoder = class extends EventEmitter2 {
       "8000",
       "-avioflags",
       "direct",
-      // sin buffer AVIOContext — flush inmediato tras cada paquete
       "pipe:1"
     ], { stdio: ["pipe", "pipe", "pipe"] });
     this.proc.stderr.on("data", () => {
@@ -520,7 +521,9 @@ var GsmEncoder = class extends EventEmitter2 {
   ready = false;
   start() {
     if (this.proc) return;
-    this.proc = spawn("ffmpeg", [
+    this.proc = spawn("stdbuf", [
+      "-o0",
+      "ffmpeg",
       "-hide_banner",
       "-loglevel",
       "quiet",
@@ -542,7 +545,6 @@ var GsmEncoder = class extends EventEmitter2 {
       "8000",
       "-avioflags",
       "direct",
-      // sin buffer AVIOContext — flush inmediato tras cada paquete
       "pipe:1"
     ], { stdio: ["pipe", "pipe", "pipe"] });
     this.proc.stderr.on("data", () => {

@@ -60880,7 +60880,9 @@ var GsmFfmpegDecoder = class extends EventEmitter3 {
   }
   start() {
     if (this.proc) return;
-    this.proc = spawn2("ffmpeg", [
+    this.proc = spawn2("stdbuf", [
+      "-o0",
+      "ffmpeg",
       "-hide_banner",
       "-loglevel",
       "quiet",
