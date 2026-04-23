@@ -61228,7 +61228,7 @@ async function wavToGsmPackets(wavBuf) {
 var CourtesyBeepManager = class {
   tonePackets = /* @__PURE__ */ new Map();
   selectedId = "beep-simple";
-  _enabled = false;
+  _enabled = true;
   async init() {
     try {
       const rows = await db.select().from(systemSettingsTable);
