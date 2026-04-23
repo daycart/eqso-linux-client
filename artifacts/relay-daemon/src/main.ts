@@ -44,12 +44,13 @@ const RX_HANG_MS = 400;
 
 // ─── Supresion post-TX (descartar audio del servidor tras soltar VOX) ─────────
 // El relay NO recibe su propio eco (broadcastToTcpAndRelays excluye al emisor).
-// PERO sí recibe el pitido de cortesía del servidor ~200-300ms tras el 0x0d.
-// El pitido desencadena setRxActive() → mata arecord → aplay ~120ms → underrun
-// → rxInhibitTimer → POST_RX_SUPPRESS → ~2.2s de bloqueo adicional por pausa.
-// Con 600ms descartamos el pitido de cortesía sin bloquear voz real posterior.
+// PERO sí recibe el pitido de cortesía del servidor. Medido en logs: llega entre
+// 600-800ms tras el 0x0d (jitter de red + procesamiento del servidor variable).
+// Con 1500ms descartamos el pitido de cortesía con margen de seguridad amplio.
+// Sin esta ventana: pitido → setRxActive() → aplay → squelch click → falso VOX
+// → segundo pitido de cortesía (doble beep audible en el cliente web).
 let postTxSuppressUntil = 0;
-const POST_TX_SUPPRESS_MS = 600;
+const POST_TX_SUPPRESS_MS = 1500;
 
 // ─── Supresion post-RX (anti-feedback acustico tras reproduccion) ─────────────
 // Tras terminar de reproducir audio del servidor, la radio CB necesita tiempo
@@ -62,10 +63,9 @@ const POST_RX_SUPPRESS_MS = 400;
 // ─── Supresion VOX post-TX propio (anti-eco de squelch y canal CB) ────────────
 // Cuando el relay termina su propia TX (VOX ptt_end), la radio vuelve a RX y
 // puede capturar el clic de squelch (~100-300ms) o eco RF residual (~300-500ms).
-// 800ms cubre ambos casos sin bloquear al operador si vuelve a hablar pronto.
-// El pitido de cortesía ya queda cubierto por POST_TX_SUPPRESS_MS, por lo que
-// ya no es necesario un margen tan largo aquí.
-const POST_TX_VOX_SUPPRESS_MS = 800;
+// 1500ms cubre ambos casos más el clic de squelch si el pitido llega a jugarse
+// (POST_TX_SUPPRESS_MS es la primera línea de defensa; esta es la segunda).
+const POST_TX_VOX_SUPPRESS_MS = 1500;
 
 function setRxActive(): void {
   const wasActive = rxActive;

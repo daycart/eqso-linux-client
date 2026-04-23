@@ -1225,10 +1225,10 @@ var rxActive = false;
 var rxInhibitTimer = null;
 var RX_HANG_MS = 400;
 var postTxSuppressUntil = 0;
-var POST_TX_SUPPRESS_MS = 600;
+var POST_TX_SUPPRESS_MS = 1500;
 var postRxVoxSuppressUntil = 0;
 var POST_RX_SUPPRESS_MS = 400;
-var POST_TX_VOX_SUPPRESS_MS = 800;
+var POST_TX_VOX_SUPPRESS_MS = 1500;
 function setRxActive() {
   const wasActive = rxActive;
   rxActive = true;
