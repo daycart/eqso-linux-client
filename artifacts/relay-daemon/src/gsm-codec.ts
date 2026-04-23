@@ -25,16 +25,16 @@ export class GsmDecoder extends EventEmitter {
 
   start(): void {
     if (this.proc) return;
-    // stdbuf -o0: igual que en GsmEncoder — sin esto, glibc acumula PCM en el
-    // buffer stdio (~4096 bytes) antes de hacer flush al pipe, causando que
-    // aplay reciba audio en ráfagas con silencios entre medias.
-    this.proc = spawn("stdbuf", ["-o0", "ffmpeg",
+    // -fflags +flush_packets: fuerza avio_flush() tras cada paquete muxado.
+    // stdbuf -o0 NO sirve: ffmpeg usa write() (no fwrite/stdio), sin efecto.
+    // El AVIOContext buffer (32KB) se vacía al pipe después de cada frame.
+    this.proc = spawn("ffmpeg", [
       "-hide_banner", "-loglevel", "quiet",
       "-probesize", "32", "-analyzeduration", "0",
       "-f", "gsm", "-ar", "8000",
       "-i", "pipe:0",
       "-f", "s16le", "-ar", "8000",
-      "-avioflags", "direct",
+      "-fflags", "+flush_packets",
       "pipe:1",
     ], { stdio: ["pipe", "pipe", "pipe"] });
 
@@ -86,17 +86,17 @@ export class GsmEncoder extends EventEmitter {
 
   start(): void {
     if (this.proc) return;
-    // stdbuf -o0: sin este flag, glibc acumula ~4096 bytes en el buffer stdio
-    // antes del flush real al pipe. Para GSM (33 bytes/frame) eso son ~124 frames
-    // (~2.5s) de audio retenido antes de llegar a Node.js.
-    // Con -o0 cada frame GSM llega inmediatamente.
-    this.proc = spawn("stdbuf", ["-o0", "ffmpeg",
+    // -fflags +flush_packets: fuerza avio_flush() tras cada frame GSM codificado.
+    // stdbuf -o0 NO sirve: ffmpeg usa write() (no fwrite/stdio), sin efecto.
+    // Sin esta flag, el AVIOContext (32KB) retiene hasta ~124 frames GSM (~2.5s)
+    // antes de hacer write() al pipe. Con flush_packets: 33 bytes/frame al instante.
+    this.proc = spawn("ffmpeg", [
       "-hide_banner", "-loglevel", "quiet",
       "-probesize", "32", "-analyzeduration", "0",
       "-f", "s16le", "-ar", "8000", "-ac", "1",
       "-i", "pipe:0",
       "-f", "gsm", "-ar", "8000",
-      "-avioflags", "direct",
+      "-fflags", "+flush_packets",
       "pipe:1",
     ], { stdio: ["pipe", "pipe", "pipe"] });
 

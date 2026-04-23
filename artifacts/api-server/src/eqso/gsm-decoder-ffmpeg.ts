@@ -28,18 +28,20 @@ export class GsmFfmpegDecoder extends EventEmitter {
 
   start(): void {
     if (this.proc) return;
-    // stdbuf -o0: deshabilita el buffer stdio de glibc en stdout de ffmpeg.
-    // Sin esto, ffmpeg acumula ~4096 bytes antes del flush real al pipe,
-    // causando que Node.js reciba paquetes en parejas (240ms audio + 120ms
-    // silencio equidistante en el browser). Con -o0 cada paquete llega
-    // inmediatamente al handler stdout.on("data").
-    this.proc = spawn("stdbuf", ["-o0", "ffmpeg",
+    // -fflags +flush_packets: fuerza avio_flush() tras cada paquete muxado.
+    // Sin esto, el AVIOContext de ffmpeg acumula datos en su buffer interno
+    // (32KB) y Node.js recibe paquetes en ráfagas separadas por silencios
+    // equidistantes. stdbuf -o0 NO sirve: ffmpeg usa write() directamente
+    // (no fwrite/stdio), así que stdbuf no tiene efecto sobre él.
+    // Con flush_packets: cada frame PCM decodificado llega al pipe
+    // inmediatamente, sin ningún buffer intermedio.
+    this.proc = spawn("ffmpeg", [
       "-hide_banner", "-loglevel", "quiet",
       "-probesize", "32", "-analyzeduration", "0",
       "-f", "gsm", "-ar", "8000",
       "-i", "pipe:0",
       "-f", "s16le", "-ar", "8000",
-      "-avioflags", "direct",
+      "-fflags", "+flush_packets",
       "pipe:1",
     ], { stdio: ["pipe", "pipe", "pipe"] });
 

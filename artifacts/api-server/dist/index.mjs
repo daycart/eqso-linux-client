@@ -60880,9 +60880,7 @@ var GsmFfmpegDecoder = class extends EventEmitter3 {
   }
   start() {
     if (this.proc) return;
-    this.proc = spawn2("stdbuf", [
-      "-o0",
-      "ffmpeg",
+    this.proc = spawn2("ffmpeg", [
       "-hide_banner",
       "-loglevel",
       "quiet",
@@ -60900,8 +60898,8 @@ var GsmFfmpegDecoder = class extends EventEmitter3 {
       "s16le",
       "-ar",
       "8000",
-      "-avioflags",
-      "direct",
+      "-fflags",
+      "+flush_packets",
       "pipe:1"
     ], { stdio: ["pipe", "pipe", "pipe"] });
     this.proc.stderr.on("data", () => {
