@@ -17,6 +17,7 @@ var DEFAULTS = {
     vox: true,
     voxThresholdRms: 600,
     voxHangMs: 1e3,
+    txGateRms: 50,
     inputGain: 1,
     outputGain: 1
   },
@@ -1203,7 +1204,7 @@ var rxActive = false;
 var rxInhibitTimer = null;
 var RX_HANG_MS = 400;
 var postTxSuppressUntil = 0;
-var POST_TX_SUPPRESS_MS = 800;
+var POST_TX_SUPPRESS_MS = 100;
 var postRxVoxSuppressUntil = 0;
 var POST_RX_SUPPRESS_MS = 1200;
 var POST_TX_VOX_SUPPRESS_MS = 5e3;
@@ -1226,7 +1227,7 @@ function setRxActive() {
 var serialPtt = new SerialPtt(cfg.ptt);
 var audio = new AlsaAudio(cfg.audio);
 var vox = new Vox(cfg.audio.voxThresholdRms, cfg.audio.voxHangMs);
-var TX_GATE_RMS = Math.max(0, cfg.audio.voxThresholdRms - 100);
+var TX_GATE_RMS = cfg.audio.txGateRms ?? 50;
 var latestPcmRms = 0;
 audio.on("error", (err) => {
   log5(`[audio] ERROR ALSA: ${err.message} \u2014 relay sigue activo, el audio se recuperar\xE1`);
