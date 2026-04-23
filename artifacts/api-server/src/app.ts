@@ -39,10 +39,12 @@ app.use("/api", router);
 if (process.env.NODE_ENV === "production") {
   const publicDir = path.join(__dirname, "public");
   if (existsSync(publicDir)) {
-    app.use(express.static(publicDir));
-    // SPA fallback: all unmatched routes return index.html
-    // Use regex instead of "*" — path-to-regexp v8 removed wildcard support
+    // Hashed assets (js, css) → inmutable, cacheable 1 año
+    app.use(express.static(publicDir, { maxAge: "1y", immutable: true }));
+    // SPA fallback: index.html con no-cache para que el navegador siempre
+    // pida el HTML fresco cuando desplegamos una nueva versión con nuevo hash
     app.get(/.*/, (_req, res) => {
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       res.sendFile(path.join(publicDir, "index.html"));
     });
     logger.info({ publicDir }, "Serving React client from static files");
