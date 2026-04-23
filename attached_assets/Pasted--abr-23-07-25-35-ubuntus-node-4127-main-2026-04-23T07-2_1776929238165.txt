@@ -1,0 +1,48 @@
+                    
+abr 23 07:25:35 ubuntus node[4127]: [main] 2026-04-23T07:25:35.893Z VOX: PTT activado \Uffffffff inicio transmision (suppress was 2026-04-23T07:25:35.717Z)
+abr 23 07:25:37 ubuntus node[4127]: [audio] 2026-04-23T07:25:37.514Z [nivel] pico RMS=15885 (-6.3 dBFS)  VOXumbral=1500  gain=0.6
+abr 23 07:25:42 ubuntus node[4127]: [audio] 2026-04-23T07:25:42.514Z [nivel] pico RMS=16092 (-6.2 dBFS)  VOXumbral=1500  gain=0.6
+abr 23 07:25:47 ubuntus node[4127]: [eqso] 2026-04-23T07:25:47.137Z PTT liberado [0x0d]
+abr 23 07:25:47 ubuntus node[4127]: [main] 2026-04-23T07:25:47.137Z VOX: PTT liberado \Uffffffff fin transmision (suppress hasta 2026-04-23T07:25:52.137Z)
+abr 23 07:25:47 ubuntus node[4127]: [audio] 2026-04-23T07:25:47.515Z [nivel] pico RMS=21144 (-3.8 dBFS)  VOXumbral=1500  gain=0.6
+abr 23 07:25:52 ubuntus node[4127]: [audio] 2026-04-23T07:25:52.514Z [nivel] pico RMS=4 (-79.4 dBFS)  VOXumbral=1500  gain=0.6
+abr 23 07:25:57 ubuntus node[4127]: [audio] 2026-04-23T07:25:57.515Z [nivel] pico RMS=4 (-79.4 dBFS)  VOXumbral=1500  gain=0.6
+abr 23 07:26:02 ubuntus node[4127]: [audio] 2026-04-23T07:26:02.516Z [nivel] pico RMS=4 (-79.0 dBFS)  VOXumbral=1500  gain=0.6
+abr 23 07:26:07 ubuntus node[4127]: [audio] 2026-04-23T07:26:07.516Z [nivel] pico RMS=4 (-79.2 dBFS)  VOXumbral=1500  gain=0.6
+abr 23 07:26:12 ubuntus node[4127]: [audio] 2026-04-23T07:26:12.517Z [nivel] pico RMS=4 (-78.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 23 07:26:13 ubuntus node[4127]: [main] 2026-04-23T07:26:13.771Z VOX: PTT activado \Uffffffff inicio transmision (suppress was 2026-04-23T07:25:52.137Z)
+abr 23 07:26:17 ubuntus node[4127]: [audio] 2026-04-23T07:26:17.517Z [nivel] pico RMS=16633 (-5.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 23 07:26:22 ubuntus node[4127]: [audio] 2026-04-23T07:26:22.518Z [nivel] pico RMS=23502 (-2.9 dBFS)  VOXumbral=1500  gain=0.6
+abr 23 07:26:23 ubuntus node[4127]: [eqso] 2026-04-23T07:26:23.104Z PTT liberado [0x0d]
+abr 23 07:26:23 ubuntus node[4127]: [main] 2026-04-23T07:26:23.104Z VOX: PTT liberado \Uffffffff fin transmision (suppress hasta 2026-04-23T07:26:28.104Z)
+abr 23 07:26:27 ubuntus node[4127]: [audio] 2026-04-23T07:26:27.520Z [nivel] pico RMS=7763 (-12.5 dBFS)  VOXumbral=1500  gain=0.6
+abr 23 07:26:31 ubuntus node[4127]: [main] 2026-04-23T07:26:31.141Z TX: 30RCI184 transmitiendo
+abr 23 07:26:31 ubuntus node[4127]: [audio] 2026-04-23T07:26:31.275Z [audio] Semi-duplex: matando arecord \Uffffffff esperando cierre para abrir aplay
+abr 23 07:26:31 ubuntus node[4127]: [audio] 2026-04-23T07:26:31.277Z [arecord] arecord: pcm_read:2240:
+abr 23 07:26:31 ubuntus node[4127]: [audio] 2026-04-23T07:26:31.278Z [arecord] read error: Interrupted system call
+abr 23 07:26:31 ubuntus node[4127]: [audio] 2026-04-23T07:26:31.305Z [arecord] Terminado (code 1)
+abr 23 07:26:31 ubuntus node[4127]: [audio] 2026-04-23T07:26:31.305Z [audio] arecord cerrado \Uffffffff abriendo aplay
+abr 23 07:26:31 ubuntus node[4127]: [audio] 2026-04-23T07:26:31.305Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 23 07:26:32 ubuntus node[4127]: [audio] 2026-04-23T07:26:32.521Z [nivel] pico RMS=4 (-79.2 dBFS)  VOXumbral=1500  gain=0.6
+abr 23 07:26:34 ubuntus node[4127]: [audio] 2026-04-23T07:26:34.751Z [playGsm] pkt#150 len=198 decoder_ready=true player=running playerStarting=false
+abr 23 07:26:34 ubuntus node[4127]: [main] 2026-04-23T07:26:34.752Z [audio] pkt#150 ? playGsm OK (pttActive=false rxActive=true)
+abr 23 07:26:35 ubuntus node[4127]: [main] 2026-04-23T07:26:35.401Z TX: 30RCI184 libero canal
+abr 23 07:26:35 ubuntus node[4127]: [main] 2026-04-23T07:26:35.753Z [rxInhibit] suppress: prev=2026-04-23T07:26:28.104Z new=2026-04-23T07:26:36.953Z
+abr 23 07:26:35 ubuntus node[4127]: [audio] 2026-04-23T07:26:35.770Z [aplay] Terminado (code 0)
+abr 23 07:26:35 ubuntus node[4127]: [audio] 2026-04-23T07:26:35.771Z [audio] Semi-duplex: reanudando arecord
+abr 23 07:26:35 ubuntus node[4127]: [audio] 2026-04-23T07:26:35.771Z arecord -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 23 07:26:36 ubuntus node[4127]: [main] 2026-04-23T07:26:36.548Z TX: 30RCI184 transmitiendo
+abr 23 07:26:36 ubuntus node[4127]: [audio] 2026-04-23T07:26:36.694Z [audio] Semi-duplex: matando arecord \Uffffffff esperando cierre para abrir aplay
+abr 23 07:26:36 ubuntus node[4127]: [audio] 2026-04-23T07:26:36.695Z [arecord] arecord: pcm_read:2240:
+abr 23 07:26:36 ubuntus node[4127]: [audio] 2026-04-23T07:26:36.697Z [arecord] read error: Interrupted system call
+abr 23 07:26:36 ubuntus node[4127]: [audio] 2026-04-23T07:26:36.722Z [arecord] Terminado (code 1)
+abr 23 07:26:36 ubuntus node[4127]: [audio] 2026-04-23T07:26:36.723Z [audio] arecord cerrado \Uffffffff abriendo aplay
+abr 23 07:26:36 ubuntus node[4127]: [audio] 2026-04-23T07:26:36.723Z aplay -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=2048 --period-size=256
+abr 23 07:26:37 ubuntus node[4127]: [audio] 2026-04-23T07:26:37.522Z [nivel] pico RMS=13898 (-7.4 dBFS)  VOXumbral=1500  gain=0.6
+abr 23 07:26:39 ubuntus node[4127]: [main] 2026-04-23T07:26:39.007Z TX: 30RCI184 libero canal
+abr 23 07:26:39 ubuntus node[4127]: [main] 2026-04-23T07:26:39.368Z [rxInhibit] suppress: prev=2026-04-23T07:26:36.953Z new=2026-04-23T07:26:40.568Z
+abr 23 07:26:39 ubuntus node[4127]: [audio] 2026-04-23T07:26:39.370Z [aplay] underrun!!! (at least 2425,108 ms long)
+abr 23 07:26:40 ubuntus node[4127]: [audio] 2026-04-23T07:26:40.389Z [aplay] Terminado (code 0)
+abr 23 07:26:40 ubuntus node[4127]: [audio] 2026-04-23T07:26:40.389Z [audio] Semi-duplex: reanudando arecord
+abr 23 07:26:40 ubuntus node[4127]: [audio] 2026-04-23T07:26:40.389Z arecord -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 23 07:26:42 ubuntus node[4127]: [audio] 2026-04-23T07:26:42.526Z [nivel] pico RMS=13898 (-7.4 dBFS)  VOXumbral=1500  gain=0.6
