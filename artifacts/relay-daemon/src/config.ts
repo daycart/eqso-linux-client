@@ -58,7 +58,7 @@ const DEFAULTS: RelayConfig = {
     voxHangMs: 2500,
     txGateRms: 50,
     inputGain: 1.0,
-    outputGain: 1.0,
+    outputGain: 3.0,
   },
   control: {
     enabled: true,

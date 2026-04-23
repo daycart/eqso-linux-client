@@ -19,7 +19,7 @@ var DEFAULTS = {
     voxHangMs: 2500,
     txGateRms: 50,
     inputGain: 1,
-    outputGain: 1
+    outputGain: 3
   },
   control: {
     enabled: true,
