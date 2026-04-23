@@ -310,16 +310,19 @@ async function handleJoin(
     return;
   }
 
-  // Look up isRelay flag from DB (non-blocking best-effort)
-  let isRelay = false;
-  try {
-    const [user] = await db.select({ isRelay: usersTable.isRelay })
-      .from(usersTable)
-      .where(eq(usersTable.callsign, name.toUpperCase()))
-      .limit(1);
-    isRelay = user?.isRelay ?? false;
-  } catch (err) {
-    logger.warn({ err, name }, "TCP handleJoin: DB isRelay lookup failed");
+  // Detect relay: callsigns starting with "0R-" are always relays (eQSO convention).
+  // Also check the DB users table for manually-flagged relays.
+  let isRelay = name.toUpperCase().startsWith("0R-");
+  if (!isRelay) {
+    try {
+      const [user] = await db.select({ isRelay: usersTable.isRelay })
+        .from(usersTable)
+        .where(eq(usersTable.callsign, name.toUpperCase()))
+        .limit(1);
+      isRelay = user?.isRelay ?? false;
+    } catch (err) {
+      logger.warn({ err, name }, "TCP handleJoin: DB isRelay lookup failed");
+    }
   }
 
   const client = roomManager.getClient(state.id);
