@@ -1,0 +1,53 @@
+165ms
+Copied client build: /opt/eqso-asorapa/artifacts/eqso-client/dist/public ? /opt/eqso-asorapa/artifacts/api-server/dist/public
+david@ubuntus:/opt/eqso-asorapa$ sudo journalctl -u eqso.service -n 50
+abr 23 21:18:10 ubuntus node[31088]: {"level":30,"time":1776979090461,"pid":31088,"hostname":"ubuntus","id":"63479d39-8b85-4b41-84b0-579efde81047","name":"0R-IN70W>
+abr 23 21:18:10 ubuntus node[31088]: {"level":30,"time":1776979090465,"pid":31088,"hostname":"ubuntus","id":"63479d39-8b85-4b41-84b0-579efde81047","name":"0R-IN70W>
+abr 23 21:18:10 ubuntus node[31088]: {"level":30,"time":1776979090467,"pid":31088,"hostname":"ubuntus","id":"63479d39-8b85-4b41-84b0-579efde81047","name":"0R-IN70W>
+abr 23 21:18:10 ubuntus node[31088]: {"level":30,"time":1776979090470,"pid":31088,"hostname":"ubuntus","id":"63479d39-8b85-4b41-84b0-579efde81047","name":"0R-IN70W>
+abr 23 21:18:10 ubuntus node[31088]: {"level":30,"time":1776979090548,"pid":31088,"hostname":"ubuntus","count":0,"msg":"RelayManager: loaded relay configurations"}
+abr 23 21:18:10 ubuntus node[31088]: {"level":30,"time":1776979090553,"pid":31088,"hostname":"ubuntus","selectedId":"beep-cw-k","enabled":true,"msg":"CourtesyBeepM>
+abr 23 21:18:10 ubuntus node[31088]: {"level":30,"time":1776979090581,"pid":31088,"hostname":"ubuntus","count":0,"msg":"Moderation: bans loaded from DB"}
+abr 23 21:18:10 ubuntus node[31088]: {"level":30,"time":1776979090591,"pid":31088,"hostname":"ubuntus","msg":"Inactivity check loop started"}
+abr 23 21:18:10 ubuntus node[31088]: {"level":30,"time":1776979090592,"pid":31088,"hostname":"ubuntus","enabled":true,"timeoutMs":2700000,"msg":"InactivityManager:>
+abr 23 21:18:11 ubuntus node[31088]: {"level":30,"time":1776979091330,"pid":31088,"hostname":"ubuntus","id":"beep-simple","packets":1,"msg":"CourtesyBeepManager: t>
+abr 23 21:18:11 ubuntus node[31088]: {"level":30,"time":1776979091417,"pid":31088,"hostname":"ubuntus","id":"85689c97-f378-4d36-9ca9-9f441d5b9ae2","addr":"192.168.>
+abr 23 21:18:11 ubuntus node[31088]: {"level":30,"time":1776979091417,"pid":31088,"hostname":"ubuntus","id":"85689c97-f378-4d36-9ca9-9f441d5b9ae2","addr":"192.168.>
+abr 23 21:18:12 ubuntus node[31088]: {"level":30,"time":1776979092106,"pid":31088,"hostname":"ubuntus","id":"beep-double","packets":3,"msg":"CourtesyBeepManager: t>
+abr 23 21:18:12 ubuntus node[31088]: {"level":30,"time":1776979092127,"pid":31088,"hostname":"ubuntus","id":"85689c97-f378-4d36-9ca9-9f441d5b9ae2","hex":"0a7800000>
+abr 23 21:18:12 ubuntus node[31088]: {"level":30,"time":1776979092177,"pid":31088,"hostname":"ubuntus","id":"cdbb9d48-755a-49f2-9053-e0f8d9bb14e9","addr":"192.168.>
+abr 23 21:18:12 ubuntus node[31088]: {"level":30,"time":1776979092177,"pid":31088,"hostname":"ubuntus","id":"cdbb9d48-755a-49f2-9053-e0f8d9bb14e9","addr":"192.168.>
+abr 23 21:18:12 ubuntus node[31088]: {"level":30,"time":1776979092260,"pid":31088,"hostname":"ubuntus","id":"cdbb9d48-755a-49f2-9053-e0f8d9bb14e9","hex":"0a7800000>
+abr 23 21:18:12 ubuntus node[31088]: {"level":30,"time":1776979092297,"pid":31088,"hostname":"ubuntus","id":"85689c97-f378-4d36-9ca9-9f441d5b9ae2","name":"0R-ASORA>
+abr 23 21:18:12 ubuntus node[31088]: {"level":30,"time":1776979092299,"pid":31088,"hostname":"ubuntus","id":"85689c97-f378-4d36-9ca9-9f441d5b9ae2","name":"0R-ASORA>
+abr 23 21:18:12 ubuntus node[31088]: {"level":30,"time":1776979092300,"pid":31088,"hostname":"ubuntus","id":"85689c97-f378-4d36-9ca9-9f441d5b9ae2","name":"0R-ASORA>
+abr 23 21:18:12 ubuntus node[31088]: {"level":30,"time":1776979092300,"pid":31088,"hostname":"ubuntus","to":"0R-IN70WN","joining":"0R-ASORAPA","msg":"eQSO TCP noti>
+abr 23 21:18:12 ubuntus node[31088]: {"level":30,"time":1776979092302,"pid":31088,"hostname":"ubuntus","id":"85689c97-f378-4d36-9ca9-9f441d5b9ae2","name":"0R-ASORA>
+abr 23 21:18:12 ubuntus node[31088]: {"level":30,"time":1776979092410,"pid":31088,"hostname":"ubuntus","id":"cdbb9d48-755a-49f2-9053-e0f8d9bb14e9","name":"0R-IN53S>
+abr 23 21:18:12 ubuntus node[31088]: {"level":30,"time":1776979092410,"pid":31088,"hostname":"ubuntus","id":"cdbb9d48-755a-49f2-9053-e0f8d9bb14e9","name":"0R-IN53S>
+abr 23 21:18:12 ubuntus node[31088]: {"level":30,"time":1776979092410,"pid":31088,"hostname":"ubuntus","id":"cdbb9d48-755a-49f2-9053-e0f8d9bb14e9","name":"0R-IN53S>
+abr 23 21:18:12 ubuntus node[31088]: {"level":30,"time":1776979092411,"pid":31088,"hostname":"ubuntus","to":"0R-IN70WN","joining":"0R-IN53SI","msg":"eQSO TCP notif>
+abr 23 21:18:12 ubuntus node[31088]: {"level":30,"time":1776979092411,"pid":31088,"hostname":"ubuntus","to":"0R-ASORAPA","joining":"0R-IN53SI","msg":"eQSO TCP noti>
+abr 23 21:18:12 ubuntus node[31088]: {"level":30,"time":1776979092411,"pid":31088,"hostname":"ubuntus","id":"cdbb9d48-755a-49f2-9053-e0f8d9bb14e9","name":"0R-IN53S>
+abr 23 21:18:13 ubuntus node[31088]: {"level":30,"time":1776979093022,"pid":31088,"hostname":"ubuntus","id":"beep-descend","packets":2,"msg":"CourtesyBeepManager: >
+abr 23 21:18:13 ubuntus node[31088]: {"level":30,"time":1776979093802,"pid":31088,"hostname":"ubuntus","id":"beep-roger","packets":2,"msg":"CourtesyBeepManager: to>
+abr 23 21:18:14 ubuntus node[31088]: {"level":30,"time":1776979094524,"pid":31088,"hostname":"ubuntus","id":"beep-cw-k","packets":7,"msg":"CourtesyBeepManager: ton>
+abr 23 21:18:37 ubuntus node[31088]: {"level":30,"time":1776979117780,"pid":31088,"hostname":"ubuntus","req":{"id":1,"method":"GET","url":"/"},"res":{"statusCode":>
+abr 23 21:18:37 ubuntus node[31088]: {"level":30,"time":1776979117896,"pid":31088,"hostname":"ubuntus","req":{"id":2,"method":"GET","url":"/assets/index-D5sNjUm2.c>
+abr 23 21:18:37 ubuntus node[31088]: {"level":30,"time":1776979117907,"pid":31088,"hostname":"ubuntus","req":{"id":3,"method":"GET","url":"/assets/index-DE4tocE-.j>
+abr 23 21:18:38 ubuntus node[31088]: {"level":30,"time":1776979118594,"pid":31088,"hostname":"ubuntus","req":{"id":4,"method":"GET","url":"/favicon.svg"},"res":{"s>
+abr 23 21:18:43 ubuntus node[31088]: {"level":30,"time":1776979123747,"pid":31088,"hostname":"ubuntus","req":{"id":5,"method":"GET","url":"/"},"res":{"statusCode":>
+abr 23 21:18:43 ubuntus node[31088]: {"level":30,"time":1776979123867,"pid":31088,"hostname":"ubuntus","req":{"id":6,"method":"GET","url":"/assets/index-DE4tocE-.j>
+abr 23 21:18:43 ubuntus node[31088]: {"level":30,"time":1776979123877,"pid":31088,"hostname":"ubuntus","req":{"id":7,"method":"GET","url":"/assets/index-D5sNjUm2.c>
+abr 23 21:18:44 ubuntus node[31088]: {"level":30,"time":1776979124347,"pid":31088,"hostname":"ubuntus","req":{"id":8,"method":"GET","url":"/favicon.svg"},"res":{"s>
+abr 23 21:18:54 ubuntus node[31088]: {"level":30,"time":1776979134382,"pid":31088,"hostname":"ubuntus","req":{"id":9,"method":"GET","url":"/"},"res":{"statusCode":>
+abr 23 21:18:54 ubuntus node[31088]: {"level":30,"time":1776979134607,"pid":31088,"hostname":"ubuntus","req":{"id":10,"method":"GET","url":"/assets/index-DE4tocE-.>
+abr 23 21:18:54 ubuntus node[31088]: {"level":30,"time":1776979134617,"pid":31088,"hostname":"ubuntus","req":{"id":11,"method":"GET","url":"/assets/index-D5sNjUm2.>
+abr 23 21:19:05 ubuntus node[31088]: {"level":30,"time":1776979145185,"pid":31088,"hostname":"ubuntus","req":{"id":12,"method":"GET","url":"/"},"res":{"statusCode">
+abr 23 21:19:05 ubuntus node[31088]: {"level":30,"time":1776979145304,"pid":31088,"hostname":"ubuntus","req":{"id":13,"method":"GET","url":"/assets/index-DE4tocE-.>
+abr 23 21:19:05 ubuntus node[31088]: {"level":30,"time":1776979145316,"pid":31088,"hostname":"ubuntus","req":{"id":14,"method":"GET","url":"/assets/index-D5sNjUm2.>
+abr 23 21:19:05 ubuntus node[31088]: {"level":30,"time":1776979145779,"pid":31088,"hostname":"ubuntus","req":{"id":15,"method":"GET","url":"/favicon.svg"},"res":{">
+abr 23 21:19:28 ubuntus node[31088]: {"level":30,"time":1776979168706,"pid":31088,"hostname":"ubuntus","req":{"id":16,"method":"GET","url":"/"},"res":{"statusCode">
+abr 23 21:19:28 ubuntus node[31088]: {"level":30,"time":1776979168800,"pid":31088,"hostname":"ubuntus","req":{"id":17,"method":"GET","url":"/assets/index-DE4tocE-.>
+abr 23 21:19:28 ubuntus node[31088]: {"level":30,"time":1776979168813,"pid":31088,"hostname":"ubuntus","req":{"id":18,"method":"GET","url":"/assets/index-D5sNjUm2.>
+abr 23 21:19:29 ubuntus node[31088]: {"level":30,"time":1776979169285,"pid":31088,"hostname":"ubuntus","req":{"id":19,"method":"GET","url":"/favicon.svg"},"res
