@@ -1,59 +1,69 @@
 /**
- * PlaybackProcessor — AudioWorklet para reproducción de audio GSM decodificado.
+ * PlaybackProcessor — AudioWorklet para reproduccion de audio GSM decodificado.
  *
- * Mantiene un buffer circular de muestras Float32 a 8kHz.
- * El proceso de reproducción lee del buffer a la tasa nativa del AudioContext
- * (normalmente 48kHz) usando interpolación lineal para upsamplear de 8kHz a nativo.
+ * Maquina de estados: IDLE → FILL → PLAY → IDLE
  *
- * Ventaja frente al scheduler (createBufferSource + source.start()):
- *  - Sin "resets" del scheduler: el jitter solo drena el buffer, no causa silencio
- *    salvo que el buffer llegue a cero.
- *  - Pre-fill configurable: con 1 segundo de pre-fill, absorbe hasta 1s de jitter
- *    de red/event-loop sin silencio audible.
- *  - Inmune a pausas del event loop JS: el AudioWorklet corre en un hilo separado
- *    de alta prioridad (audio thread), independiente del main thread.
+ * IDLE   : sin actividad, esperando inicio de transmision.
+ * FILL   : acumulando FILL_THRESHOLD muestras antes de empezar a reproducir
+ *           (pre-fill al comienzo de cada transmision).
+ * PLAY   : reproduciendo del buffer circular. Un underrun (buffer vacio) produce
+ *           silencio PROPORCIONAL al gap real, NO vuelve a modo FILL.
+ *           Tras IDLE_TIMEOUT_FRAMES de silencio continuo, regresa a IDLE para
+ *           detectar el inicio de la siguiente transmision.
+ *
+ * Por que este diseno:
+ *   - El worklet anterior (starved flag) re-entraba en modo FILL en cada underrun.
+ *     Gap de 350ms → 350ms de silencio + 300ms de re-fill = 650ms total. Peor que
+ *     el scheduler original con 500ms de jitter buffer.
+ *   - Con la nueva maquina de estados: gap de 350ms → 350ms de silencio → reanuda
+ *     inmediatamente cuando llega el siguiente paquete. El pre-fill solo se aplica
+ *     una vez al comienzo de cada transmision.
+ *   - IDLE_TIMEOUT_FRAMES de silencio (≈1.5s) distingue "fin de transmision" de
+ *     "jitter mid-TX". Si el gap es < 1.5s, el modo PLAY se mantiene y el proximo
+ *     paquete se reproduce sin overhead. Si el gap es > 1.5s, volvemos a IDLE para
+ *     aplicar el pre-fill correctamente en la siguiente transmision.
  */
 
-const BUFFER_SAMPLES = 8000;    // capacidad: 1s a 8kHz
-const SRC_RATE       = 8000;    // tasa de las muestras entrantes (GSM 06.10)
+const BUFFER_CAPACITY  = 8000;   // 1s a 8kHz: capacidad maxima circular
+const SRC_RATE         = 8000;   // tasa de muestras entrantes (GSM 06.10)
+const FILL_THRESHOLD   = 2400;   // 300ms a 8kHz: pre-fill al inicio de TX
+const MAX_BUFFER       = 4800;   // 600ms: limite anti-acumulacion (descarta entrantes si excede)
 
-// Pre-fill: esperar esta cantidad de muestras antes de empezar a reproducir.
-// 2400 muestras = 300ms a 8kHz. Absorbe jitter de hasta ~300ms sin silencio.
-// Valor pequeño para minimizar latencia; el buffer protege contra fluctuaciones
-// puntuales pero no acumula audio indefinidamente (no hay "cola creciente").
-const PRE_FILL_SAMPLES = 2400;
-
-// Limite maximo de buffer. Si hay mas de este numero de muestras acumuladas,
-// descartar las nuevas entrantes para evitar que la latencia crezca sin limite.
-// 4800 = 600ms: cubre rafagas de 3-4 paquetes seguidos del servidor.
-const MAX_BUFFER_SAMPLES = 4800;
+// Timeout de silencio continuo para regresar a IDLE.
+// A 48000 Hz, cada process() call = 128 muestras = ~2.67ms.
+// 1500ms / 2.67ms ≈ 562 frames. Usamos 560.
+// A 44100 Hz: 560 × 128/44100 ≈ 1624ms. Suficiente.
+const IDLE_TIMEOUT_FRAMES = 560; // ~1.5s de silencio continuo
 
 class PlaybackProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    this._buf       = new Float32Array(BUFFER_SAMPLES);
-    this._writeIdx  = 0;
-    this._readIdx   = 0;
-    this._available = 0;   // muestras 8kHz disponibles en el buffer
-    this._readFrac  = 0.0; // posicion fraccionaria para interpolacion
-    this._starved   = true; // true = esperando pre-fill, output silence
+    this._buf          = new Float32Array(BUFFER_CAPACITY);
+    this._writeIdx     = 0;
+    this._readIdx      = 0;
+    this._available    = 0;
+    this._readFrac     = 0.0;
+    this._state        = "idle";   // "idle" | "fill" | "play"
+    this._silentFrames = 0;        // frames consecutivos con underrun en modo play
 
     this.port.onmessage = ({ data }) => {
       if (data.type !== "push") return;
       const samples = new Float32Array(data.buffer);
       for (let i = 0; i < samples.length; i++) {
-        if (this._available < MAX_BUFFER_SAMPLES) {
-          // Solo aceptar si no hemos superado el maximo (anti-acumulacion).
-          // Descartar el resto para que la latencia no crezca indefinidamente.
+        if (this._available < MAX_BUFFER) {
           this._buf[this._writeIdx] = samples[i];
-          this._writeIdx = (this._writeIdx + 1) % BUFFER_SAMPLES;
+          this._writeIdx = (this._writeIdx + 1) % BUFFER_CAPACITY;
           this._available++;
         }
+        // Si el buffer supera MAX_BUFFER: descartar para evitar latencia creciente
       }
-      // Salir del modo starved cuando tenemos suficiente pre-fill
-      if (this._starved && this._available >= PRE_FILL_SAMPLES) {
-        this._starved = false;
+
+      // Transicion de estado al recibir datos
+      if (this._state === "idle") {
+        this._state = "fill";
       }
+      // En modo play: resetear contador de silencio (ha llegado audio nuevo)
+      this._silentFrames = 0;
     };
   }
 
@@ -61,37 +71,60 @@ class PlaybackProcessor extends AudioWorkletProcessor {
     const out = outputs[0]?.[0];
     if (!out) return true;
 
-    if (this._starved) {
-      // Esperando pre-fill: silencio
+    // ── IDLE: sin transmision activa ──────────────────────────────────────────
+    if (this._state === "idle") {
       out.fill(0);
       return true;
     }
 
-    // Ratio: cuantas muestras 8kHz consumir por muestra nativa
-    const step = SRC_RATE / sampleRate;
+    // ── FILL: acumulando pre-fill inicial ─────────────────────────────────────
+    if (this._state === "fill") {
+      if (this._available < FILL_THRESHOLD) {
+        out.fill(0);
+        return true;
+      }
+      // Pre-fill completo → empezar a reproducir
+      this._state = "play";
+    }
+
+    // ── PLAY: reproducir del buffer, silencio proporcional en underrun ────────
+    const step = SRC_RATE / sampleRate; // muestras 8kHz por muestra nativa
+    let underrun = false;
 
     for (let i = 0; i < out.length; i++) {
       if (this._available <= 1) {
-        // Underrun: volver a modo starved para re-hacer pre-fill
-        out[i] = 0;
-        this._starved = true;
-        // Rellenar el resto con silencio
-        for (let j = i + 1; j < out.length; j++) out[j] = 0;
+        // Buffer vacio: silencio. No volver a FILL; reanudar en cuanto lleguen datos.
+        for (let j = i; j < out.length; j++) out[j] = 0;
+        underrun = true;
         break;
       }
 
       // Interpolacion lineal entre muestra actual y siguiente
       const i0 = this._readIdx;
-      const i1 = (this._readIdx + 1) % BUFFER_SAMPLES;
+      const i1 = (this._readIdx + 1) % BUFFER_CAPACITY;
       out[i] = this._buf[i0] + (this._buf[i1] - this._buf[i0]) * this._readFrac;
 
-      // Avanzar posicion fraccionaria
       this._readFrac += step;
       while (this._readFrac >= 1.0) {
         this._readFrac -= 1.0;
-        this._readIdx = (this._readIdx + 1) % BUFFER_SAMPLES;
+        this._readIdx = (this._readIdx + 1) % BUFFER_CAPACITY;
         if (this._available > 0) this._available--;
       }
+    }
+
+    if (underrun) {
+      this._silentFrames++;
+      // Si llevamos ~1.5s de silencio continuo: fin de transmision → volver a IDLE
+      if (this._silentFrames >= IDLE_TIMEOUT_FRAMES) {
+        this._state = "idle";
+        this._silentFrames = 0;
+        this._available = 0;
+        this._writeIdx = 0;
+        this._readIdx = 0;
+        this._readFrac = 0.0;
+      }
+    } else {
+      this._silentFrames = 0;
     }
 
     return true;

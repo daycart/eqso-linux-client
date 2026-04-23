@@ -90,7 +90,7 @@ export function useAudio(): UseAudioReturn {
 
     const doInit = async () => {
       try {
-        const url = import.meta.env.BASE_URL + "playback-worklet.js?v=2";
+        const url = import.meta.env.BASE_URL + "playback-worklet.js?v=3";
         await ctx.audioWorklet.addModule(url);
         const node = new AudioWorkletNode(ctx, PLAYBACK_WORKLET_NAME, {
           numberOfInputs:  0,
