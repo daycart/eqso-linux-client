@@ -45,7 +45,7 @@ class MicProcessor extends AudioWorkletProcessor {
     // ── AGC state ─────────────────────────────────────────────────────────
     const blockMs = (128 / nativeRate) * 1000;
     this._agcGain    = 1.0;    // safe start: avoids first-PTT saturation spike
-    this._agcTarget  = 0.04;   // 4 % RMS → peak ~12 % FS (first green segment)
+    this._agcTarget  = 0.12;   // 12 % RMS → peak ~36 % FS — relay TX needs higher drive
     this._agcMaxGain = 5.0;    // cap: limits compression ratio, avoids AGC pumping
     this._agcMinGain = 0.1;
     this._agcRelease = Math.exp(-blockMs / 80);    // fast drop: 80 ms
