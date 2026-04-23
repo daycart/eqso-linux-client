@@ -1,0 +1,25 @@
+abr 23 20:40:25 ubuntus eqso-relay-[29378]: [ptt] 2026-04-23T20:40:25.493Z Iniciando PTT serial: /dev/ttyACM0 (rts)
+abr 23 20:40:25 ubuntus eqso-relay-[29378]: [audio] 2026-04-23T20:40:25.562Z arecord -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --period-size=480 --buffer-size=1920
+abr 23 20:40:25 ubuntus eqso-relay-[29378]: [main] 2026-04-23T20:40:25.589Z Conectando a 127.0.0.1:2171 como "0R-IN70WN" en sala "CB"\Uffffffff
+abr 23 20:40:25 ubuntus eqso-relay-[29378]: [control] 2026-04-23T20:40:25.676Z Control HTTP escuchando en http://127.0.0.1:8009
+abr 23 20:40:25 ubuntus eqso-relay-[29378]: [audio] 2026-04-23T20:40:25.765Z [arecord] chunk#1: 502 muestras (1004 bytes) \Uffffffff size inesperado
+abr 23 20:40:25 ubuntus eqso-relay-[29378]: [eqso] 2026-04-23T20:40:25.822Z TCP conectado a 127.0.0.1:2171
+abr 23 20:40:25 ubuntus eqso-relay-[29378]: [audio] 2026-04-23T20:40:25.847Z [arecord] chunk#2: 960 muestras (1920 bytes) \Uffffffff size inesperado
+abr 23 20:40:25 ubuntus eqso-relay-[29378]: [eqso] 2026-04-23T20:40:25.909Z Handshake recibido \Uffffffff conexion establecida
+abr 23 20:40:25 ubuntus eqso-relay-[29378]: [main] 2026-04-23T20:40:25.910Z Conectado \Uffffffff enviando JOIN\Uffffffff
+abr 23 20:40:25 ubuntus eqso-relay-[29378]: [eqso] 2026-04-23T20:40:25.921Z JOIN enviado: callsign="0R-IN70WN" sala="CB"
+abr 23 20:40:25 ubuntus eqso-relay-[29378]: [eqso] 2026-04-23T20:40:25.925Z Salas disponibles: GENERAL, CB, ASORAPA, PRUEBAS
+abr 23 20:40:25 ubuntus eqso-relay-[29378]: [main] 2026-04-23T20:40:25.930Z Salas: GENERAL, CB, ASORAPA, PRUEBAS
+abr 23 20:40:25 ubuntus eqso-relay-[29378]: [audio] 2026-04-23T20:40:25.930Z [arecord] chunk#3: 480 muestras (960 bytes) \Uffffffff period=480 OK
+abr 23 20:40:25 ubuntus eqso-relay-[29378]: [main] 2026-04-23T20:40:25.951Z Sala: 0R-IN52OO se ha unido
+abr 23 20:40:25 ubuntus eqso-relay-[29378]: [main] 2026-04-23T20:40:25.952Z Sala: 0R-IN53SI se ha unido
+abr 23 20:40:25 ubuntus eqso-relay-[29378]: [main] 2026-04-23T20:40:25.952Z Sala: 0R-ASORAPA se ha unido
+abr 23 20:40:25 ubuntus eqso-relay-[29378]: [main] 2026-04-23T20:40:25.952Z Sala: 30RCI184 se ha unido
+abr 23 20:40:25 ubuntus eqso-relay-[29378]: [main] 2026-04-23T20:40:25.953Z Sala: 0R-IN70WN se ha unido
+abr 23 20:40:25 ubuntus eqso-relay-[29378]: [ptt] 2026-04-23T20:40:25.953Z PTT serial listo (/dev/ttyACM0, rts)
+abr 23 20:40:25 ubuntus eqso-relay-[29378]: [audio] 2026-04-23T20:40:25.978Z [arecord] chunk#4: 480 muestras (960 bytes) \Uffffffff period=480 OK
+abr 23 20:40:26 ubuntus eqso-relay-[29378]: [audio] 2026-04-23T20:40:26.042Z [arecord] chunk#5: 480 muestras (960 bytes) \Uffffffff period=480 OK
+abr 23 20:40:26 ubuntus eqso-relay-[29378]: [audio] 2026-04-23T20:40:26.100Z [arecord] chunk#6: 480 muestras (960 bytes) \Uffffffff period=480 OK
+abr 23 20:40:26 ubuntus eqso-relay-[29378]: [audio] 2026-04-23T20:40:26.157Z [arecord] chunk#7: 480 muestras (960 bytes) \Uffffffff period=480 OK
+abr 23 20:40:26 ubuntus eqso-relay-[29378]: [audio] 2026-04-23T20:40:26.813Z [arecord] chunk#8: 480 muestras (960 bytes) \Uffffffff period=480 OK
+abr 23 20:40:30 ubuntus eqso-relay-[29378]: [audio] 2026-04-23T20:40:30.586Z [nivel] pico RMS=2099 (-23.9 dBFS)  VOXumbral=600  gain=0.4
