@@ -62163,7 +62163,7 @@ function processSingleByte(state, byte) {
               safeWrite(state, beepPackets[i++]);
               if (i < beepPackets.length) setTimeout(sendBeep, 120);
             };
-            setTimeout(sendBeep, 250);
+            setTimeout(sendBeep, 1e3);
           }
         }
       }
