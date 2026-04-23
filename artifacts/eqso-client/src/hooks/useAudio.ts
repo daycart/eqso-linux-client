@@ -28,11 +28,12 @@ const MAX_QUEUE_AHEAD_SEC = 3.0;
 
 // Jitter buffer: cuando el scheduler se reinicia (primera transmision o gap grande),
 // se adelanta JITTER_BUFFER_SEC segundos respecto a "now" en lugar de snap exacto.
-// Esto absorbe retrasos de hasta 200ms en la entrega de paquetes (jitter del event
-// loop del servidor o red) sin silencio audible.
+// Esto absorbe retrasos de hasta JITTER_BUFFER_SEC ms en la entrega de paquetes
+// (jitter del event loop del servidor, FFmpeg, o red WiFi) sin silencio audible.
 // Sin buffer: cualquier paquete >0ms tarde => silencio del mismo tamanyo.
-// Con 200ms: paquetes que lleguen hasta 200ms tarde => sin silencio.
-const JITTER_BUFFER_SEC = 0.20;
+// Con 500ms: paquetes que lleguen hasta 500ms tarde => sin silencio.
+// La latencia añadida al inicio de cada transmision es exactamente JITTER_BUFFER_SEC.
+const JITTER_BUFFER_SEC = 0.50;
 
 // Warmup: discard the first 80 ms of mic audio to absorb hardware startup pop.
 // 80 ms is enough; 500 ms was wasting ~400 ms of every PTT press.

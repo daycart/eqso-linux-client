@@ -427,9 +427,21 @@ export function startTcpServer(port: number): net.Server {
     // Cuando el relay daemon envía GSM, ffmpeg lo decodifica a PCM y emite
     // el evento "pcm" que aquí se reenvía a los clientes WS del navegador.
     const tcpDecoder = new GsmFfmpegDecoder();
+    let lastPcmMs = 0;
+    let pktCount = 0;
     tcpDecoder.on("pcm", (pcm: Int16Array) => {
       const client = roomManager.getClient(state.id);
       if (client?.room) {
+        const nowMs = Date.now();
+        pktCount++;
+        if (lastPcmMs > 0) {
+          const gap = nowMs - lastPcmMs;
+          // Log si el intervalo se desvía más de 40ms del ideal 120ms
+          if (gap > 160 || gap < 80) {
+            logger.warn({ pkt: pktCount, gap, client: client.name }, "pcm gap fuera de rango (esperado ~120ms)");
+          }
+        }
+        lastPcmMs = nowMs;
         const float32 = pcmToFloat32Normalized(pcm);
         const wsPkt = Buffer.concat([Buffer.from([0x11]), Buffer.from(float32.buffer)]);
         roomManager.broadcastBinToLocalWsClients(client.room, wsPkt, state.id);
