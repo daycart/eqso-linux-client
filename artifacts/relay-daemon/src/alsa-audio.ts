@@ -30,7 +30,13 @@ import {
 const PCM_CHUNK_SAMPLES = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET; // 960 muestras = 1920 bytes
 
 // Jitter buffer para RX: acumula muestras antes de abrir aplay.
-const JITTER_PRE_BUFFER_SAMPLES = 960;
+// 1920 = 2 paquetes = 240ms. Permite absorber variaciones de timing al arrancar.
+const JITTER_PRE_BUFFER_SAMPLES = 1920;
+
+// Silencio inyectado si no llega audio en SILENCE_THRESHOLD_MS ms.
+// Mantiene el buffer DMA de aplay no vacío y evita underruns por jitter de red.
+const SILENCE_THRESHOLD_MS  = 100; // ms sin audio → inyectar silencio
+const SILENCE_INJECT_BYTES  = 1920; // 960 muestras × 2 bytes = 120ms a 8kHz S16LE
 
 export class AlsaAudio extends EventEmitter {
   private recorder: ChildProcessWithoutNullStreams | null = null;
@@ -51,6 +57,11 @@ export class AlsaAudio extends EventEmitter {
   private levelClipCount = 0;
   private levelSamples   = 0;
   private levelTimer: ReturnType<typeof setInterval> | null = null;
+  // Inyeccion de silencio: previene underruns de aplay cuando hay gaps de red
+  private silenceTimer:      ReturnType<typeof setInterval> | null = null;
+  private lastAudioWriteMs = 0;
+  // Diagnostico arecord: log tamaño de los primeros chunks (verifica period=480)
+  private arecordChunkCount = 0;
 
   constructor(private cfg: AudioConfig) {
     super();
@@ -66,6 +77,7 @@ export class AlsaAudio extends EventEmitter {
   async stop(): Promise<void> {
     this.stopping = true;
     if (this.levelTimer) { clearInterval(this.levelTimer); this.levelTimer = null; }
+    this.stopSilenceInjection();
 
     // arecord: SIGTERM es suficiente (lectura USB no causa D-state)
     this.stopRecorder();
@@ -187,7 +199,10 @@ export class AlsaAudio extends EventEmitter {
     if (this.pcmChunkCount <= 5)
       log(`[playPcm] chunk#${this.pcmChunkCount} → escribiendo ${samples.length} muestras a aplay stdin`);
     const buf = Buffer.from(samples.buffer, samples.byteOffset, samples.byteLength);
-    try { this.player?.stdin.write(buf); } catch { /* player may have closed */ }
+    try {
+      this.player?.stdin.write(buf);
+      this.lastAudioWriteMs = Date.now();
+    } catch { /* player may have closed */ }
   }
 
   // ── arecord ───────────────────────────────────────────────────────────────
@@ -250,8 +265,14 @@ export class AlsaAudio extends EventEmitter {
     });
 
     this.recorder.stdout.on("data", (chunk: Buffer) => {
+      this.arecordChunkCount++;
       const gain = this.cfg.inputGain;
       const sampleCount = Math.floor(chunk.length / 2);
+      // Primeros 8 chunks: diagnostico para verificar que period=480 funciona.
+      // Con period=480 cada chunk debe ser exactamente 480 muestras (960 bytes).
+      // Si ALSA redondea a 512, los chunks seran 512 muestras (1024 bytes).
+      if (this.arecordChunkCount <= 8)
+        log(`[arecord] chunk#${this.arecordChunkCount}: ${sampleCount} muestras (${chunk.length} bytes) — ${sampleCount === 480 ? "period=480 OK" : sampleCount === 512 ? "ALSA redondeó a 512 (drift!)" : `size inesperado`}`);
       const pcm = new Int16Array(sampleCount);
       let sumSq = 0;
       for (let i = 0; i < sampleCount; i++) {
@@ -361,7 +382,7 @@ export class AlsaAudio extends EventEmitter {
       "-r", "8000",
       "-c", "1",
       "-q",
-      "--buffer-size=2048",
+      "--buffer-size=4096",
       "--period-size=256",
     ];
     log(`aplay ${args.join(" ")}`);
@@ -381,6 +402,7 @@ export class AlsaAudio extends EventEmitter {
       log(`[aplay] Terminado (code ${code})`);
       if (this.player === p) {
         this.player = null;
+        this.stopSilenceInjection();
         // Aplay cerrado mientras seguia activo (underrun severo, etc.)
         // Reanudar arecord si corresponde.
         if (this.recorderSuspended && !this.stopping && !this.playerStarting && !this.drainPlayer) {
@@ -396,9 +418,15 @@ export class AlsaAudio extends EventEmitter {
       try { p.stdin.write(buf); } catch { /* ignore */ }
       this.jitterBuf = new Int16Array(0);
     }
+
+    // Iniciar inyeccion de silencio: rellena el buffer de aplay cuando no llegan
+    // paquetes de red, evitando underruns y los silencios que producen.
+    this.startSilenceInjection();
   }
 
   private stopPlayer(): void {
+    this.stopSilenceInjection();
+
     if (this.jitterBuf.length > 0 && this.player && !this.player.killed) {
       const buf = Buffer.from(this.jitterBuf.buffer, this.jitterBuf.byteOffset, this.jitterBuf.byteLength);
       try { this.player.stdin.write(buf); } catch { /* ignore */ }
@@ -444,6 +472,42 @@ export class AlsaAudio extends EventEmitter {
       this.recorderSuspended = false;
       log("[audio] Semi-duplex: reanudando arecord (player ya cerrado)");
       this.startRecorder();
+    }
+  }
+
+  // ── Inyeccion de silencio ─────────────────────────────────────────────────
+
+  /**
+   * Arranca un timer que, si no llega audio real en SILENCE_THRESHOLD_MS ms,
+   * escribe silencio en aplay stdin para mantener el buffer DMA lleno.
+   * Esto previene los underruns causados por jitter de red o gaps entre
+   * transmisiones, que se manifestaban como silencios de hasta 2s audibles.
+   */
+  private startSilenceInjection(): void {
+    this.stopSilenceInjection();
+    this.lastAudioWriteMs = Date.now();
+    this.silenceTimer = setInterval(() => {
+      if (!this.player || this.player.killed) {
+        this.stopSilenceInjection();
+        return;
+      }
+      const gap = Date.now() - this.lastAudioWriteMs;
+      if (gap >= SILENCE_THRESHOLD_MS) {
+        const silence = Buffer.alloc(SILENCE_INJECT_BYTES, 0);
+        try {
+          this.player.stdin.write(silence);
+          this.lastAudioWriteMs = Date.now();
+        } catch {
+          this.stopSilenceInjection();
+        }
+      }
+    }, 60);
+  }
+
+  private stopSilenceInjection(): void {
+    if (this.silenceTimer) {
+      clearInterval(this.silenceTimer);
+      this.silenceTimer = null;
     }
   }
 
