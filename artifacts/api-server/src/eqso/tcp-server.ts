@@ -150,9 +150,8 @@ function processSingleByte(state: TcpClientState, byte: number): void {
         state.flushPaceQueue?.();
 
         // Tono de cortesía: solo si es un cliente relay (radio CB).
-        // El relay-daemon descarta audio entrante durante 800ms tras soltar PTT
-        // (POST_TX_SUPPRESS_MS) para evitar eco. Esperamos 1000ms para que el
-        // beep llegue justo después de que expire esa ventana de supresión.
+        // El relay-daemon tiene POST_TX_SUPPRESS_MS=100ms. Con 300ms de espera
+        // el beep llega 200ms después de que expire la ventana de supresión.
         if (client.isRelay) {
           const beepPackets = courtesyBeepManager.getPackets();
           if (beepPackets.length > 0) {
@@ -162,7 +161,7 @@ function processSingleByte(state: TcpClientState, byte: number): void {
               safeWrite(state, beepPackets[i++]!);
               if (i < beepPackets.length) setTimeout(sendBeep, 120);
             };
-            setTimeout(sendBeep, 1000);
+            setTimeout(sendBeep, 300);
           }
         }
       }

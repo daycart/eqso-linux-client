@@ -45,15 +45,11 @@ const RX_HANG_MS = 400;
 // ─── Supresion post-TX (anti-eco del servidor) ────────────────────────────────
 // El relay NO recibe su propio audio de vuelta del servidor (el TCP server
 // excluye al emisor de broadcastToTcpAndRelays con excludeId=state.id). Por
-// tanto, el relay nunca reproduce su propio eco. Sin embargo, durante el
-// voxHangMs (3s), el VOX mantiene pttActive=true y el TX_GATE impide enviar
-// silencio. Cuando el VOX baja el PTT, el servidor puede tener paquetes del
-// relay en el decoder queue de FFmpeg; con el flush del servidor esos paquetes
-// llegan al navegador antes que ptt_released_remote. POST_TX_SUPPRESS_MS es
-// el margen de guarda para descartar paquetes del servidor entre el 0x0d del
-// relay y cualquier audio residual de red. 800ms es suficiente.
+// tanto, el relay nunca reproduce su propio eco. Ya no hay buffer FFmpeg que
+// retrase paquetes. Un guarda mínimo de 100ms cubre jitter de red residual
+// sin bloquear el beep de cortesía (que llega 300ms tras el 0x0d).
 let postTxSuppressUntil = 0;
-const POST_TX_SUPPRESS_MS = 800;
+const POST_TX_SUPPRESS_MS = 100;
 
 // ─── Supresion post-RX (anti-feedback acustico tras reproduccion) ─────────────
 // Tras terminar de reproducir audio del servidor (web client, etc.), el altavoz
@@ -109,15 +105,11 @@ const serialPtt = new SerialPtt(cfg.ptt);
 const audio = new AlsaAudio(cfg.audio);
 const vox   = new Vox(cfg.audio.voxThresholdRms, cfg.audio.voxHangMs);
 
-// Gate de transmision: nivel minimo para enviar audio al servidor.
-// El VOX mantiene pttActive=true durante voxHangMs incluso cuando el nivel
-// baja de voxThresholdRms. Durante ese hang, el audio puede estar en el rango
-// 0-voxThreshold (ruido de fondo). Si se envía, el navegador acumula ruido en
-// su cola y lo reproduce sobre el audio siguiente = "eco que pisa".
-// TX_GATE = voxThreshold - 100: durante el hang prácticamente nada pasa
-// (suelo RMS≈4-6), mientras que la voz activa (>voxThreshold) sí pasa.
-// Derivarlo del config permite ajustar voxThreshold sin cambiar código.
-const TX_GATE_RMS = Math.max(0, cfg.audio.voxThresholdRms - 100);
+// Gate de transmision: nivel mínimo para enviar un paquete.
+// Evita enviar silencio absoluto durante el colgado del VOX.
+// Valor por defecto 50 (muy bajo): no corta voz suave pero descarta silencio
+// total (suelo RMS≈4-6 sin señal). Configurable en txGateRms.
+const TX_GATE_RMS = cfg.audio.txGateRms ?? 50;
 let latestPcmRms = 0;
 
 // Errores de audio (ej: arecord crashea por ALSA no disponible).

@@ -7,6 +7,10 @@ export interface AudioConfig {
   vox: boolean;
   voxThresholdRms: number;
   voxHangMs: number;
+  /** Gate de TX: RMS mínimo para enviar un paquete durante el VOX hang.
+   *  0 = sin gate (envía todo durante VOX active). Por defecto 50 (elimina
+   *  silencio absoluto sin cortar voz suave). */
+  txGateRms: number;
   inputGain: number;
   outputGain: number;
 }
@@ -52,6 +56,7 @@ const DEFAULTS: RelayConfig = {
     vox: true,
     voxThresholdRms: 600,
     voxHangMs: 1000,
+    txGateRms: 50,
     inputGain: 1.0,
     outputGain: 1.0,
   },
