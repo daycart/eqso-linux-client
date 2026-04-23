@@ -62283,12 +62283,14 @@ async function handleJoin(state, name, room, message, password) {
     state.socket.destroy();
     return;
   }
-  let isRelay = false;
-  try {
-    const [user] = await db.select({ isRelay: usersTable.isRelay }).from(usersTable).where(eq(usersTable.callsign, name.toUpperCase())).limit(1);
-    isRelay = user?.isRelay ?? false;
-  } catch (err) {
-    logger.warn({ err, name }, "TCP handleJoin: DB isRelay lookup failed");
+  let isRelay = name.toUpperCase().startsWith("0R-");
+  if (!isRelay) {
+    try {
+      const [user] = await db.select({ isRelay: usersTable.isRelay }).from(usersTable).where(eq(usersTable.callsign, name.toUpperCase())).limit(1);
+      isRelay = user?.isRelay ?? false;
+    } catch (err) {
+      logger.warn({ err, name }, "TCP handleJoin: DB isRelay lookup failed");
+    }
   }
   const client = roomManager.getClient(state.id);
   if (client) {
