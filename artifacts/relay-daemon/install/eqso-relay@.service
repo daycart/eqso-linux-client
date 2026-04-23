@@ -34,13 +34,24 @@ Environment=NODE_ENV=production
 # Ruta al daemon compilado (ajustar si se instala en otro lugar)
 WorkingDirectory=/opt/eqso-asorapa/artifacts/relay-daemon
 
-# Pre-arranque: liberar cualquier proceso aplay/arecord residual y resetear el
-# modulo USB audio.  Esto es necesario cuando un aplay anterior quedo bloqueado
-# en D-state (sleep ininterrumpible en el driver snd_usb_audio): ni siquiera
-# SIGKILL puede matar un proceso en D-state, pero descargar y recargar el modulo
-# del kernel fuerza la liberacion del dispositivo ALSA antes de arrancar.
-# Se ejecuta como root (prefijo '+') para poder usar modprobe.
-ExecStartPre=+/bin/sh -c 'pkill -KILL -x aplay 2>/dev/null; pkill -KILL -x arecord 2>/dev/null; sleep 0.5; modprobe -r snd_usb_audio 2>/dev/null || true; sleep 0.3; modprobe snd_usb_audio 2>/dev/null || true; sleep 1'
+# Pre-arranque: liberar el dispositivo USB audio antes de arrancar.
+# Cuando un aplay anterior queda en D-state (sleep ininterrumpible en el
+# driver snd_usb_audio), 'modprobe -r' falla ("Module is in use").
+# La solucion es resetear el dispositivo USB via sysfs/authorized:
+#   echo 0 > .../authorized  → el kernel desconecta el USB, el D-state
+#                               process recibe ENODEV y muere inmediatamente
+#   sleep 1                  → esperar a que muera y que udev re-enumere
+#   echo 1 > .../authorized  → reconecta el dispositivo USB al kernel
+# Se ejecuta como root (prefijo '+') para poder escribir en /sys.
+ExecStartPre=+/bin/sh -c '\
+  pkill -KILL -x aplay 2>/dev/null; pkill -KILL -x arecord 2>/dev/null; \
+  for d in /sys/bus/usb/devices/*/; do \
+    if grep -qiE "audio|CM108|C-Media" "${d}product" 2>/dev/null; then \
+      echo "eqso-relay-pre: reseteando USB $(cat ${d}product)" >&2; \
+      echo 0 > "${d}authorized" 2>/dev/null && sleep 1 && echo 1 > "${d}authorized" 2>/dev/null; \
+    fi; \
+  done; \
+  sleep 1'
 ExecStart=/usr/bin/node --enable-source-maps dist/main.mjs
 
 # Reinicio automatico: siempre, excepto si se para manualmente
@@ -70,9 +81,15 @@ KillMode=control-group
 KillSignal=SIGKILL
 TimeoutStopSec=5
 
-# Limpieza post-parada: mata procesos residuales y descarga/recarga el modulo
-# USB audio para liberar cualquier proceso en D-state que siga reteniendo ALSA.
-ExecStopPost=+/bin/sh -c 'pkill -KILL -x aplay 2>/dev/null; pkill -KILL -x arecord 2>/dev/null; sleep 0.5; modprobe -r snd_usb_audio 2>/dev/null || true; sleep 0.3; modprobe snd_usb_audio 2>/dev/null || true'
+# Limpieza post-parada: reset USB via sysfs (mismo metodo que ExecStartPre).
+ExecStopPost=+/bin/sh -c '\
+  pkill -KILL -x aplay 2>/dev/null; pkill -KILL -x arecord 2>/dev/null; \
+  for d in /sys/bus/usb/devices/*/; do \
+    if grep -qiE "audio|CM108|C-Media" "${d}product" 2>/dev/null; then \
+      echo 0 > "${d}authorized" 2>/dev/null && sleep 0.5 && echo 1 > "${d}authorized" 2>/dev/null; \
+    fi; \
+  done; \
+  true'
 
 [Install]
 WantedBy=multi-user.target
