@@ -60863,6 +60863,519 @@ var EqsoProxy = class extends EventEmitter2 {
   }
 };
 
+// src/eqso/gsm610.ts
+function GSM_ADD(a, b) {
+  const s = a + b | 0;
+  if (a > 0 && b > 0 && s < 0) return 32767;
+  if (a < 0 && b < 0 && s > 0) return -32768;
+  return s;
+}
+function GSM_MULT(a, b) {
+  if (a === -32768 && b === -32768) return 32767;
+  return a * b >> 15 | 0;
+}
+function GSM_MULT_R(a, b) {
+  if (a === -32768 && b === -32768) return 32767;
+  return a * b + 16384 >> 15 | 0;
+}
+function SASR(x, by) {
+  return x >> by | 0;
+}
+function GSM_ABS(x) {
+  return x < 0 ? x === -32768 ? 32767 : -x : x;
+}
+function CLIP(x, lo, hi) {
+  return x < lo ? lo : x > hi ? hi : x;
+}
+function norm32(x) {
+  if (x === 0) return 0;
+  if (x < 0) x = ~x;
+  let n = 0;
+  if ((x & 4294901760) === 0) {
+    n += 16;
+    x <<= 16;
+  }
+  if ((x & 4278190080) === 0) {
+    n += 8;
+    x <<= 8;
+  }
+  if ((x & 4026531840) === 0) {
+    n += 4;
+    x <<= 4;
+  }
+  if ((x & 3221225472) === 0) {
+    n += 2;
+    x <<= 2;
+  }
+  if ((x & 2147483648) === 0) {
+    n += 1;
+  }
+  return n;
+}
+function Autocorrelation(s) {
+  let smax = 0;
+  for (let i = 0; i < 160; i++) {
+    const a = GSM_ABS(s[i]);
+    if (a > smax) smax = a;
+  }
+  let scalauto = 0;
+  if (smax !== 0) {
+    let tmp = smax << 16 | 0;
+    if (tmp < 0) tmp = ~tmp;
+    const n = norm32(tmp);
+    scalauto = 4 - n;
+  }
+  const fasr = new Int16Array(160);
+  if (scalauto > 0) {
+    const factor = SASR(32767, scalauto - 1);
+    for (let i = 0; i < 160; i++) fasr[i] = GSM_MULT(s[i], factor);
+  } else {
+    for (let i = 0; i < 160; i++) fasr[i] = SASR(s[i], -scalauto);
+  }
+  const L_ACF = new Array(9).fill(0);
+  for (let k = 0; k <= 8; k++) {
+    let acc = 0;
+    for (let i = k; i < 160; i++) acc += fasr[i] * fasr[i - k];
+    L_ACF[k] = acc | 0;
+  }
+  return L_ACF;
+}
+function Reflection_coefficients(L_ACF) {
+  const r = new Int16Array(8);
+  const P = new Int16Array(9);
+  const K = new Int16Array(9);
+  if (L_ACF[0] === 0) return r;
+  const n = norm32(L_ACF[0]);
+  let temp;
+  for (let i = 0; i <= 8; i++) {
+    P[i] = SASR(L_ACF[i], 32 - 16 - n) | 0;
+  }
+  for (let i = 1; i <= 8; i++) K[i] = P[i];
+  for (let idx = 1; idx <= 8; idx++) {
+    if (P[0] === 0) break;
+    temp = GSM_ABS(P[0]);
+    if (temp === 0) {
+      r[idx - 1] = 0;
+      break;
+    }
+    if (K[idx] < 0) {
+      r[idx - 1] = CLIP(SASR(-K[idx], 0), -32768, 32767);
+    } else {
+      r[idx - 1] = CLIP(SASR(-K[idx], 0), -32768, 32767);
+    }
+    {
+      let num = K[idx];
+      let den = P[0];
+      if (den === 0) {
+        r[idx - 1] = 0;
+      } else {
+        let neg = false;
+        if (num < 0) {
+          neg = !neg;
+          num = -num;
+        }
+        if (den < 0) {
+          neg = !neg;
+          den = -den;
+        }
+        if (num >= den) {
+          r[idx - 1] = neg ? -32767 : 32767;
+        } else {
+          let q = 0;
+          for (let i = 0; i < 15; i++) {
+            num <<= 1;
+            q <<= 1;
+            if (num >= den) {
+              q |= 1;
+              num -= den;
+            }
+          }
+          r[idx - 1] = neg ? -q : q;
+        }
+      }
+    }
+    if (idx === 8) break;
+    const rn = r[idx - 1];
+    for (let i = 0; i <= 8 - idx; i++) {
+      P[i] = GSM_ADD(P[i], GSM_MULT_R(rn, K[i + 1]));
+    }
+    for (let i = 1; i <= 8 - idx; i++) {
+      K[i] = GSM_ADD(K[i + 1], GSM_MULT_R(rn, P[i]));
+    }
+  }
+  return r;
+}
+function Transformation_to_Log_Area_Ratios(r) {
+  const LAR = new Int16Array(8);
+  for (let i = 0; i < 8; i++) {
+    const ri = r[i];
+    const a = GSM_ABS(ri);
+    let lar;
+    if (a < 22118) {
+      lar = SASR(ri, 1);
+    } else if (a < 31130) {
+      lar = ri < 0 ? -CLIP(-ri - 11059, 0, 32767) : CLIP(ri - 11059, 0, 32767);
+      lar = GSM_ADD(SASR(ri, 2), ri < 0 ? -11059 / 2 : 11059 / 2);
+      lar = SASR(GSM_ADD(ri, ri < 0 ? 8 : -8), 2) + (ri < 0 ? -3276 : 3276);
+    } else {
+      lar = ri < 0 ? -32767 : 32767;
+    }
+    LAR[i] = lar;
+  }
+  return LAR;
+}
+function Quantization_and_coding(LAR) {
+  const LARc = new Int16Array(8);
+  const steps = [
+    [20480, 0, 31, -32],
+    [20480, 0, 31, -32],
+    [20480, 2048, 15, -16],
+    [20480, -2560, 15, -16],
+    [13964, 94, 7, -8],
+    [15360, -1792, 7, -8],
+    [8533, -341, 3, -4],
+    [9036, -1144, 3, -4]
+  ];
+  for (let i = 0; i < 8; i++) {
+    const [A, B, MAC, MIC] = steps[i];
+    let temp = GSM_MULT(A, LAR[i]);
+    temp = GSM_ADD(temp, B);
+    LARc[i] = CLIP(temp, MIC, MAC);
+  }
+  return LARc;
+}
+function gsm_LPC_Analysis(s) {
+  const L_ACF = Autocorrelation(s);
+  const r = Reflection_coefficients(L_ACF);
+  const LAR = Transformation_to_Log_Area_Ratios(r);
+  return Quantization_and_coding(LAR);
+}
+function LARc_to_LARp(LARc) {
+  const LARp = new Int16Array(8);
+  const steps = [
+    [13107, 0],
+    [13107, 0],
+    [13107, -1536],
+    [13107, 1792],
+    [19223, -66],
+    [17476, 1344],
+    [31454, 256],
+    [29708, 856]
+  ];
+  for (let i = 0; i < 8; i++) {
+    const [A, B] = steps[i];
+    LARp[i] = CLIP(GSM_ADD(GSM_MULT(A, LARc[i]), B), -32767, 32767);
+  }
+  return LARp;
+}
+function LARp_to_rp(LARp) {
+  for (let i = 0; i < 8; i++) {
+    let temp = LARp[i];
+    const neg = temp < 0;
+    if (neg) temp = temp === -32768 ? 32767 : -temp;
+    let rp;
+    if (temp < 11059) rp = temp << 1;
+    else if (temp < 20070) rp = GSM_ADD(temp, 11059);
+    else rp = GSM_ADD(SASR(temp, 2), 26112);
+    LARp[i] = neg ? -rp : rp;
+  }
+}
+function LARc_to_r(LARc) {
+  const rrp = LARc_to_LARp(LARc);
+  LARp_to_rp(rrp);
+  return rrp;
+}
+function parcorAnalysis(rrp, u, s, d, sOffset, dOffset, count2) {
+  for (let k = 0; k < count2; k++) {
+    let di = s[sOffset + k];
+    for (let i = 7; i >= 0; i--) {
+      di = GSM_ADD(di, -GSM_MULT_R(rrp[i], u[i]));
+      u[i] = GSM_ADD(u[i], GSM_MULT_R(rrp[i], di));
+    }
+    d[dOffset + k] = di;
+  }
+}
+function gsm_short_term_analysis(s, LARc, d, prevLARp, u) {
+  const currLARp = LARc_to_LARp(LARc);
+  const weights = [
+    [3, 1],
+    [2, 2],
+    [1, 3],
+    [0, 4]
+  ];
+  for (let sub = 0; sub < 4; sub++) {
+    const [wp, wc] = weights[sub];
+    const rrp = new Int16Array(8);
+    for (let i = 0; i < 8; i++) {
+      const pTerm = wp === 0 ? 0 : GSM_MULT_R(prevLARp[i], wp << 13);
+      const cTerm = wc === 4 ? currLARp[i] : GSM_MULT_R(currLARp[i], wc << 13);
+      rrp[i] = GSM_ADD(pTerm, cTerm);
+    }
+    LARp_to_rp(rrp);
+    parcorAnalysis(rrp, u, s, d, sub * 40, sub * 40, 40);
+  }
+  for (let i = 0; i < 8; i++) prevLARp[i] = currLARp[i];
+}
+var BCQ = [0, 3277, 13107, 26214];
+var dp = new Int16Array(120);
+function gsm_long_term(d, dpLocal, seg) {
+  const off = seg * 40;
+  let bestNc = 40, bestBc = 0;
+  let bestR = -Infinity;
+  for (let nc = 40; nc <= 120; nc++) {
+    let cross = 0, energy = 0;
+    for (let k = 0; k < 40; k++) {
+      const dpIdx = off + k - nc;
+      const dpVal = dpIdx >= 0 ? d[dpIdx] : dpLocal[dpLocal.length + dpIdx];
+      cross += d[off + k] * dpVal;
+      energy += dpVal * dpVal;
+    }
+    if (energy === 0) continue;
+    const r = cross * cross / energy;
+    if (r > bestR) {
+      bestR = r;
+      bestNc = nc;
+    }
+  }
+  {
+    const nc = bestNc;
+    let bestScore = -Infinity;
+    for (let bc = 0; bc < 4; bc++) {
+      const gain2 = BCQ[bc] / 32768;
+      let score = 0;
+      for (let k = 0; k < 40; k++) {
+        const dpIdx = off + k - nc;
+        const dpVal = dpIdx >= 0 ? d[dpIdx] : dpLocal[dpLocal.length + dpIdx];
+        const pred = d[off + k] - gain2 * dpVal;
+        score -= pred * pred;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestBc = bc;
+      }
+    }
+  }
+  const e = new Int16Array(40);
+  const gain = BCQ[bestBc] / 32768;
+  for (let k = 0; k < 40; k++) {
+    const dpIdx = off + k - bestNc;
+    const dpVal = dpIdx >= 0 ? d[dpIdx] : dpLocal[dpLocal.length + dpIdx];
+    e[k] = CLIP(Math.round(d[off + k] - gain * dpVal), -32768, 32767);
+  }
+  return { bc: bestBc, nc: bestNc, e };
+}
+function xmaxEncode(xmax) {
+  if (xmax === 0) return 0;
+  let exp = 0;
+  let x = xmax;
+  while (x > 7) {
+    x >>= 1;
+    exp++;
+  }
+  const mant = Math.min(7, x);
+  return exp << 3 | mant;
+}
+function xmaxDecode(q) {
+  const exp = q >> 3 & 7;
+  const mant = q & 7;
+  return mant + 8 << exp >> 1;
+}
+function xQuantize(x, xmax_dec) {
+  if (xmax_dec === 0) return 4;
+  const norm = Math.max(-1, Math.min(1, x / xmax_dec));
+  const q = Math.round((norm + 1) * 3.5);
+  return CLIP(q, 0, 7);
+}
+function gsm_RPE_encode(e) {
+  let bestMc = 0, bestEnergy = -1;
+  for (let mc2 = 0; mc2 < 4; mc2++) {
+    let energy = 0;
+    for (let k = 0; k < 13; k++) {
+      const s = e[mc2 + 3 * k];
+      energy += s * s;
+    }
+    if (energy > bestEnergy) {
+      bestEnergy = energy;
+      bestMc = mc2;
+    }
+  }
+  let xmax = 0;
+  const mc = bestMc;
+  for (let k = 0; k < 13; k++) {
+    const a = GSM_ABS(e[mc + 3 * k]);
+    if (a > xmax) xmax = a;
+  }
+  const xmaxQ = xmaxEncode(xmax);
+  const xmaxD = xmaxDecode(xmaxQ);
+  const x = [];
+  for (let k = 0; k < 13; k++) {
+    x.push(xQuantize(e[mc + 3 * k], xmaxD));
+  }
+  return { mc, xmax: xmaxQ, x };
+}
+function packBits(LARc, segs) {
+  const out = new Uint8Array(33);
+  let bp = 0;
+  function writeBits(val, bits) {
+    for (let i = bits - 1; i >= 0; i--) {
+      const byteIdx = bp >> 3;
+      const bitIdx = 7 - (bp & 7);
+      if (val >> i & 1) out[byteIdx] |= 1 << bitIdx;
+      bp++;
+    }
+  }
+  out[0] = 208;
+  bp = 4;
+  const larBits = [6, 6, 5, 5, 4, 4, 3, 3];
+  const larOff = [32, 32, 16, 16, 8, 8, 4, 4];
+  for (let i = 0; i < 8; i++) {
+    writeBits(LARc[i] + larOff[i], larBits[i]);
+  }
+  for (const seg of segs) {
+    writeBits(seg.nc, 7);
+    writeBits(seg.bc, 2);
+    writeBits(seg.mc, 2);
+    writeBits(seg.xmax, 6);
+    for (const xk of seg.x) writeBits(xk, 3);
+  }
+  return out;
+}
+var GsmEncoder = class {
+  // LTP delay history: last 120 samples of LPC residual from the previous frame.
+  // dpState[0] = oldest, dpState[119] = most recent.
+  dpState = new Int16Array(120);
+  // Short-term analysis filter lattice state (8 reflection stages)
+  stU = new Int16Array(8);
+  // LARp from previous frame (for interpolation in analysis filter)
+  prevLARp = new Int16Array(8);
+  encodeFrame(s) {
+    if (s.length !== 160) throw new Error("GSM frame requires 160 samples");
+    const LARc = gsm_LPC_Analysis(s);
+    const d = new Int16Array(160);
+    gsm_short_term_analysis(s, LARc, d, this.prevLARp, this.stU);
+    const dpLocal = new Int16Array(this.dpState);
+    const segs = [];
+    for (let seg = 0; seg < 4; seg++) {
+      const { bc, nc, e } = gsm_long_term(d, dpLocal, seg);
+      const rpe = gsm_RPE_encode(e);
+      segs.push({ nc, bc, mc: rpe.mc, xmax: rpe.xmax, x: rpe.x });
+    }
+    for (let k = 0; k < 120; k++) {
+      this.dpState[k] = d[k + 40];
+    }
+    return packBits(LARc, segs);
+  }
+};
+function unpackBits(frame) {
+  if (frame.length < 33) return null;
+  let bp = 4;
+  function readBits(n) {
+    let v = 0;
+    for (let i = 0; i < n; i++) {
+      const byteIdx = bp >> 3;
+      const bitIdx = 7 - (bp & 7);
+      v = v << 1 | frame[byteIdx] >> bitIdx & 1;
+      bp++;
+    }
+    return v;
+  }
+  const larBits = [6, 6, 5, 5, 4, 4, 3, 3];
+  const larOff = [32, 32, 16, 16, 8, 8, 4, 4];
+  const LARc = new Int16Array(8);
+  for (let i = 0; i < 8; i++) {
+    LARc[i] = readBits(larBits[i]) - larOff[i];
+  }
+  const segs = [];
+  for (let s = 0; s < 4; s++) {
+    const nc = readBits(7);
+    const bc = readBits(2);
+    const mc = readBits(2);
+    const xmax = readBits(6);
+    const x = [];
+    for (let k = 0; k < 13; k++) x.push(readBits(3));
+    segs.push({ nc, bc, mc, xmax, x });
+  }
+  return { LARc, segs };
+}
+var RPE_FAC = new Int16Array([-28521, -20972, -12124, -3835, 3835, 12124, 20972, 28521]);
+function interpolateLARc(prev, curr) {
+  const out = [];
+  for (let sub = 0; sub < 4; sub++) {
+    const larInterp = new Int16Array(8);
+    for (let i = 0; i < 8; i++) {
+      let lar;
+      if (sub === 0) lar = SASR(GSM_ADD(GSM_ADD(prev[i], prev[i]), GSM_ADD(prev[i], curr[i])), 2);
+      else if (sub === 1) lar = SASR(GSM_ADD(prev[i], curr[i]), 1);
+      else if (sub === 2) lar = SASR(GSM_ADD(prev[i], GSM_ADD(curr[i], GSM_ADD(curr[i], curr[i]))), 2);
+      else lar = curr[i];
+      larInterp[i] = lar;
+    }
+    out.push(LARc_to_r(larInterp));
+  }
+  return out;
+}
+var GsmDecoder = class {
+  // LTP history: 120 samples, oldest at index 0, newest at index 119.
+  dp = new Int16Array(120);
+  // Synthesis lattice state v[0..7].
+  v = new Int16Array(8);
+  // Previous frame LARc for interpolation.
+  prevLARc = new Int16Array(8);
+  /** Decode a 198-byte GSM packet (6 frames) → 960 Int16 PCM samples. */
+  decodePacket(data) {
+    const out = new Int16Array(GSM_FRAME_SAMPLES * FRAMES_PER_PACKET);
+    for (let f = 0; f < FRAMES_PER_PACKET; f++) {
+      const frame = data.slice(f * GSM_FRAME_BYTES, (f + 1) * GSM_FRAME_BYTES);
+      out.set(this.decodeFrame(frame), f * GSM_FRAME_SAMPLES);
+    }
+    return out;
+  }
+  decodeFrame(frame) {
+    const params = unpackBits(frame);
+    if (!params) return new Int16Array(160);
+    const { LARc, segs } = params;
+    const rpPerSeg = interpolateLARc(this.prevLARc, LARc);
+    this.prevLARc = new Int16Array(LARc);
+    const out = new Int16Array(160);
+    for (let seg = 0; seg < 4; seg++) {
+      const { nc, bc, mc, xmax, x } = segs[seg];
+      const off = seg * 40;
+      const rp = rpPerSeg[seg];
+      const xmaxD = xmaxDecode(xmax);
+      const ep = new Int16Array(40);
+      for (let k = 0; k < 13; k++) {
+        const temp = GSM_MULT_R(xmaxD, RPE_FAC[x[k]]);
+        ep[mc + 3 * k] = CLIP(GSM_ADD(temp, temp), -32768, 32767);
+      }
+      const wt = new Int16Array(40);
+      const bcGain = BCQ[bc];
+      for (let k = 0; k < 40; k++) {
+        const histIdx = 120 - nc + k;
+        const drp = histIdx >= 0 && histIdx < 120 ? this.dp[histIdx] : 0;
+        wt[k] = CLIP(GSM_ADD(ep[k], GSM_MULT_R(bcGain, drp)), -32768, 32767);
+      }
+      this.dp.copyWithin(0, 40);
+      this.dp.set(wt, 80);
+      for (let k = 0; k < 40; k++) {
+        let sri = wt[k];
+        for (let i = 7; i >= 0; i--) {
+          sri = CLIP(sri - GSM_MULT_R(rp[i], this.v[i]), -32768, 32767);
+          this.v[i] = CLIP(this.v[i] + GSM_MULT_R(rp[i], sri), -32768, 32767);
+        }
+        this.v[0] = sri;
+        out[off + k] = sri;
+      }
+    }
+    return out;
+  }
+};
+var GSM_FRAME_BYTES = 33;
+var GSM_FRAME_SAMPLES = 160;
+var FRAMES_PER_PACKET = 6;
+var GSM_PACKET_BYTES = GSM_FRAME_BYTES * FRAMES_PER_PACKET;
+var globalEncoder = new GsmEncoder();
+var globalDecoder = new GsmDecoder();
+
 // src/eqso/relay-manager.ts
 var MAX_RECONNECT_DELAY_MS = 1e4;
 var PTT_INACTIVITY_TIMEOUT_MS = 5e3;
@@ -60905,7 +61418,8 @@ var RelayManager = class {
       rxPackets: 0,
       txPackets: 0,
       remoteUsers: [],
-      transmitting: false
+      transmitting: false,
+      decoder: new GsmDecoder()
     };
   }
   startRelay(config2) {
@@ -60982,7 +61496,17 @@ var RelayManager = class {
           break;
         case "audio": {
           const audioPkt = event.data;
-          roomManager.broadcastToRoom(config2.localRoom, audioPkt, listenerId);
+          roomManager.broadcastToTcpAndRelays(config2.localRoom, audioPkt, listenerId);
+          if (audioPkt.length >= 1 + AUDIO_PAYLOAD_SIZE) {
+            const gsmPayload = new Uint8Array(audioPkt.buffer, audioPkt.byteOffset + 1, AUDIO_PAYLOAD_SIZE);
+            const pcm = state.decoder.decodePacket(gsmPayload);
+            const float322 = new Float32Array(pcm.length);
+            for (let i = 0; i < pcm.length; i++) {
+              float322[i] = Math.max(-0.45, Math.min(0.45, pcm[i] / 32768));
+            }
+            const wsPkt = Buffer.concat([Buffer.from([17]), Buffer.from(float322.buffer)]);
+            roomManager.broadcastBinToLocalWsClients(config2.localRoom, wsPkt, listenerId);
+          }
           state.rxPackets++;
           break;
         }
@@ -61922,193 +62446,6 @@ var app_default = app;
 // src/eqso/tcp-server.ts
 import net2 from "net";
 import { randomUUID as randomUUID2 } from "crypto";
-
-// src/eqso/ffmpeg-gsm.ts
-import { spawn as spawn3 } from "child_process";
-import { EventEmitter as EventEmitter3 } from "events";
-var GSM_FRAME_BYTES = 33;
-var GSM_FRAME_SAMPLES = 160;
-var FRAMES_PER_PACKET = 6;
-var GSM_PACKET_BYTES = GSM_FRAME_BYTES * FRAMES_PER_PACKET;
-var PCM_PACKET_BYTES = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET * 2;
-var FfmpegGsmDecoder = class extends EventEmitter3 {
-  proc = null;
-  accumulator = Buffer.alloc(0);
-  ready = false;
-  /** Spawn the ffmpeg decoder process and mark ready after startup delay. */
-  start() {
-    if (this.proc) return;
-    this.proc = spawn3("ffmpeg", [
-      "-hide_banner",
-      "-loglevel",
-      "quiet",
-      "-probesize",
-      "32",
-      "-analyzeduration",
-      "0",
-      "-f",
-      "gsm",
-      "-ar",
-      "8000",
-      "-i",
-      "pipe:0",
-      "-f",
-      "s16le",
-      "-ar",
-      "8000",
-      // -avioflags direct desactiva el buffer de escritura AVIOContext (por defecto 32 KB).
-      // Sin esto FFmpeg acumula ~17 paquetes GSM (2 segundos) antes de hacer flush al pipe
-      // de Node.js, produciendo rafagas de audio en el navegador en lugar de flujo continuo.
-      "-avioflags",
-      "direct",
-      "pipe:1"
-    ], { stdio: ["pipe", "pipe", "pipe"] });
-    this.proc.stderr.on("data", () => {
-    });
-    this.proc.on("error", (err) => {
-      logger.warn({ err }, "ffmpeg GSM decoder error");
-    });
-    this.proc.on("close", () => {
-      this.proc = null;
-      this.ready = false;
-    });
-    this.proc.stdout.on("data", (chunk) => {
-      this.accumulator = Buffer.concat([this.accumulator, chunk]);
-      while (this.accumulator.length >= PCM_PACKET_BYTES) {
-        const pcmBuf = this.accumulator.slice(0, PCM_PACKET_BYTES);
-        this.accumulator = this.accumulator.slice(PCM_PACKET_BYTES);
-        const pcm = new Int16Array(
-          pcmBuf.buffer.slice(
-            pcmBuf.byteOffset,
-            pcmBuf.byteOffset + PCM_PACKET_BYTES
-          )
-        );
-        this.emit("pcm", pcm);
-      }
-    });
-    setTimeout(() => {
-      this.ready = true;
-      logger.debug("ffmpeg GSM decoder ready");
-    }, 500);
-  }
-  /** Feed a 198-byte GSM packet. Emits "pcm" event with Int16Array(960) when decoded. */
-  decode(gsmPacket) {
-    if (!this.proc || !this.ready) {
-      logger.warn("ffmpeg GSM decoder not ready, dropping packet");
-      return;
-    }
-    if (gsmPacket.length < GSM_PACKET_BYTES) {
-      logger.warn({ len: gsmPacket.length }, "ffmpeg GSM decoder: short packet, skipping");
-      return;
-    }
-    try {
-      this.proc.stdin.write(gsmPacket.slice(0, GSM_PACKET_BYTES));
-    } catch (err) {
-      logger.warn({ err }, "ffmpeg GSM decoder write error");
-    }
-  }
-  stop() {
-    try {
-      this.proc?.stdin.end();
-      this.proc?.kill("SIGTERM");
-    } catch {
-    }
-    this.proc = null;
-    this.ready = false;
-    this.accumulator = Buffer.alloc(0);
-  }
-};
-var FfmpegGsmEncoder = class extends EventEmitter3 {
-  proc = null;
-  accumulator = Buffer.alloc(0);
-  ready = false;
-  /** Spawn the ffmpeg encoder process and mark ready after startup delay. */
-  start() {
-    if (this.proc) return;
-    this.proc = spawn3("ffmpeg", [
-      "-hide_banner",
-      "-loglevel",
-      "quiet",
-      "-probesize",
-      "32",
-      "-analyzeduration",
-      "0",
-      "-f",
-      "s16le",
-      "-ar",
-      "8000",
-      "-ac",
-      "1",
-      "-i",
-      "pipe:0",
-      // No audio filters — worklet already applies AGC, clip, and bandpass.
-      // Filters add hundreds of ms of pipeline latency that delays voice vs PTT.
-      "-f",
-      "gsm",
-      "-ar",
-      "8000",
-      "pipe:1"
-    ], { stdio: ["pipe", "pipe", "pipe"] });
-    this.proc.stderr.on("data", () => {
-    });
-    this.proc.on("error", (err) => {
-      logger.warn({ err }, "ffmpeg GSM encoder error");
-    });
-    this.proc.on("close", () => {
-      this.proc = null;
-      this.ready = false;
-    });
-    this.proc.stdout.on("data", (chunk) => {
-      this.accumulator = Buffer.concat([this.accumulator, chunk]);
-      while (this.accumulator.length >= GSM_PACKET_BYTES) {
-        const gsmBuf = Buffer.from(this.accumulator.slice(0, GSM_PACKET_BYTES));
-        this.accumulator = this.accumulator.slice(GSM_PACKET_BYTES);
-        this.emit("gsm", gsmBuf);
-      }
-    });
-    setTimeout(() => {
-      this.ready = true;
-      logger.debug("ffmpeg GSM encoder ready");
-    }, 500);
-  }
-  /**
-   * Feed a 960-sample (1920-byte) Int16 PCM packet.
-   * Emits "gsm" event with Buffer(198) when encoded.
-   */
-  encode(pcmPacket) {
-    if (!this.proc || !this.ready) {
-      logger.warn("ffmpeg GSM encoder not ready, dropping packet");
-      return;
-    }
-    if (pcmPacket.length < GSM_FRAME_SAMPLES * FRAMES_PER_PACKET) {
-      logger.warn({ len: pcmPacket.length }, "ffmpeg GSM encoder: short PCM, skipping");
-      return;
-    }
-    try {
-      const buf = Buffer.from(
-        pcmPacket.buffer.slice(
-          pcmPacket.byteOffset,
-          pcmPacket.byteOffset + GSM_FRAME_SAMPLES * FRAMES_PER_PACKET * 2
-        )
-      );
-      this.proc.stdin.write(buf);
-    } catch (err) {
-      logger.warn({ err }, "ffmpeg GSM encoder write error");
-    }
-  }
-  stop() {
-    try {
-      this.proc?.stdin.end();
-      this.proc?.kill("SIGTERM");
-    } catch {
-    }
-    this.proc = null;
-    this.ready = false;
-    this.accumulator = Buffer.alloc(0);
-  }
-};
-
-// src/eqso/tcp-server.ts
 var tcpDecoders = /* @__PURE__ */ new Map();
 function sendRoomList(state) {
   const rooms = roomManager.getRooms();
@@ -62153,7 +62490,6 @@ function processSingleByte(state, byte) {
         roomManager.broadcastToRoom(client.room, rel, state.id);
         safeWrite(state, Buffer.from([8]));
         roomManager.unlockRoom(client.room, state.id);
-        state.flushPaceQueue?.();
         if (client.isRelay) {
           const beepPackets = courtesyBeepManager.getPackets();
           if (beepPackets.length > 0) {
@@ -62235,7 +62571,16 @@ function processMultiByte(state, byte) {
           const gsmPayload = state.buf.slice(0, AUDIO_PAYLOAD_SIZE);
           const gsmPkt = Buffer.concat([Buffer.from([1]), gsmPayload]);
           roomManager.broadcastToTcpAndRelays(client.room, gsmPkt, state.id);
-          tcpDecoders.get(state.id)?.decode(Buffer.from(gsmPayload));
+          const decoder = tcpDecoders.get(state.id);
+          if (decoder) {
+            const pcm = decoder.decodePacket(new Uint8Array(gsmPayload));
+            const float322 = new Float32Array(pcm.length);
+            for (let i = 0; i < pcm.length; i++) {
+              float322[i] = Math.max(-0.45, Math.min(0.45, pcm[i] / 32768));
+            }
+            const wsPkt = Buffer.concat([Buffer.from([17]), Buffer.from(float322.buffer)]);
+            roomManager.broadcastBinToLocalWsClients(client.room, wsPkt, state.id);
+          }
         }
         state.buf = state.buf.slice(AUDIO_PAYLOAD_SIZE);
         if (state.buf.length === 0) {
@@ -62338,11 +62683,7 @@ function handleData(state, data) {
 function handleDisconnect(state) {
   if (state.disconnected) return;
   state.disconnected = true;
-  const decoder = tcpDecoders.get(state.id);
-  if (decoder) {
-    decoder.stop();
-    tcpDecoders.delete(state.id);
-  }
+  tcpDecoders.delete(state.id);
   const client = roomManager.getClient(state.id);
   if (client?.room) {
     const leftPkt = buildUserLeft(client.name);
@@ -62388,48 +62729,7 @@ function startTcpServer(port2) {
     };
     roomManager.addClient(clientInfo);
     logger.info({ id, addr: socket.remoteAddress }, "eQSO TCP client registered \u2014 waiting for handshake");
-    const decoder = new FfmpegGsmDecoder();
-    tcpDecoders.set(id, decoder);
-    const AUDIO_PACE_MS = 120;
-    const audioPaceQueue = [];
-    let audioPaceTimer = null;
-    const sendNextAudioPkt = () => {
-      const pkt = audioPaceQueue.shift();
-      if (!pkt) {
-        audioPaceTimer = null;
-        return;
-      }
-      const room = roomManager.getClient(id)?.room;
-      if (room) roomManager.broadcastBinToLocalWsClients(room, pkt, id);
-      audioPaceTimer = setTimeout(sendNextAudioPkt, AUDIO_PACE_MS);
-    };
-    state.flushPaceQueue = () => {
-      if (audioPaceTimer) {
-        clearTimeout(audioPaceTimer);
-        audioPaceTimer = null;
-      }
-      const room = roomManager.getClient(id)?.room;
-      if (!room) {
-        audioPaceQueue.length = 0;
-        return;
-      }
-      while (audioPaceQueue.length > 0) {
-        const pkt = audioPaceQueue.shift();
-        roomManager.broadcastBinToLocalWsClients(room, pkt, id);
-      }
-    };
-    decoder.on("pcm", (pcm) => {
-      const cli = roomManager.getClient(id);
-      if (!cli?.room) return;
-      const float322 = new Float32Array(pcm.length);
-      for (let i = 0; i < pcm.length; i++) {
-        float322[i] = Math.max(-0.45, Math.min(0.45, pcm[i] / 32768));
-      }
-      const wsPkt = Buffer.concat([Buffer.from([17]), Buffer.from(float322.buffer)]);
-      audioPaceQueue.push(wsPkt);
-      if (!audioPaceTimer) sendNextAudioPkt();
-    });
-    decoder.start();
+    tcpDecoders.set(id, new GsmDecoder());
     socket.setKeepAlive(true, 3e4);
     const keepaliveInterval = setInterval(() => {
       if (!state.disconnected) safeWrite(state, KEEPALIVE_PACKET);
@@ -62470,10 +62770,197 @@ var import_websocket_server = __toESM(require_websocket_server(), 1);
 
 // src/eqso/ws-bridge.ts
 import { randomUUID as randomUUID3 } from "crypto";
+
+// src/eqso/ffmpeg-gsm.ts
+import { spawn as spawn3 } from "child_process";
+import { EventEmitter as EventEmitter3 } from "events";
+var GSM_FRAME_BYTES2 = 33;
+var GSM_FRAME_SAMPLES2 = 160;
+var FRAMES_PER_PACKET2 = 6;
+var GSM_PACKET_BYTES2 = GSM_FRAME_BYTES2 * FRAMES_PER_PACKET2;
+var PCM_PACKET_BYTES = GSM_FRAME_SAMPLES2 * FRAMES_PER_PACKET2 * 2;
+var FfmpegGsmDecoder = class extends EventEmitter3 {
+  proc = null;
+  accumulator = Buffer.alloc(0);
+  ready = false;
+  /** Spawn the ffmpeg decoder process and mark ready after startup delay. */
+  start() {
+    if (this.proc) return;
+    this.proc = spawn3("ffmpeg", [
+      "-hide_banner",
+      "-loglevel",
+      "quiet",
+      "-probesize",
+      "32",
+      "-analyzeduration",
+      "0",
+      "-f",
+      "gsm",
+      "-ar",
+      "8000",
+      "-i",
+      "pipe:0",
+      "-f",
+      "s16le",
+      "-ar",
+      "8000",
+      // -avioflags direct desactiva el buffer de escritura AVIOContext (por defecto 32 KB).
+      // Sin esto FFmpeg acumula ~17 paquetes GSM (2 segundos) antes de hacer flush al pipe
+      // de Node.js, produciendo rafagas de audio en el navegador en lugar de flujo continuo.
+      "-avioflags",
+      "direct",
+      "pipe:1"
+    ], { stdio: ["pipe", "pipe", "pipe"] });
+    this.proc.stderr.on("data", () => {
+    });
+    this.proc.on("error", (err) => {
+      logger.warn({ err }, "ffmpeg GSM decoder error");
+    });
+    this.proc.on("close", () => {
+      this.proc = null;
+      this.ready = false;
+    });
+    this.proc.stdout.on("data", (chunk) => {
+      this.accumulator = Buffer.concat([this.accumulator, chunk]);
+      while (this.accumulator.length >= PCM_PACKET_BYTES) {
+        const pcmBuf = this.accumulator.slice(0, PCM_PACKET_BYTES);
+        this.accumulator = this.accumulator.slice(PCM_PACKET_BYTES);
+        const pcm = new Int16Array(
+          pcmBuf.buffer.slice(
+            pcmBuf.byteOffset,
+            pcmBuf.byteOffset + PCM_PACKET_BYTES
+          )
+        );
+        this.emit("pcm", pcm);
+      }
+    });
+    setTimeout(() => {
+      this.ready = true;
+      logger.debug("ffmpeg GSM decoder ready");
+    }, 500);
+  }
+  /** Feed a 198-byte GSM packet. Emits "pcm" event with Int16Array(960) when decoded. */
+  decode(gsmPacket) {
+    if (!this.proc || !this.ready) {
+      logger.warn("ffmpeg GSM decoder not ready, dropping packet");
+      return;
+    }
+    if (gsmPacket.length < GSM_PACKET_BYTES2) {
+      logger.warn({ len: gsmPacket.length }, "ffmpeg GSM decoder: short packet, skipping");
+      return;
+    }
+    try {
+      this.proc.stdin.write(gsmPacket.slice(0, GSM_PACKET_BYTES2));
+    } catch (err) {
+      logger.warn({ err }, "ffmpeg GSM decoder write error");
+    }
+  }
+  stop() {
+    try {
+      this.proc?.stdin.end();
+      this.proc?.kill("SIGTERM");
+    } catch {
+    }
+    this.proc = null;
+    this.ready = false;
+    this.accumulator = Buffer.alloc(0);
+  }
+};
+var FfmpegGsmEncoder = class extends EventEmitter3 {
+  proc = null;
+  accumulator = Buffer.alloc(0);
+  ready = false;
+  /** Spawn the ffmpeg encoder process and mark ready after startup delay. */
+  start() {
+    if (this.proc) return;
+    this.proc = spawn3("ffmpeg", [
+      "-hide_banner",
+      "-loglevel",
+      "quiet",
+      "-probesize",
+      "32",
+      "-analyzeduration",
+      "0",
+      "-f",
+      "s16le",
+      "-ar",
+      "8000",
+      "-ac",
+      "1",
+      "-i",
+      "pipe:0",
+      // No audio filters — worklet already applies AGC, clip, and bandpass.
+      // Filters add hundreds of ms of pipeline latency that delays voice vs PTT.
+      "-f",
+      "gsm",
+      "-ar",
+      "8000",
+      "pipe:1"
+    ], { stdio: ["pipe", "pipe", "pipe"] });
+    this.proc.stderr.on("data", () => {
+    });
+    this.proc.on("error", (err) => {
+      logger.warn({ err }, "ffmpeg GSM encoder error");
+    });
+    this.proc.on("close", () => {
+      this.proc = null;
+      this.ready = false;
+    });
+    this.proc.stdout.on("data", (chunk) => {
+      this.accumulator = Buffer.concat([this.accumulator, chunk]);
+      while (this.accumulator.length >= GSM_PACKET_BYTES2) {
+        const gsmBuf = Buffer.from(this.accumulator.slice(0, GSM_PACKET_BYTES2));
+        this.accumulator = this.accumulator.slice(GSM_PACKET_BYTES2);
+        this.emit("gsm", gsmBuf);
+      }
+    });
+    setTimeout(() => {
+      this.ready = true;
+      logger.debug("ffmpeg GSM encoder ready");
+    }, 500);
+  }
+  /**
+   * Feed a 960-sample (1920-byte) Int16 PCM packet.
+   * Emits "gsm" event with Buffer(198) when encoded.
+   */
+  encode(pcmPacket) {
+    if (!this.proc || !this.ready) {
+      logger.warn("ffmpeg GSM encoder not ready, dropping packet");
+      return;
+    }
+    if (pcmPacket.length < GSM_FRAME_SAMPLES2 * FRAMES_PER_PACKET2) {
+      logger.warn({ len: pcmPacket.length }, "ffmpeg GSM encoder: short PCM, skipping");
+      return;
+    }
+    try {
+      const buf = Buffer.from(
+        pcmPacket.buffer.slice(
+          pcmPacket.byteOffset,
+          pcmPacket.byteOffset + GSM_FRAME_SAMPLES2 * FRAMES_PER_PACKET2 * 2
+        )
+      );
+      this.proc.stdin.write(buf);
+    } catch (err) {
+      logger.warn({ err }, "ffmpeg GSM encoder write error");
+    }
+  }
+  stop() {
+    try {
+      this.proc?.stdin.end();
+      this.proc?.kill("SIGTERM");
+    } catch {
+    }
+    this.proc = null;
+    this.ready = false;
+    this.accumulator = Buffer.alloc(0);
+  }
+};
+
+// src/eqso/ws-bridge.ts
 var WS_AUDIO_LOCAL = 1;
 var WS_AUDIO_REMOTE = 17;
 var WS_PCM_TX = 5;
-var PCM_CHUNK_SAMPLES = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET;
+var PCM_CHUNK_SAMPLES = GSM_FRAME_SAMPLES2 * FRAMES_PER_PACKET2;
 var SERVER_VERSION = "eQSO Linux Server v1.0";
 var KEEPALIVE_MS = 3e4;
 function sendJson(ws, obj) {
@@ -62844,7 +63331,7 @@ function handleRemoteMode(ws, id, host, port2) {
         const gsmBuf = Buffer.from(
           pkt.buffer,
           pkt.byteOffset + 1,
-          Math.min(AUDIO_PAYLOAD_SIZE, GSM_PACKET_BYTES)
+          Math.min(AUDIO_PAYLOAD_SIZE, GSM_PACKET_BYTES2)
         );
         decoder.decode(gsmBuf);
         break;

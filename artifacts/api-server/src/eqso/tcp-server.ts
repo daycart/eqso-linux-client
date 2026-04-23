@@ -2,7 +2,7 @@ import net from "net";
 import { randomUUID } from "crypto";
 import { logger } from "../lib/logger";
 import { roomManager, ClientInfo } from "./room-manager";
-import { FfmpegGsmDecoder } from "./ffmpeg-gsm";
+import { GsmDecoder } from "./gsm610";
 import { inactivityManager } from "./inactivity-manager";
 import { moderationManager } from "./moderation-manager";
 import { courtesyBeepManager } from "./courtesy-beep-manager";
@@ -28,8 +28,8 @@ import {
 
 const SERVER_VERSION = "eQSO Linux Server v1.0";
 
-// One FFmpeg GSM decoder per TCP client (keyed by client UUID)
-const tcpDecoders = new Map<string, FfmpegGsmDecoder>();
+// One native GSM decoder per TCP client (stateful, keyed by client UUID)
+const tcpDecoders = new Map<string, GsmDecoder>();
 
 interface TcpClientState {
   id: string;
@@ -39,10 +39,6 @@ interface TcpClientState {
   multiByteCmd: number;
   handshakeDone: boolean;
   disconnected: boolean; // guard against double-disconnect (error + close both fire)
-  /** Drena inmediatamente los paquetes GSM pendientes en el pace queue.
-   *  Llamado desde processSingleByte cuando el cliente envía RELEASE_PTT (0x0d),
-   *  así los últimos frames llegan al navegador sin el retardo de 120ms/paquete. */
-  flushPaceQueue?: () => void;
 }
 
 function sendRoomList(state: TcpClientState): void {
@@ -142,12 +138,6 @@ function processSingleByte(state: TcpClientState, byte: number): void {
         // liberar PTT (lo interpretaban como "expulsado de sala").
         safeWrite(state, Buffer.from([0x08]));
         roomManager.unlockRoom(client.room, state.id);
-        // Drena inmediatamente los paquetes GSM que quedaron en el pace queue.
-        // Sin esto, los últimos 3-5 paquetes GSM del relay CB se entregan al
-        // navegador 360-600ms tarde → suena como eco/cola de la voz.
-        // Con flush: los paquetes llegan juntos (<1 tick de Node.js) y el
-        // Web Audio del navegador los encola en nextPlayTimeRef sin solapamiento.
-        state.flushPaceQueue?.();
 
         // Tono de cortesía: solo si es un cliente relay (radio CB).
         // El relay-daemon tiene POST_TX_SUPPRESS_MS=100ms. Con 300ms de espera
@@ -248,8 +238,18 @@ function processMultiByte(state: TcpClientState, byte: number): void {
           const gsmPkt = Buffer.concat([Buffer.from([0x01]), gsmPayload]);
           roomManager.broadcastToTcpAndRelays(client.room, gsmPkt, state.id);
 
-          // Feed to per-client FFmpeg decoder; WS broadcast happens in "pcm" event
-          tcpDecoders.get(state.id)?.decode(Buffer.from(gsmPayload));
+          // Decode GSM → Int16 PCM → Float32 and broadcast to WS browser clients.
+          // Native synchronous decode: no subprocess, no pipe, no timer race condition.
+          const decoder = tcpDecoders.get(state.id);
+          if (decoder) {
+            const pcm = decoder.decodePacket(new Uint8Array(gsmPayload));
+            const float32 = new Float32Array(pcm.length);
+            for (let i = 0; i < pcm.length; i++) {
+              float32[i] = Math.max(-0.45, Math.min(0.45, pcm[i] / 32768.0));
+            }
+            const wsPkt = Buffer.concat([Buffer.from([0x11]), Buffer.from(float32.buffer)]);
+            roomManager.broadcastBinToLocalWsClients(client.room, wsPkt, state.id);
+          }
         }
         state.buf = state.buf.slice(AUDIO_PAYLOAD_SIZE);
         if (state.buf.length === 0) {
@@ -379,11 +379,7 @@ function handleDisconnect(state: TcpClientState): void {
   if (state.disconnected) return; // guard: error event is always followed by close event
   state.disconnected = true;
 
-  const decoder = tcpDecoders.get(state.id);
-  if (decoder) {
-    decoder.stop();
-    tcpDecoders.delete(state.id);
-  }
+  tcpDecoders.delete(state.id);
 
   const client = roomManager.getClient(state.id);
   if (client?.room) {
@@ -433,58 +429,10 @@ export function startTcpServer(port: number): net.Server {
     roomManager.addClient(clientInfo);
     logger.info({ id, addr: socket.remoteAddress }, "eQSO TCP client registered — waiting for handshake");
 
-    // Spawn per-client FFmpeg GSM decoder.  The 500ms startup warmup happens here
-    // so the process is ready by the time the client starts transmitting audio.
-    const decoder = new FfmpegGsmDecoder();
-    tcpDecoders.set(id, decoder);
-
-    // Cola de paquetes PCM con limitador de tasa: un paquete cada AUDIO_PACE_MS.
-    // Sin esto, FFmpeg puede emitir varios paquetes en el mismo tick de Node.js
-    // (rafaga), el navegador los recibe todos a la vez y el scheduler Web Audio
-    // API desborda → solapamiento / "bucle".
-    // 120ms = duración exacta de un paquete GSM (960 samples a 8000 Hz).
-    // Usar 110ms causaba que el scheduler del navegador se adelantara ~10ms por
-    // paquete → en 12 segundos = ~1s de "cola fantasma" que se reproducía como
-    // eco de lo ya hablado tras terminar la transmisión.
-    const AUDIO_PACE_MS = 120; // igual a la duración real del paquete GSM
-    const audioPaceQueue: Buffer[] = [];
-    let audioPaceTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const sendNextAudioPkt = () => {
-      const pkt = audioPaceQueue.shift();
-      if (!pkt) { audioPaceTimer = null; return; }
-      const room = roomManager.getClient(id)?.room;
-      if (room) roomManager.broadcastBinToLocalWsClients(room, pkt, id);
-      audioPaceTimer = setTimeout(sendNextAudioPkt, AUDIO_PACE_MS);
-    };
-
-    // Cuando el cliente envía RELEASE_PTT (0x0d), drenamos el pace queue sin
-    // esperar los 120ms entre paquetes. Los últimos N paquetes GSM del relay CB
-    // llegan en el mismo tick de Node.js; el navegador los encola secuencialmente
-    // en su nextPlayTimeRef (sin solapamiento) pero sin el retardo del pace timer.
-    // Efecto: el final de la transmisión llega al cliente sin cola de eco.
-    state.flushPaceQueue = () => {
-      if (audioPaceTimer) { clearTimeout(audioPaceTimer); audioPaceTimer = null; }
-      const room = roomManager.getClient(id)?.room;
-      if (!room) { audioPaceQueue.length = 0; return; }
-      while (audioPaceQueue.length > 0) {
-        const pkt = audioPaceQueue.shift()!;
-        roomManager.broadcastBinToLocalWsClients(room, pkt, id);
-      }
-    };
-
-    decoder.on("pcm", (pcm: Int16Array) => {
-      const cli = roomManager.getClient(id);
-      if (!cli?.room) return;
-      const float32 = new Float32Array(pcm.length);
-      for (let i = 0; i < pcm.length; i++) {
-        float32[i] = Math.max(-0.45, Math.min(0.45, pcm[i] / 32768.0));
-      }
-      const wsPkt = Buffer.concat([Buffer.from([0x11]), Buffer.from(float32.buffer)]);
-      audioPaceQueue.push(wsPkt);
-      if (!audioPaceTimer) sendNextAudioPkt(); // primer paquete sale inmediatamente
-    });
-    decoder.start();
+    // Instancia de decoder GSM nativo (puro JS, stateful) por cliente.
+    // La decodificación es síncrona: un paquete GSM in → Int16 PCM out
+    // en el mismo tick de Node.js, sin subprocess ni pipe.
+    tcpDecoders.set(id, new GsmDecoder());
 
     // TCP keepalive a nivel kernel: tras 30s de inactividad de aplicacion, el
     // OS envía probes TCP al extremo remoto. Si este responde (connection alive),

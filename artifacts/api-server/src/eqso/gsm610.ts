@@ -583,13 +583,23 @@ function interpolateLARc(prev: Int16Array, curr: Int16Array): Int16Array[] {
   return out;
 }
 
-class GsmDecoder {
+export class GsmDecoder {
   // LTP history: 120 samples, oldest at index 0, newest at index 119.
   private dp    = new Int16Array(120);
   // Synthesis lattice state v[0..7].
   private v     = new Int16Array(8);
   // Previous frame LARc for interpolation.
   private prevLARc = new Int16Array(8);
+
+  /** Decode a 198-byte GSM packet (6 frames) → 960 Int16 PCM samples. */
+  decodePacket(data: Uint8Array): Int16Array {
+    const out = new Int16Array(GSM_FRAME_SAMPLES * FRAMES_PER_PACKET);
+    for (let f = 0; f < FRAMES_PER_PACKET; f++) {
+      const frame = data.slice(f * GSM_FRAME_BYTES, (f + 1) * GSM_FRAME_BYTES);
+      out.set(this.decodeFrame(frame), f * GSM_FRAME_SAMPLES);
+    }
+    return out;
+  }
 
   decodeFrame(frame: Uint8Array): Int16Array {
     const params = unpackBits(frame);
