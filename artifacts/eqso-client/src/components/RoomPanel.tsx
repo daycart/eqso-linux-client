@@ -252,6 +252,7 @@ export function RoomPanel({
                 onMouseUp={onPttEnd}
                 onTouchStart={(e) => { e.preventDefault(); onPttStart(); }}
                 onTouchEnd={(e) => { e.preventDefault(); onPttEnd(); }}
+                onTouchCancel={(e) => { e.preventDefault(); onPttEnd(); }}
                 disabled={channelBusy && !pttActive}
                 className={`w-40 h-40 rounded-full flex flex-col items-center justify-center gap-2 transition-all duration-150 select-none touch-none
                   ${pttActive && pttGranted
