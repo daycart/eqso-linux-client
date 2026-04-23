@@ -1,39 +1,40 @@
 /**
- * Convierte muestras PCM Int16 a Float32 con normalización por paquete.
+ * Convierte muestras PCM Int16 a Float32 con normalización por pico por paquete.
  *
- * Por qué es necesario:
- *   - Los clientes web transmiten a ~-19 dBFS (RMS≈0.04 float32).
- *   - El daemon de radioenlace captura la radio CB a niveles más altos
- *     (~-7 dBFS RMS después de gain). Con el antiguo clamp fijo en ±0.45
- *     se recortaban duramente las cimas → distorsión severa en el navegador.
+ * Problema resuelto:
+ *   El clamp fijo anterior (±0.45) recortaba duramente los picos del audio CB
+ *   (~0.6 float32) causando distorsión severa. La normalización por RMS reducía
+ *   el nivel dejándolo demasiado bajo.
  *
- * Algoritmo (AGC suave por paquete):
- *   1. Calcular RMS del paquete.
- *   2. Si RMS > MIN_RMS: aplicar escala para alcanzar TARGET_RMS
- *      (limitado a MAX_SCALE para no amplificar el ruido de fondo).
- *   3. Limitar a ±1.0 como red de seguridad.
+ * Algoritmo (normalizador de pico por paquete):
+ *   1. Buscar el pico máximo del paquete.
+ *   2. Si pico > TARGET_PEAK: escalar todo el paquete para que el pico = TARGET_PEAK.
+ *      → mismo nivel que el clamp anterior pero SIN recorte → sin distorsión.
+ *   3. Si pico < TARGET_PEAK: amplificar hasta TARGET_PEAK, limitado a MAX_SCALE
+ *      para no amplificar el ruido de fondo.
+ *   4. MIN_PEAK: umbral de silencio, debajo del cual no se amplifica.
  *
- * Con TARGET_RMS=0.15 y el GainNode del navegador en ×2:
- *   → RMS de salida = 0.30 ≈ -10 dBFS. Volumen cómodo para escuchar.
- * MAX_SCALE=4.0: limita la amplificación de señales muy débiles.
- * MIN_RMS=0.003: umbral de silencio (no amplificar el suelo de ruido).
+ * Con TARGET_PEAK=0.45 y el GainNode del navegador en ×2:
+ *   → Pico de salida = 0.90 FS  (igual al comportamiento anterior, sin distorsión)
+ * MAX_SCALE=4.0: amplifica señales débiles (micros web) hasta 4× como máximo.
+ * MIN_PEAK=0.005: evita amplificar silencio absoluto / ruido de fondo.
  */
 export function pcmToFloat32Normalized(pcm: Int16Array): Float32Array {
-  const TARGET_RMS = 0.15;
-  const MAX_SCALE  = 4.0;
-  const MIN_RMS    = 0.003;
+  const TARGET_PEAK = 0.45;
+  const MAX_SCALE   = 4.0;
+  const MIN_PEAK    = 0.005;
 
-  let sumSq = 0;
+  let peak = 0;
   for (let i = 0; i < pcm.length; i++) {
-    const s = pcm[i] / 32768;
-    sumSq += s * s;
+    const abs = Math.abs(pcm[i]) / 32768;
+    if (abs > peak) peak = abs;
   }
-  const rms = pcm.length > 0 ? Math.sqrt(sumSq / pcm.length) : 0;
-  const scale = rms > MIN_RMS ? Math.min(MAX_SCALE, TARGET_RMS / rms) : 1.0;
+
+  const scale = peak > MIN_PEAK ? Math.min(MAX_SCALE, TARGET_PEAK / peak) : 1.0;
 
   const float32 = new Float32Array(pcm.length);
   for (let i = 0; i < pcm.length; i++) {
-    float32[i] = Math.max(-1, Math.min(1, (pcm[i] / 32768) * scale));
+    float32[i] = (pcm[i] / 32768) * scale;
   }
   return float32;
 }

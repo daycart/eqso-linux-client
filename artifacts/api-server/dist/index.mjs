@@ -61378,19 +61378,18 @@ var globalDecoder = new GsmDecoder();
 
 // src/eqso/pcm-utils.ts
 function pcmToFloat32Normalized(pcm) {
-  const TARGET_RMS = 0.15;
+  const TARGET_PEAK = 0.45;
   const MAX_SCALE = 4;
-  const MIN_RMS = 3e-3;
-  let sumSq = 0;
+  const MIN_PEAK = 5e-3;
+  let peak = 0;
   for (let i = 0; i < pcm.length; i++) {
-    const s = pcm[i] / 32768;
-    sumSq += s * s;
+    const abs = Math.abs(pcm[i]) / 32768;
+    if (abs > peak) peak = abs;
   }
-  const rms = pcm.length > 0 ? Math.sqrt(sumSq / pcm.length) : 0;
-  const scale = rms > MIN_RMS ? Math.min(MAX_SCALE, TARGET_RMS / rms) : 1;
+  const scale = peak > MIN_PEAK ? Math.min(MAX_SCALE, TARGET_PEAK / peak) : 1;
   const float322 = new Float32Array(pcm.length);
   for (let i = 0; i < pcm.length; i++) {
-    float322[i] = Math.max(-1, Math.min(1, pcm[i] / 32768 * scale));
+    float322[i] = pcm[i] / 32768 * scale;
   }
   return float322;
 }
