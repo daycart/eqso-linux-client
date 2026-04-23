@@ -631,7 +631,8 @@ var AlsaAudio = class extends EventEmitter3 {
     this.killDrainPlayerNow();
     if (this.player) {
       try {
-        this.player.kill("SIGTERM");
+        this.player.stdin.destroy();
+        this.player.kill("SIGKILL");
       } catch {
       }
       this.player = null;

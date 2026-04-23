@@ -52,10 +52,19 @@ NoNewPrivileges=true
 # Permite acceso a /dev/snd para ALSA
 SupplementaryGroups=audio
 
-# Senales de parada
-KillMode=process
-KillSignal=SIGTERM
-TimeoutStopSec=10
+# Senales de parada:
+# control-group — systemd mata TODOS los procesos del cgroup (node + aplay + arecord)
+# cuando se detiene el servicio, sin esperar a que Node los mate el mismo.
+# Necesario porque aplay puede quedar en D-state (sleep ininterrumpible ALSA USB)
+# y no responder a SIGTERM; con control-group + SIGKILL el kernel lo limpia
+# en cuanto el hardware libera el wait.
+KillMode=control-group
+KillSignal=SIGKILL
+TimeoutStopSec=5
+
+# Limpieza post-parada: mata cualquier aplay/arecord residual que aun pueda
+# estar bloqueado en el driver ALSA USB y libera el dispositivo de audio.
+ExecStopPost=/bin/sh -c 'pkill -9 -x aplay 2>/dev/null; pkill -9 -x arecord 2>/dev/null; sleep 0.5; true'
 
 [Install]
 WantedBy=multi-user.target

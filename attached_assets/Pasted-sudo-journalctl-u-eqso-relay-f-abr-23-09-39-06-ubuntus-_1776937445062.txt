@@ -1,0 +1,115 @@
+sudo journalctl -u eqso-relay -f
+abr 23 09:39:06 ubuntus node[9029]: [main] 2026-04-23T09:39:06.362Z TX: 30RCI184 transmitiendo
+abr 23 09:39:06 ubuntus node[9029]: [audio] 2026-04-23T09:39:06.561Z [audio] openPlayer: SIGKILL a aplay anterior \Uffffffff esperando cierre para liberar ALSA
+abr 23 09:39:08 ubuntus node[9029]: [audio] 2026-04-23T09:39:08.535Z [playGsm] pkt#50 len=198 decoder_ready=true player=null playerStarting=true
+abr 23 09:39:08 ubuntus node[9029]: [main] 2026-04-23T09:39:08.536Z [audio] pkt#50 ? playGsm OK (pttActive=false rxActive=true)
+abr 23 09:39:13 ubuntus node[9029]: [main] 2026-04-23T09:39:13.734Z TX: 30RCI184 libero canal
+abr 23 09:39:14 ubuntus node[9029]: [main] 2026-04-23T09:39:14.094Z [rxInhibit] suppress: prev=2026-04-23T09:38:55.232Z new=2026-04-23T09:39:15.294Z
+abr 23 09:40:16 ubuntus node[9029]: [main] 2026-04-23T09:40:16.330Z Se\UffffffffSIGTERM recibida \Uffffffff apagando\Uffffffff
+abr 23 09:40:16 ubuntus systemd[1]: Stopping eqso-relay.service - eQSO Relay Daemon...
+abr 23 09:41:46 ubuntus systemd[1]: eqso-relay.service: State 'final-sigterm' timed out. Killing.
+abr 23 09:41:46 ubuntus systemd[1]: eqso-relay.service: Killing process 11637 (aplay) with signal SIGKILL.
+abr 23 09:43:16 ubuntus systemd[1]: eqso-relay.service: Processes still around after final SIGKILL. Entering failed mode.
+abr 23 09:43:16 ubuntus systemd[1]: eqso-relay.service: Failed with result 'timeout'.
+abr 23 09:43:16 ubuntus systemd[1]: eqso-relay.service: Unit process 11637 (aplay) remains running after unit stopped.
+abr 23 09:43:16 ubuntus systemd[1]: Stopped eqso-relay.service - eQSO Relay Daemon.
+abr 23 09:43:16 ubuntus systemd[1]: eqso-relay.service: Consumed 1min 29.170s CPU time, 41.6M memory peak, 0B memory swap peak.
+abr 23 09:43:16 ubuntus systemd[1]: eqso-relay.service: Found left-over process 11637 (aplay) in control group while starting unit. Ignoring.
+abr 23 09:43:16 ubuntus systemd[1]: eqso-relay.service: This usually indicates unclean termination of a previous run, or service implementation deficiencies.
+abr 23 09:43:16 ubuntus systemd[1]: Starting eqso-relay.service - eQSO Relay Daemon...
+abr 23 09:43:17 ubuntus wake-audio.sh[11719]: [wake] power/control=on: USB Audio Device
+abr 23 09:43:17 ubuntus wake-audio.sh[11719]: [wake] /proc/asound/cards actual:
+abr 23 09:43:17 ubuntus wake-audio.sh[11742]:  0 [I82801AAICH    ]: ICH - Intel 82801AA-ICH
+abr 23 09:43:17 ubuntus wake-audio.sh[11742]:                       Intel 82801AA-ICH with AD1980 at irq 21
+abr 23 09:43:17 ubuntus wake-audio.sh[11742]:  1 [Device         ]: USB-Audio - USB Audio Device
+abr 23 09:43:17 ubuntus wake-audio.sh[11742]:                       C-Media Electronics Inc. USB Audio Device at usb-0000:00:06.0-3, full speed
+abr 23 09:43:17 ubuntus wake-audio.sh[11719]: [wake] Tarjeta USB lista (1s)
+abr 23 09:43:17 ubuntus wake-audio.sh[11745]:  0 [I82801AAICH    ]: ICH - Intel 82801AA-ICH
+abr 23 09:43:17 ubuntus wake-audio.sh[11745]:                       Intel 82801AA-ICH with AD1980 at irq 21
+abr 23 09:43:17 ubuntus wake-audio.sh[11745]:  1 [Device         ]: USB-Audio - USB Audio Device
+abr 23 09:43:17 ubuntus wake-audio.sh[11745]:                       C-Media Electronics Inc. USB Audio Device at usb-0000:00:06.0-3, full speed
+abr 23 09:43:17 ubuntus wake-audio.sh[11746]: Simple mixer control 'Mic',0
+abr 23 09:43:17 ubuntus wake-audio.sh[11746]:   Capabilities: pvolume pvolume-joined cvolume cvolume-joined pswitch pswitch-joined cswitch cswitch-joined
+abr 23 09:43:17 ubuntus wake-audio.sh[11746]:   Playback channels: Mono
+abr 23 09:43:17 ubuntus wake-audio.sh[11746]:   Capture channels: Mono
+abr 23 09:43:17 ubuntus wake-audio.sh[11746]:   Limits: Playback 0 - 31 Capture 0 - 35
+abr 23 09:43:17 ubuntus wake-audio.sh[11746]:   Mono: Playback 0 [0%] [-99999.99dB] [off] Capture 0 [0%] [-12.00dB] [on]
+abr 23 09:43:17 ubuntus wake-audio.sh[11719]: [wake] Mic playback (sidetone) = 0%
+abr 23 09:43:17 ubuntus wake-audio.sh[11754]: Simple mixer control 'Mic',0
+abr 23 09:43:17 ubuntus wake-audio.sh[11754]:   Capabilities: pvolume pvolume-joined cvolume cvolume-joined pswitch pswitch-joined cswitch cswitch-joined
+abr 23 09:43:17 ubuntus wake-audio.sh[11754]:   Playback channels: Mono
+abr 23 09:43:17 ubuntus wake-audio.sh[11754]:   Capture channels: Mono
+abr 23 09:43:17 ubuntus wake-audio.sh[11754]:   Limits: Playback 0 - 31 Capture 0 - 35
+abr 23 09:43:17 ubuntus wake-audio.sh[11754]:   Mono: Playback 19 [61%] [-4.00dB] [off] Capture 21 [60%] [9.00dB] [on]
+abr 23 09:43:17 ubuntus wake-audio.sh[11719]: [wake] Mic capture = 60%
+abr 23 09:43:17 ubuntus wake-audio.sh[11756]: Simple mixer control 'Speaker',0
+abr 23 09:43:17 ubuntus wake-audio.sh[11756]:   Capabilities: pvolume pswitch pswitch-joined
+abr 23 09:43:17 ubuntus wake-audio.sh[11756]:   Playback channels: Front Left - Front Right
+abr 23 09:43:17 ubuntus wake-audio.sh[11756]:   Limits: Playback 0 - 37
+abr 23 09:43:17 ubuntus wake-audio.sh[11756]:   Mono:
+abr 23 09:43:17 ubuntus wake-audio.sh[11756]:   Front Left: Playback 33 [89%] [-4.00dB] [on]
+abr 23 09:43:17 ubuntus wake-audio.sh[11756]:   Front Right: Playback 33 [89%] [-4.00dB] [on]
+abr 23 09:43:17 ubuntus wake-audio.sh[11760]: Simple mixer control 'Auto Gain Control',0
+abr 23 09:43:17 ubuntus wake-audio.sh[11760]:   Capabilities: pswitch pswitch-joined
+abr 23 09:43:17 ubuntus wake-audio.sh[11760]:   Playback channels: Mono
+abr 23 09:43:17 ubuntus wake-audio.sh[11760]:   Mono: Playback [off]
+abr 23 09:43:17 ubuntus wake-audio.sh[11719]: [wake] Mixer ALSA card 1 ajustado
+abr 23 09:43:21 ubuntus systemd[1]: eqso-relay.service: Found left-over process 11637 (aplay) in control group while starting unit. Ignoring.
+abr 23 09:43:21 ubuntus systemd[1]: eqso-relay.service: This usually indicates unclean termination of a previous run, or service implementation deficiencies.
+abr 23 09:43:21 ubuntus systemd[1]: Started eqso-relay.service - eQSO Relay Daemon.
+abr 23 09:43:22 ubuntus node[11782]: [config] Cargado: /etc/eqso-relay/default.json
+abr 23 09:43:22 ubuntus node[11782]: [config] Configuracion activa: {
+abr 23 09:43:22 ubuntus node[11782]:   "callsign": "0R-IN70WN",
+abr 23 09:43:22 ubuntus node[11782]:   "room": "CB",
+abr 23 09:43:22 ubuntus node[11782]:   "password": "",
+abr 23 09:43:22 ubuntus node[11782]:   "message": "Radio Enlace IN70WN",
+abr 23 09:43:22 ubuntus node[11782]:   "server": "127.0.0.1",
+abr 23 09:43:22 ubuntus node[11782]:   "port": 2171,
+abr 23 09:43:22 ubuntus node[11782]:   "reconnectMinMs": 2000,
+abr 23 09:43:22 ubuntus node[11782]:   "reconnectMaxMs": 60000,
+abr 23 09:43:22 ubuntus node[11782]:   "audio": {
+abr 23 09:43:22 ubuntus node[11782]:     "captureDevice": "plughw:Device,0",
+abr 23 09:43:22 ubuntus node[11782]:     "playbackDevice": "plughw:Device,0",
+abr 23 09:43:22 ubuntus node[11782]:     "vox": true,
+abr 23 09:43:22 ubuntus node[11782]:     "voxThresholdRms": 1500,
+abr 23 09:43:22 ubuntus node[11782]:     "voxHangMs": 3000,
+abr 23 09:43:22 ubuntus node[11782]:     "txGateRms": 50,
+abr 23 09:43:22 ubuntus node[11782]:     "inputGain": 0.6,
+abr 23 09:43:22 ubuntus node[11782]:     "outputGain": 1
+abr 23 09:43:22 ubuntus node[11782]:   },
+abr 23 09:43:22 ubuntus node[11782]:   "control": {
+abr 23 09:43:22 ubuntus node[11782]:     "enabled": true,
+abr 23 09:43:22 ubuntus node[11782]:     "port": 8009,
+abr 23 09:43:22 ubuntus node[11782]:     "host": "127.0.0.1"
+abr 23 09:43:22 ubuntus node[11782]:   },
+abr 23 09:43:22 ubuntus node[11782]:   "ptt": {
+abr 23 09:43:22 ubuntus node[11782]:     "device": "/dev/ttyACM0",
+abr 23 09:43:22 ubuntus node[11782]:     "method": "rts",
+abr 23 09:43:22 ubuntus node[11782]:     "inverted": false
+abr 23 09:43:22 ubuntus node[11782]:   }
+abr 23 09:43:22 ubuntus node[11782]: }
+abr 23 09:43:22 ubuntus node[11782]: [main] 2026-04-23T09:43:22.142Z ============================================================
+abr 23 09:43:22 ubuntus node[11782]: [main] 2026-04-23T09:43:22.143Z eQSO Relay Daemon arrancado
+abr 23 09:43:22 ubuntus node[11782]: [main] 2026-04-23T09:43:22.143Z   Callsign : 0R-IN70WN
+abr 23 09:43:22 ubuntus node[11782]: [main] 2026-04-23T09:43:22.143Z   Sala     : CB
+abr 23 09:43:22 ubuntus node[11782]: [main] 2026-04-23T09:43:22.143Z   Servidor : 127.0.0.1:2171
+abr 23 09:43:22 ubuntus node[11782]: [main] 2026-04-23T09:43:22.144Z   VOX      : ON (umbral=1500 hang=3000ms)
+abr 23 09:43:22 ubuntus node[11782]: [main] 2026-04-23T09:43:22.144Z   Captura  : plughw:Device,0
+abr 23 09:43:22 ubuntus node[11782]: [main] 2026-04-23T09:43:22.146Z   Playback : plughw:Device,0
+abr 23 09:43:22 ubuntus node[11782]: [main] 2026-04-23T09:43:22.147Z   PTT Ser. : /dev/ttyACM0 (rts)
+abr 23 09:43:22 ubuntus node[11782]: [main] 2026-04-23T09:43:22.147Z ============================================================
+abr 23 09:43:22 ubuntus node[11782]: [ptt] 2026-04-23T09:43:22.150Z Iniciando PTT serial: /dev/ttyACM0 (rts)
+abr 23 09:43:22 ubuntus node[11782]: [audio] 2026-04-23T09:43:22.206Z arecord -D plughw:Device,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 23 09:43:22 ubuntus node[11782]: [main] 2026-04-23T09:43:22.224Z Conectando a 127.0.0.1:2171 como "0R-IN70WN" en sala "CB"\Uffffffff
+abr 23 09:43:22 ubuntus node[11782]: [control] 2026-04-23T09:43:22.284Z Control HTTP escuchando en http://127.0.0.1:8009
+abr 23 09:43:22 ubuntus node[11782]: [eqso] 2026-04-23T09:43:22.306Z TCP conectado a 127.0.0.1:2171
+abr 23 09:43:22 ubuntus node[11782]: [eqso] 2026-04-23T09:43:22.325Z Handshake recibido \Uffffffff conexion establecida
+abr 23 09:43:22 ubuntus node[11782]: [main] 2026-04-23T09:43:22.326Z Conectado \Uffffffff enviando JOIN\Uffffffff
+abr 23 09:43:22 ubuntus node[11782]: [eqso] 2026-04-23T09:43:22.339Z JOIN enviado: callsign="0R-IN70WN" sala="CB"
+abr 23 09:43:22 ubuntus node[11782]: [eqso] 2026-04-23T09:43:22.345Z Salas disponibles: GENERAL, CB, ASORAPA, PRUEBAS
+abr 23 09:43:22 ubuntus node[11782]: [main] 2026-04-23T09:43:22.346Z Salas: GENERAL, CB, ASORAPA, PRUEBAS
+abr 23 09:43:22 ubuntus node[11782]: [main] 2026-04-23T09:43:22.353Z Sala: 0R-JN11BK se ha unido
+abr 23 09:43:22 ubuntus node[11782]: [main] 2026-04-23T09:43:22.353Z Sala: 0R-ASORAPA se ha unido
+abr 23 09:43:22 ubuntus node[11782]: [main] 2026-04-23T09:43:22.354Z Sala: 0R-IN53SI se ha unido
+abr 23 09:43:22 ubuntus node[11782]: [main] 2026-04-23T09:43:22.354Z Sala: 0R-IN70WN se ha unido
+abr 23 09:43:22 ubuntus node[11782]: [ptt] 2026-04-23T09:43:22.428Z PTT serial listo (/dev/ttyACM0, rts)

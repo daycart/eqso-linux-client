@@ -70,7 +70,11 @@ export class AlsaAudio extends EventEmitter {
     // Matar drain player inmediatamente (sin esperar el timer de 300ms)
     this.killDrainPlayerNow();
     if (this.player) {
-      try { this.player.kill("SIGTERM"); } catch { /* ignore */ }
+      // SIGKILL directo: aplay puede estar en D-state (sleep ininterrumpible en
+      // driver USB ALSA) y no responder a SIGTERM.  Con SIGKILL el kernel lo
+      // elimina tan pronto como salga del wait; el systemd ExecStopPost limpia
+      // cualquier proceso residual en D-state.
+      try { this.player.stdin.destroy(); this.player.kill("SIGKILL"); } catch { /* ignore */ }
       this.player = null;
     }
     this.encoder.stop();
