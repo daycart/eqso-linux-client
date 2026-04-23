@@ -73,10 +73,12 @@ const POST_RX_SUPPRESS_MS = 1200;
 //   3. Eco acustico de la sala (altavoz → micro, ~200-500ms).
 // Sin esta supresion, el VOX puede dispararse < 2s despues de soltar PTT y
 // crear un bucle TX→silencio→TX que inunda el canal eQSO con ruido ("eco").
-// Observado en logs: re-trigger a 1066ms pese a ventana de 1500ms → se sube
-// a 5000ms para cubrir holgadamente todos los casos. En CB la pausa tipica
-// entre transmisiones es >5s, por lo que no penaliza el uso normal.
-const POST_TX_VOX_SUPPRESS_MS = 5000;
+// Observado en logs: re-trigger a 1066ms pese a ventana de 1500ms.
+// NOTA: voxHangMs=2500ms hace que las pausas naturales del habla no rompan
+// el TX; el suppress post-TX solo se activa cuando el operador realmente
+// para. 1500ms cubre squelch click (100-300ms) + eco RF residual (300-700ms)
+// sin bloquear al operador si vuelve a hablar inmediatamente.
+const POST_TX_VOX_SUPPRESS_MS = 1500;
 
 function setRxActive(): void {
   const wasActive = rxActive;

@@ -16,7 +16,7 @@ var DEFAULTS = {
     playbackDevice: "plughw:1,0",
     vox: true,
     voxThresholdRms: 600,
-    voxHangMs: 1e3,
+    voxHangMs: 2500,
     txGateRms: 50,
     inputGain: 1,
     outputGain: 1
@@ -1228,7 +1228,7 @@ var postTxSuppressUntil = 0;
 var POST_TX_SUPPRESS_MS = 100;
 var postRxVoxSuppressUntil = 0;
 var POST_RX_SUPPRESS_MS = 1200;
-var POST_TX_VOX_SUPPRESS_MS = 5e3;
+var POST_TX_VOX_SUPPRESS_MS = 1500;
 function setRxActive() {
   const wasActive = rxActive;
   rxActive = true;
