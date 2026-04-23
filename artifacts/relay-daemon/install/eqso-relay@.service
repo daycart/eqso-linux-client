@@ -86,14 +86,15 @@ NoNewPrivileges=true
 SupplementaryGroups=audio
 
 # Senales de parada:
-# control-group — systemd mata TODOS los procesos del cgroup (node + aplay + arecord)
-# cuando se detiene el servicio, sin esperar a que Node los mate el mismo.
-# Necesario porque aplay puede quedar en D-state (sleep ininterrumpible ALSA USB)
-# y no responder a SIGTERM; con control-group + SIGKILL el kernel lo limpia
-# en cuanto el hardware libera el wait.
+# SIGTERM → Node recibe la señal, cierra stdin de aplay, espera que aplay
+# vacie su buffer DMA (≤1.5s) y luego llama process.exit(0).
+# Esto evita el D-state: el D-state ocurre cuando SIGKILL mata aplay en
+# mitad de una escritura USB DMA. Con cierre graceful, aplay termina la
+# escritura antes de salir y el kernel no queda bloqueado.
+# Si Node no sale en 8s, systemd envia SIGKILL al cgroup entero (fallback).
 KillMode=control-group
-KillSignal=SIGKILL
-TimeoutStopSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=8
 
 # Limpieza post-parada: reset USB via sysfs (mismo metodo que ExecStartPre).
 ExecStopPost=+/bin/sh -c '\

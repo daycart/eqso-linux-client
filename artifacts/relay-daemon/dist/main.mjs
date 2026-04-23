@@ -621,7 +621,7 @@ var AlsaAudio = class extends EventEmitter3 {
     this.startRecorder();
     this.levelTimer = setInterval(() => this.logLevel(), 5e3);
   }
-  stop() {
+  async stop() {
     this.stopping = true;
     if (this.levelTimer) {
       clearInterval(this.levelTimer);
@@ -630,12 +630,26 @@ var AlsaAudio = class extends EventEmitter3 {
     this.stopRecorder();
     this.killDrainPlayerNow();
     if (this.player) {
-      try {
-        this.player.stdin.destroy();
-        this.player.kill("SIGKILL");
-      } catch {
-      }
+      const p = this.player;
       this.player = null;
+      await new Promise((resolve) => {
+        const sigterm = setTimeout(() => {
+          try {
+            p.kill("SIGTERM");
+          } catch {
+          }
+        }, 500);
+        const timeout = setTimeout(resolve, 1500);
+        p.once("close", () => {
+          clearTimeout(sigterm);
+          clearTimeout(timeout);
+          resolve();
+        });
+        try {
+          p.stdin.end();
+        } catch {
+        }
+      });
     }
     this.encoder.stop();
     this.decoder.stop();
@@ -1410,18 +1424,23 @@ log5("=".repeat(60));
 if (cfg.ptt.device) serialPtt.start();
 audio.start();
 connect();
-function shutdown(sig) {
-  log5(`Se\xF1al ${sig} recibida \u2014 apagando\u2026`);
+async function shutdown(sig) {
+  log5(`Se\xF1al ${sig} recibida \u2014 apagando (graceful)\u2026`);
   if (pttActive) {
     eqsoClient?.endTx();
   }
   eqsoClient?.disconnect();
   serialPtt.stop();
-  audio.stop();
+  await audio.stop();
+  log5("Apagado completado.");
   process.exit(0);
 }
-process.on("SIGTERM", () => shutdown("SIGTERM"));
-process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => {
+  shutdown("SIGTERM").catch(() => process.exit(1));
+});
+process.on("SIGINT", () => {
+  shutdown("SIGINT").catch(() => process.exit(1));
+});
 process.on("SIGUSR1", () => {
   log5("SIGUSR1: reconexion manual");
   eqsoClient?.disconnect();

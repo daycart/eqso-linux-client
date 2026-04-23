@@ -63,20 +63,40 @@ export class AlsaAudio extends EventEmitter {
     this.levelTimer = setInterval(() => this.logLevel(), 5000);
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     this.stopping = true;
     if (this.levelTimer) { clearInterval(this.levelTimer); this.levelTimer = null; }
+
+    // arecord: SIGTERM es suficiente (lectura USB no causa D-state)
     this.stopRecorder();
-    // Matar drain player inmediatamente (sin esperar el timer de 300ms)
+
+    // drainPlayer: ya estaba vaciando, SIGKILL es seguro (ya no escribe activamente)
     this.killDrainPlayerNow();
+
     if (this.player) {
-      // SIGKILL directo: aplay puede estar en D-state (sleep ininterrumpible en
-      // driver USB ALSA) y no responder a SIGTERM.  Con SIGKILL el kernel lo
-      // elimina tan pronto como salga del wait; el systemd ExecStopPost limpia
-      // cualquier proceso residual en D-state.
-      try { this.player.stdin.destroy(); this.player.kill("SIGKILL"); } catch { /* ignore */ }
+      const p = this.player;
       this.player = null;
+      // Shutdown graceful de aplay:
+      //   1. Cerrar stdin → aplay vacia su buffer DMA y sale limpiamente
+      //   2. Tras 500ms, SIGTERM si aun sigue vivo
+      //   3. Tras 1500ms, continuar de todas formas (timeout de seguridad)
+      // Esto evita el D-state: el D-state ocurre cuando SIGKILL interrumpe una
+      // escritura DMA USB a mitad. Si esperamos a que aplay termine la escritura
+      // por si mismo (cerrando stdin), no hay D-state.
+      await new Promise<void>((resolve) => {
+        const sigterm = setTimeout(() => {
+          try { p.kill("SIGTERM"); } catch { /* ignore */ }
+        }, 500);
+        const timeout = setTimeout(resolve, 1500);
+        p.once("close", () => {
+          clearTimeout(sigterm);
+          clearTimeout(timeout);
+          resolve();
+        });
+        try { p.stdin.end(); } catch { /* ignore */ }
+      });
     }
+
     this.encoder.stop();
     this.decoder.stop();
   }

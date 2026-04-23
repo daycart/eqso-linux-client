@@ -359,17 +359,21 @@ connect();
 
 // ─── Señales del sistema ──────────────────────────────────────────────────────
 
-function shutdown(sig: string): void {
-  log(`Señal ${sig} recibida — apagando…`);
+async function shutdown(sig: string): Promise<void> {
+  log(`Señal ${sig} recibida — apagando (graceful)…`);
   if (pttActive) { eqsoClient?.endTx(); }
   eqsoClient?.disconnect();
   serialPtt.stop();
-  audio.stop();
+  // Esperar a que aplay vacie su buffer DMA antes de salir.
+  // Esto evita el D-state: si process.exit() ocurriera mientras aplay
+  // esta escribiendo al USB (DMA transfer), el kernel entraria en D-state.
+  await audio.stop();
+  log("Apagado completado.");
   process.exit(0);
 }
 
-process.on("SIGTERM", () => shutdown("SIGTERM"));
-process.on("SIGINT",  () => shutdown("SIGINT"));
+process.on("SIGTERM", () => { shutdown("SIGTERM").catch(() => process.exit(1)); });
+process.on("SIGINT",  () => { shutdown("SIGINT").catch(() => process.exit(1)); });
 
 // Reconexion manual via SIGUSR1 (ej: kill -USR1 <pid>)
 process.on("SIGUSR1", () => {
