@@ -70,6 +70,14 @@ export function AdminPanel({ token, onClose }: AdminPanelProps) {
   const [inactTriggerRoom, setInactTriggerRoom] = useState("");
   const [inactMsg, setInactMsg] = useState<string | null>(null);
 
+  // Courtesy beep section state
+  const [beepConfig, setBeepConfig] = useState<{
+    enabled: boolean; selectedId: string;
+    tones: { id: string; label: string }[];
+  } | null>(null);
+  const [beepMsg, setBeepMsg] = useState<string | null>(null);
+  const [beepSaving, setBeepSaving] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -214,12 +222,38 @@ export function AdminPanel({ token, onClose }: AdminPanelProps) {
 
   async function loadInactConfig() {
     try {
-      const res = await fetch(`${getApiBase()}/api/admin/inactivity`, { headers: authHeaders(token) });
-      if (!res.ok) return;
-      const cfg = await res.json();
-      setInactConfig(cfg);
-      setInactTimeout(String(cfg.timeoutMinutes));
+      const [inactRes, beepRes] = await Promise.all([
+        fetch(`${getApiBase()}/api/admin/inactivity`,     { headers: authHeaders(token) }),
+        fetch(`${getApiBase()}/api/admin/courtesy-beep`,  { headers: authHeaders(token) }),
+      ]);
+      if (inactRes.ok) {
+        const cfg = await inactRes.json();
+        setInactConfig(cfg);
+        setInactTimeout(String(cfg.timeoutMinutes));
+      }
+      if (beepRes.ok) {
+        setBeepConfig(await beepRes.json());
+      }
     } catch {}
+  }
+
+  async function saveBeepConfig(patch: { selectedId?: string; enabled?: boolean }) {
+    setBeepMsg(null);
+    setBeepSaving(true);
+    try {
+      const res = await fetch(`${getApiBase()}/api/admin/courtesy-beep`, {
+        method: "PATCH",
+        headers: authHeaders(token),
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Error");
+      setBeepConfig(await res.json());
+      setBeepMsg("Configuracion guardada.");
+    } catch (e: unknown) {
+      setBeepMsg(e instanceof Error ? e.message : "Error");
+    } finally {
+      setBeepSaving(false);
+    }
   }
 
   async function saveInactConfig(patch: { enabled?: boolean; timeoutMinutes?: number }) {
@@ -487,6 +521,92 @@ export function AdminPanel({ token, onClose }: AdminPanelProps) {
               </div>
             </>
           )}
+
+          {/* ── Courtesy beep ── */}
+          <div className="border-t border-gray-800 pt-6">
+            <h3 className="text-sm font-semibold text-gray-200 mb-1">Beep de cortesia (radio-enlace)</h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Cuando el operador CB suelta el PTT, el servidor devuelve un tono de cortesia al radio-enlace
+              para que suene por la radio. Los clientes web no lo escuchan.
+            </p>
+
+            {beepMsg && (
+              <p className={`text-xs px-3 py-2 rounded-lg mb-4 ${
+                beepMsg.startsWith("Error")
+                  ? "bg-red-950 text-red-300 border border-red-800"
+                  : "bg-green-950 text-green-300 border border-green-800"
+              }`}>
+                {beepMsg}
+              </p>
+            )}
+
+            {beepConfig === null ? (
+              <p className="text-xs text-gray-600">Cargando...</p>
+            ) : (
+              <>
+                {/* Enable/disable */}
+                <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 flex items-center justify-between gap-4 mb-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-200">
+                      {beepConfig.enabled ? "Activado" : "Desactivado"}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {beepConfig.enabled
+                        ? "El tono se envia al radio-enlace tras cada transmision CB"
+                        : "Sin tono de cortesia"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => saveBeepConfig({ enabled: !beepConfig.enabled })}
+                    disabled={beepSaving}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                      beepConfig.enabled
+                        ? "bg-red-900 hover:bg-red-800 text-red-200"
+                        : "bg-green-800 hover:bg-green-700 text-green-200"
+                    }`}
+                  >
+                    {beepConfig.enabled ? "Desactivar" : "Activar"}
+                  </button>
+                </div>
+
+                {/* Tone selection */}
+                <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                  <p className="text-sm font-medium text-gray-200 mb-3">Seleccionar tono</p>
+                  <div className="space-y-2">
+                    {beepConfig.tones.map((tone) => (
+                      <label
+                        key={tone.id}
+                        className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+                          beepConfig.selectedId === tone.id
+                            ? "bg-green-950 border border-green-800"
+                            : "border border-gray-800 hover:border-gray-700"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="beep-tone"
+                          value={tone.id}
+                          checked={beepConfig.selectedId === tone.id}
+                          onChange={() => setBeepConfig(c => c ? { ...c, selectedId: tone.id } : c)}
+                          className="accent-green-500"
+                        />
+                        <span className="text-sm text-gray-300">{tone.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      onClick={() => saveBeepConfig({ selectedId: beepConfig.selectedId })}
+                      disabled={beepSaving}
+                      className="bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {beepSaving ? "Guardando..." : "Guardar tono"}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 

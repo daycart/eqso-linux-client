@@ -5,6 +5,10 @@ import { roomManager, ClientInfo } from "./room-manager";
 import { FfmpegGsmDecoder } from "./ffmpeg-gsm";
 import { inactivityManager } from "./inactivity-manager";
 import { moderationManager } from "./moderation-manager";
+import { courtesyBeepManager } from "./courtesy-beep-manager";
+import { db } from "@workspace/db";
+import { usersTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import {
   EQSO_COMMANDS,
   AUDIO_PAYLOAD_SIZE,
@@ -144,6 +148,22 @@ function processSingleByte(state: TcpClientState, byte: number): void {
         // Con flush: los paquetes llegan juntos (<1 tick de Node.js) y el
         // Web Audio del navegador los encola en nextPlayTimeRef sin solapamiento.
         state.flushPaceQueue?.();
+
+        // Tono de cortesía: solo si es un cliente relay (radio CB).
+        // Enviamos los paquetes GSM del beep SOLO de vuelta a esta conexión TCP,
+        // 250ms después de liberar PTT, para que el operador CB escuche el tono.
+        if (client.isRelay) {
+          const beepPackets = courtesyBeepManager.getPackets();
+          if (beepPackets.length > 0) {
+            let i = 0;
+            const sendBeep = () => {
+              if (state.disconnected || i >= beepPackets.length) return;
+              safeWrite(state, beepPackets[i++]!);
+              if (i < beepPackets.length) setTimeout(sendBeep, 120);
+            };
+            setTimeout(sendBeep, 250);
+          }
+        }
       }
       break;
 
@@ -209,7 +229,8 @@ function processMultiByte(state: TcpClientState, byte: number): void {
           { id: state.id, name: parsed.name, room: parsed.room, bufLen: state.buf.length },
           "eQSO TCP JOIN parsed"
         );
-        handleJoin(state, parsed.name, parsed.room, parsed.message, parsed.password);
+        handleJoin(state, parsed.name, parsed.room, parsed.message, parsed.password)
+          .catch(err => logger.error({ err }, "handleJoin async error"));
         state.readMultiByte = false;
         state.multiByteCmd = 0;
         state.buf = Buffer.alloc(0);
@@ -244,13 +265,13 @@ function processMultiByte(state: TcpClientState, byte: number): void {
   }
 }
 
-function handleJoin(
+async function handleJoin(
   state: TcpClientState,
   name: string,
   room: string,
   message: string,
   password: string
-): void {
+): Promise<void> {
   const existing = roomManager.getClient(state.id);
   const oldRoom = existing?.room ?? "";
 
@@ -285,14 +306,28 @@ function handleJoin(
   if (roomManager.isNameTaken(name, state.id)) {
     safeWrite(state, buildErrorMessage(`Indicativo "${name}" ya en uso`));
     logger.warn({ id: state.id, name }, "TCP client rejected: callsign already in use — destroying socket");
-    state.socket.destroy(); // destroy so the anonymous connection does not linger for 2 minutes
+    state.socket.destroy();
     return;
+  }
+
+  // Look up isRelay flag from DB (non-blocking best-effort)
+  let isRelay = false;
+  try {
+    const [user] = await db.select({ isRelay: usersTable.isRelay })
+      .from(usersTable)
+      .where(eq(usersTable.callsign, name.toUpperCase()))
+      .limit(1);
+    isRelay = user?.isRelay ?? false;
+  } catch (err) {
+    logger.warn({ err, name }, "TCP handleJoin: DB isRelay lookup failed");
   }
 
   const client = roomManager.getClient(state.id);
   if (client) {
     client.name = name;
     client.message = message;
+    client.isRelay = isRelay;
+    if (isRelay) logger.info({ id: state.id, name }, "TCP client identified as relay");
   }
 
   const oldMembers = oldRoom ? roomManager.getRoomMembers(oldRoom) : [];

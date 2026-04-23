@@ -6,6 +6,8 @@ import { startWsBridge } from "./eqso/ws-bridge";
 import { seedServers } from "./lib/seedServers";
 import { moderationManager } from "./eqso/moderation-manager";
 import { relayManager } from "./eqso/relay-manager";
+import { inactivityManager } from "./eqso/inactivity-manager";
+import { courtesyBeepManager } from "./eqso/courtesy-beep-manager";
 
 const rawPort = process.env["PORT"];
 
@@ -27,6 +29,8 @@ startWsBridge(httpServer);
 seedServers().catch((err) => logger.warn({ err }, "seedServers failed (non-fatal)"));
 moderationManager.loadBans().catch((err) => logger.warn({ err }, "moderationManager.loadBans failed (non-fatal)"));
 relayManager.init().catch((err) => logger.warn({ err }, "relayManager.init failed (non-fatal)"));
+inactivityManager.init().catch((err) => logger.warn({ err }, "inactivityManager.init failed (non-fatal)"));
+courtesyBeepManager.init().catch((err) => logger.warn({ err }, "courtesyBeepManager.init failed (non-fatal)"));
 
 httpServer.listen(port, (err?: Error) => {
   if (err) {

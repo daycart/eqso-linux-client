@@ -31,6 +31,7 @@ export interface ClientInfo {
   txBytes: number;
   rxBytes: number;
   pingMs: number;
+  isRelay?: boolean;
   send: (data: Buffer) => void;
   close: () => void;
 }

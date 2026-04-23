@@ -33524,7 +33524,7 @@ var require_buffer_util = __commonJS({
     "use strict";
     var { EMPTY_BUFFER } = require_constants2();
     var FastBuffer = Buffer[Symbol.species];
-    function concat(list, totalLength) {
+    function concat2(list, totalLength) {
       if (list.length === 0) return EMPTY_BUFFER;
       if (list.length === 1) return list[0];
       const target = Buffer.allocUnsafe(totalLength);
@@ -33570,7 +33570,7 @@ var require_buffer_util = __commonJS({
       return buf;
     }
     module.exports = {
-      concat,
+      concat: concat2,
       mask: _mask,
       toArrayBuffer,
       toBuffer,
@@ -34239,7 +34239,7 @@ var require_receiver = __commonJS({
       kStatusCode,
       kWebSocket
     } = require_constants2();
-    var { concat, toArrayBuffer, unmask } = require_buffer_util();
+    var { concat: concat2, toArrayBuffer, unmask } = require_buffer_util();
     var { isValidStatusCode, isValidUTF8 } = require_validation();
     var FastBuffer = Buffer[Symbol.species];
     var GET_INFO = 0;
@@ -34685,9 +34685,9 @@ var require_receiver = __commonJS({
         if (this._opcode === 2) {
           let data;
           if (this._binaryType === "nodebuffer") {
-            data = concat(fragments, messageLength);
+            data = concat2(fragments, messageLength);
           } else if (this._binaryType === "arraybuffer") {
-            data = toArrayBuffer(concat(fragments, messageLength));
+            data = toArrayBuffer(concat2(fragments, messageLength));
           } else if (this._binaryType === "blob") {
             data = new Blob(fragments);
           } else {
@@ -34705,7 +34705,7 @@ var require_receiver = __commonJS({
             });
           }
         } else {
-          const buf = concat(fragments, messageLength);
+          const buf = concat2(fragments, messageLength);
           if (!this._skipUTF8Validation && !isValidUTF8(buf)) {
             const error40 = this.createError(
               Error,
@@ -48291,6 +48291,7 @@ __export(schema_exports, {
   insertUserSchema: () => insertUserSchema,
   relayConnectionsTable: () => relayConnectionsTable,
   serversTable: () => serversTable,
+  systemSettingsTable: () => systemSettingsTable,
   usersTable: () => usersTable
 });
 
@@ -59736,6 +59737,12 @@ var relayConnectionsTable = pgTable("relay_connections", {
   createdAt: timestamp("created_at").notNull().defaultNow()
 });
 
+// ../../lib/db/src/schema/settings.ts
+var systemSettingsTable = pgTable("system_settings", {
+  key: varchar("key", { length: 100 }).primaryKey(),
+  value: varchar("value", { length: 2e3 }).notNull().default("")
+});
+
 // ../../lib/db/src/index.ts
 var { Pool: Pool3 } = esm_default;
 if (!process.env.DATABASE_URL) {
@@ -60056,6 +60063,28 @@ var InactivityManager = class {
   audioFile = process.env.INACTIVITY_AUDIO_FILE ?? DEFAULT_AUDIO_FILE;
   checkTimer = null;
   playing = /* @__PURE__ */ new Set();
+  // ── Startup: load persisted config from DB ────────────────────────────────
+  async init() {
+    try {
+      const rows = await db.select().from(systemSettingsTable);
+      const map2 = new Map(rows.map((r) => [r.key, r.value]));
+      const savedEnabled = map2.get("inactivity_enabled");
+      const savedTimeout = map2.get("inactivity_timeout_min");
+      if (savedEnabled !== void 0) {
+        this.enabled = savedEnabled === "1";
+        if (this.enabled) this.startCheckLoop();
+      }
+      if (savedTimeout !== void 0) {
+        this.timeoutMs = Math.max(1, Number(savedTimeout)) * 6e4;
+      }
+      logger.info(
+        { enabled: this.enabled, timeoutMs: this.timeoutMs },
+        "InactivityManager: config loaded from DB"
+      );
+    } catch (err) {
+      logger.warn({ err }, "InactivityManager: could not load config from DB (using defaults)");
+    }
+  }
   // ── Public config ────────────────────────────────────────────────────────────
   getConfig() {
     return {
@@ -60070,16 +60099,17 @@ var InactivityManager = class {
     if (v) this.startCheckLoop();
     else this.stopCheckLoop();
     logger.info({ enabled: v }, "Inactivity manager toggled");
+    this.persistConfig();
   }
   setTimeoutMinutes(minutes) {
     this.timeoutMs = Math.max(1, minutes) * 6e4;
     logger.info({ minutes }, "Inactivity timeout updated");
+    this.persistConfig();
   }
   setAudioFile(filePath) {
     this.audioFile = filePath;
   }
   // ── Activity tracking ────────────────────────────────────────────────────────
-  /** Call this whenever a room has a real PTT event */
   recordActivity(room) {
     this.lastActivity.set(room, Date.now());
   }
@@ -60187,7 +60217,6 @@ var InactivityManager = class {
     }));
     await Promise.all([localDone, wsDone]);
   }
-  /** Convert WAV → Float32 PCM packets with 0x11 opcode for browser WebSocket clients */
   convertWavToFloat32Packets(filePath) {
     return new Promise((resolve, reject) => {
       const ff = spawn("ffmpeg", [
@@ -60275,12 +60304,19 @@ var InactivityManager = class {
       });
     });
   }
-  /** Save a WAV buffer uploaded by the admin */
   async saveAudioFile(data) {
     const dir = path.dirname(this.audioFile);
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(this.audioFile, data);
     logger.info({ file: this.audioFile, bytes: data.length }, "Inactivity audio file saved");
+  }
+  // ── Private: persist config to DB ────────────────────────────────────────────
+  persistConfig() {
+    const doSave = async () => {
+      await db.insert(systemSettingsTable).values({ key: "inactivity_enabled", value: this.enabled ? "1" : "0" }).onConflictDoUpdate({ target: systemSettingsTable.key, set: { value: sql`excluded.value` } });
+      await db.insert(systemSettingsTable).values({ key: "inactivity_timeout_min", value: String(this.timeoutMs / 6e4) }).onConflictDoUpdate({ target: systemSettingsTable.key, set: { value: sql`excluded.value` } });
+    };
+    doSave().catch((err) => logger.warn({ err }, "InactivityManager: failed to persist config"));
   }
 };
 var inactivityManager = new InactivityManager();
@@ -61073,6 +61109,180 @@ var RelayManager = class {
 };
 var relayManager = new RelayManager();
 
+// src/eqso/courtesy-beep-manager.ts
+import { spawn as spawn2 } from "child_process";
+var SAMPLE_RATE = 8e3;
+var AUDIO_PAYLOAD_SIZE2 = 198;
+var COURTESY_TONES = [
+  { id: "beep-simple", label: "Bip simple (1000 Hz, 200ms)" },
+  { id: "beep-double", label: "Doble bip (1000 Hz, 2x150ms)" },
+  { id: "beep-descend", label: "Tono descendente (1400 a 800 Hz)" },
+  { id: "beep-roger", label: "Roger bip (1750 Hz, 100ms)" },
+  { id: "beep-cw-k", label: "CW 'K' (700 Hz, dah-dit-dah)" }
+];
+function sine(freq, durationMs, amp = 0.6) {
+  const n = Math.floor(SAMPLE_RATE * durationMs / 1e3);
+  const buf = new Int16Array(n);
+  for (let i = 0; i < n; i++) {
+    buf[i] = Math.round(amp * 32767 * Math.sin(2 * Math.PI * freq * i / SAMPLE_RATE));
+  }
+  return buf;
+}
+function silence(durationMs) {
+  return new Int16Array(Math.floor(SAMPLE_RATE * durationMs / 1e3));
+}
+function concat(...parts) {
+  const total = parts.reduce((s, p) => s + p.length, 0);
+  const out = new Int16Array(total);
+  let off = 0;
+  for (const p of parts) {
+    out.set(p, off);
+    off += p.length;
+  }
+  return out;
+}
+function generatePcm(id) {
+  switch (id) {
+    case "beep-simple":
+      return sine(1e3, 200);
+    case "beep-double":
+      return concat(sine(1e3, 150), silence(100), sine(1e3, 150));
+    case "beep-descend": {
+      const n = Math.floor(SAMPLE_RATE * 300 / 1e3);
+      const buf = new Int16Array(n);
+      for (let i = 0; i < n; i++) {
+        const freq = 1400 - 600 * i / n;
+        buf[i] = Math.round(0.6 * 32767 * Math.sin(2 * Math.PI * freq * i / SAMPLE_RATE));
+      }
+      return buf;
+    }
+    case "beep-roger":
+      return sine(1750, 100);
+    case "beep-cw-k":
+      return concat(
+        sine(700, 300),
+        silence(100),
+        sine(700, 100),
+        silence(100),
+        sine(700, 300)
+      );
+    default:
+      return sine(1e3, 200);
+  }
+}
+function pcmToWav(pcm) {
+  const dataLen = pcm.length * 2;
+  const buf = Buffer.allocUnsafe(44 + dataLen);
+  buf.write("RIFF", 0);
+  buf.writeUInt32LE(36 + dataLen, 4);
+  buf.write("WAVE", 8);
+  buf.write("fmt ", 12);
+  buf.writeUInt32LE(16, 16);
+  buf.writeUInt16LE(1, 20);
+  buf.writeUInt16LE(1, 22);
+  buf.writeUInt32LE(SAMPLE_RATE, 24);
+  buf.writeUInt32LE(SAMPLE_RATE * 2, 28);
+  buf.writeUInt16LE(2, 32);
+  buf.writeUInt16LE(16, 34);
+  buf.write("data", 36);
+  buf.writeUInt32LE(dataLen, 40);
+  for (let i = 0; i < pcm.length; i++) {
+    buf.writeInt16LE(pcm[i], 44 + i * 2);
+  }
+  return buf;
+}
+async function wavToGsmPackets(wavBuf) {
+  return new Promise((resolve, reject) => {
+    const ff = spawn2("ffmpeg", [
+      "-i",
+      "pipe:0",
+      "-ar",
+      "8000",
+      "-ac",
+      "1",
+      "-f",
+      "gsm",
+      "pipe:1"
+    ], { stdio: ["pipe", "pipe", "pipe"] });
+    const chunks = [];
+    ff.stdout.on("data", (c) => chunks.push(c));
+    ff.stderr.on("data", () => {
+    });
+    ff.on("error", reject);
+    ff.on("close", (code) => {
+      if (code !== 0 && code !== null) {
+        reject(new Error(`ffmpeg exit ${code}`));
+        return;
+      }
+      const raw = Buffer.concat(chunks);
+      const packets = [];
+      for (let off = 0; off + AUDIO_PAYLOAD_SIZE2 <= raw.length; off += AUDIO_PAYLOAD_SIZE2) {
+        packets.push(Buffer.concat([Buffer.from([1]), raw.slice(off, off + AUDIO_PAYLOAD_SIZE2)]));
+      }
+      resolve(packets);
+    });
+    ff.stdin.write(wavBuf);
+    ff.stdin.end();
+  });
+}
+var CourtesyBeepManager = class {
+  tonePackets = /* @__PURE__ */ new Map();
+  selectedId = "beep-simple";
+  _enabled = false;
+  async init() {
+    try {
+      const rows = await db.select().from(systemSettingsTable);
+      const map2 = new Map(rows.map((r) => [r.key, r.value]));
+      const savedId = map2.get("courtesy_beep_id");
+      const savedEn = map2.get("courtesy_beep_enabled");
+      if (savedId && COURTESY_TONES.find((t) => t.id === savedId)) this.selectedId = savedId;
+      if (savedEn !== void 0) this._enabled = savedEn === "1";
+      logger.info({ selectedId: this.selectedId, enabled: this._enabled }, "CourtesyBeepManager: config loaded from DB");
+    } catch (err) {
+      logger.warn({ err }, "CourtesyBeepManager: could not load config from DB");
+    }
+    for (const tone of COURTESY_TONES) {
+      try {
+        const pcm = generatePcm(tone.id);
+        const wav = pcmToWav(pcm);
+        const pkts = await wavToGsmPackets(wav);
+        this.tonePackets.set(tone.id, pkts);
+        logger.info({ id: tone.id, packets: pkts.length }, "CourtesyBeepManager: tone ready");
+      } catch (err) {
+        logger.warn({ err, id: tone.id }, "CourtesyBeepManager: failed to generate tone");
+      }
+    }
+  }
+  getPackets() {
+    if (!this._enabled) return [];
+    return this.tonePackets.get(this.selectedId) ?? [];
+  }
+  isEnabled() {
+    return this._enabled;
+  }
+  getSelectedId() {
+    return this.selectedId;
+  }
+  getConfig() {
+    return {
+      enabled: this._enabled,
+      selectedId: this.selectedId,
+      tones: COURTESY_TONES
+    };
+  }
+  async setConfig(selectedId, enabled) {
+    if (COURTESY_TONES.find((t) => t.id === selectedId)) this.selectedId = selectedId;
+    this._enabled = enabled;
+    await this.persist();
+    logger.info({ selectedId: this.selectedId, enabled: this._enabled }, "CourtesyBeepManager: config saved");
+  }
+  async persist() {
+    await db.insert(systemSettingsTable).values({ key: "courtesy_beep_id", value: this.selectedId }).onConflictDoUpdate({ target: systemSettingsTable.key, set: { value: sql`excluded.value` } });
+    await db.insert(systemSettingsTable).values({ key: "courtesy_beep_enabled", value: this._enabled ? "1" : "0" }).onConflictDoUpdate({ target: systemSettingsTable.key, set: { value: sql`excluded.value` } });
+  }
+};
+var courtesyBeepManager = new CourtesyBeepManager();
+
 // src/routes/admin.ts
 var router4 = (0, import_express4.Router)();
 router4.use(requireAdmin);
@@ -61425,6 +61635,21 @@ router4.post("/relays/:id/stop", async (req, res) => {
     res.status(500).json({ error: "Error interno del servidor" });
   }
 });
+router4.get("/courtesy-beep", (_req, res) => {
+  res.json(courtesyBeepManager.getConfig());
+});
+router4.patch("/courtesy-beep", async (req, res) => {
+  const { selectedId, enabled } = req.body;
+  try {
+    await courtesyBeepManager.setConfig(
+      selectedId ?? courtesyBeepManager.getSelectedId(),
+      enabled !== void 0 ? Boolean(enabled) : courtesyBeepManager.isEnabled()
+    );
+    res.json(courtesyBeepManager.getConfig());
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
 router4.post(
   "/inactivity/audio",
   import_express5.default.raw({ type: ["audio/wav", "audio/wave", "application/octet-stream"], limit: "20mb" }),
@@ -61699,7 +61924,7 @@ import net2 from "net";
 import { randomUUID as randomUUID2 } from "crypto";
 
 // src/eqso/ffmpeg-gsm.ts
-import { spawn as spawn2 } from "child_process";
+import { spawn as spawn3 } from "child_process";
 import { EventEmitter as EventEmitter3 } from "events";
 var GSM_FRAME_BYTES = 33;
 var GSM_FRAME_SAMPLES = 160;
@@ -61713,7 +61938,7 @@ var FfmpegGsmDecoder = class extends EventEmitter3 {
   /** Spawn the ffmpeg decoder process and mark ready after startup delay. */
   start() {
     if (this.proc) return;
-    this.proc = spawn2("ffmpeg", [
+    this.proc = spawn3("ffmpeg", [
       "-hide_banner",
       "-loglevel",
       "quiet",
@@ -61800,7 +62025,7 @@ var FfmpegGsmEncoder = class extends EventEmitter3 {
   /** Spawn the ffmpeg encoder process and mark ready after startup delay. */
   start() {
     if (this.proc) return;
-    this.proc = spawn2("ffmpeg", [
+    this.proc = spawn3("ffmpeg", [
       "-hide_banner",
       "-loglevel",
       "quiet",
@@ -61929,6 +62154,18 @@ function processSingleByte(state, byte) {
         safeWrite(state, Buffer.from([8]));
         roomManager.unlockRoom(client.room, state.id);
         state.flushPaceQueue?.();
+        if (client.isRelay) {
+          const beepPackets = courtesyBeepManager.getPackets();
+          if (beepPackets.length > 0) {
+            let i = 0;
+            const sendBeep = () => {
+              if (state.disconnected || i >= beepPackets.length) return;
+              safeWrite(state, beepPackets[i++]);
+              if (i < beepPackets.length) setTimeout(sendBeep, 120);
+            };
+            setTimeout(sendBeep, 250);
+          }
+        }
       }
       break;
     case EQSO_COMMANDS.HANDSHAKE:
@@ -61984,7 +62221,7 @@ function processMultiByte(state, byte) {
           { id: state.id, name: parsed.name, room: parsed.room, bufLen: state.buf.length },
           "eQSO TCP JOIN parsed"
         );
-        handleJoin(state, parsed.name, parsed.room, parsed.message, parsed.password);
+        handleJoin(state, parsed.name, parsed.room, parsed.message, parsed.password).catch((err) => logger.error({ err }, "handleJoin async error"));
         state.readMultiByte = false;
         state.multiByteCmd = 0;
         state.buf = Buffer.alloc(0);
@@ -62012,7 +62249,7 @@ function processMultiByte(state, byte) {
       break;
   }
 }
-function handleJoin(state, name, room, message, password) {
+async function handleJoin(state, name, room, message, password) {
   const existing = roomManager.getClient(state.id);
   const oldRoom = existing?.room ?? "";
   if (moderationManager.isBanned(name)) {
@@ -62046,10 +62283,19 @@ function handleJoin(state, name, room, message, password) {
     state.socket.destroy();
     return;
   }
+  let isRelay = false;
+  try {
+    const [user] = await db.select({ isRelay: usersTable.isRelay }).from(usersTable).where(eq(usersTable.callsign, name.toUpperCase())).limit(1);
+    isRelay = user?.isRelay ?? false;
+  } catch (err) {
+    logger.warn({ err, name }, "TCP handleJoin: DB isRelay lookup failed");
+  }
   const client = roomManager.getClient(state.id);
   if (client) {
     client.name = name;
     client.message = message;
+    client.isRelay = isRelay;
+    if (isRelay) logger.info({ id: state.id, name }, "TCP client identified as relay");
   }
   const oldMembers = oldRoom ? roomManager.getRoomMembers(oldRoom) : [];
   roomManager.joinRoom(state.id, room);
@@ -62842,6 +63088,8 @@ startWsBridge(httpServer);
 seedServers().catch((err) => logger.warn({ err }, "seedServers failed (non-fatal)"));
 moderationManager.loadBans().catch((err) => logger.warn({ err }, "moderationManager.loadBans failed (non-fatal)"));
 relayManager.init().catch((err) => logger.warn({ err }, "relayManager.init failed (non-fatal)"));
+inactivityManager.init().catch((err) => logger.warn({ err }, "inactivityManager.init failed (non-fatal)"));
+courtesyBeepManager.init().catch((err) => logger.warn({ err }, "courtesyBeepManager.init failed (non-fatal)"));
 httpServer.listen(port, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
