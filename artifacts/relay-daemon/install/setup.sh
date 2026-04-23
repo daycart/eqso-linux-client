@@ -74,6 +74,11 @@ cp "$UNIT_SRC" "$UNIT_DST"
 # Actualizar la ruta de instalacion en el archivo de servicio
 sed -i "s|/opt/eqso-asorapa/artifacts/relay-daemon|${INSTALL_DIR}|g" "$UNIT_DST"
 
+# Marcar los scripts auxiliares como ejecutables
+chmod +x "$(dirname "$0")/usb-reset.sh"
+chmod +x "$(dirname "$0")/alsa-setup.sh"
+chmod +x "$(dirname "$0")/stop-cleanup.sh"
+
 systemctl daemon-reload
 echo "  Unidad instalada: $UNIT_DST"
 

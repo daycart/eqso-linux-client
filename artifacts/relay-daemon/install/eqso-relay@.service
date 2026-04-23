@@ -27,61 +27,24 @@ Type=simple
 User=eqso
 Group=audio
 
-# La instancia (%i) determina que archivo de config leer
+# La instancia (%i) determina que archivo de config leer.
+# Para un servicio no-template (eqso-relay.service sin @) %i queda vacio
+# y el daemon usa "CB" como instancia por defecto.
 Environment=RELAY_INSTANCE=%i
 Environment=NODE_ENV=production
 
-# Ruta al daemon compilado (ajustar si se instala en otro lugar)
+# Ruta al daemon compilado
 WorkingDirectory=/opt/eqso-asorapa/artifacts/relay-daemon
 
-# Pre-arranque: liberar el dispositivo USB audio antes de arrancar.
-# Cuando un aplay anterior queda en D-state (sleep ininterrumpible en el
-# driver snd_usb_audio), 'modprobe -r' falla ("Module is in use").
-# La solucion es resetear el dispositivo USB via sysfs/authorized:
-#   echo 0 > .../authorized  → el kernel desconecta el USB, el D-state
-#                               process recibe ENODEV y muere inmediatamente
-#   sleep 1                  → esperar a que muera y que udev re-enumere
-#   echo 1 > .../authorized  → reconecta el dispositivo USB al kernel
-# Se ejecuta como root (prefijo '+') para poder escribir en /sys.
-ExecStartPre=+/bin/sh -c '\
-  pkill -KILL -x aplay 2>/dev/null; pkill -KILL -x arecord 2>/dev/null; sleep 0.3; \
-  python3 -c "\
-import fcntl, subprocess, re, time, sys; \
-USBDEVFS_RESET = 21524; \
-out = subprocess.check_output([\"lsusb\"]).decode(); \
-found = False; \
-[ (setattr(sys, \"_m\", re.search(r\"Bus (\d+) Device (\d+)\", l)) or True) and sys._m and re.search(r\"audio|CM108|C-Media\", l, re.I) and __import__(\"builtins\").__dict__.update({\"_p\": f\"/dev/bus/usb/{sys._m.group(1)}/{sys._m.group(2).zfill(3)}\"}) or True for l in out.splitlines()]; \
-p = globals().get(\"_p\") or None; \
-[ open(p, \"wb\") and True for p in ([p] if p else []) and [open(p,\"wb\")] if (lambda f: (fcntl.ioctl(f,USBDEVFS_RESET,0) or True) and f.close() or True)(open(p,\"wb\")) else [] ]; \
-" 2>/dev/null || true; \
-python3 -c "\
-import fcntl, subprocess, re, time; \
-USBDEVFS_RESET = 21524; \
-out = subprocess.check_output([\"lsusb\"]).decode(); \
-for line in out.splitlines(): \
-    m = re.search(r\"Bus (\d+) Device (\d+)\", line); \
-    if m and re.search(r\"audio|CM108|C-Media\", line, re.I): \
-        path = \"/dev/bus/usb/{}/{}\".format(m.group(1), m.group(2).zfill(3)); \
-        fd = open(path, \"wb\"); fcntl.ioctl(fd, USBDEVFS_RESET, 0); fd.close(); \
-        print(\"USB reset: \" + path); time.sleep(1); \
-" 2>&1 | head -5 || true; \
-sleep 2'
+# Pre-arranque 1: matar aplay/arecord residuales y resetear el USB audio.
+# Se ejecuta como root (prefijo '+') para acceder a /dev/bus/usb y /sys.
+ExecStartPre=+/bin/sh /opt/eqso-asorapa/artifacts/relay-daemon/install/usb-reset.sh
 
-# Post-reset: configurar niveles del mixer ALSA del CM108.
+# Pre-arranque 2: configurar mixer ALSA del CM108.
 # Tras el reset USB los niveles vuelven al default del driver (puede ser 0%).
-# Se detecta el numero de tarjeta por nombre y se fijan:
-#   - Playback (Speaker/Headphone/PCM) al maximo para que la senyal llegue al microfono de la radio
-#   - Capture (Mic) al 40% para evitar saturacion y distorsion GSM
-ExecStartPre=+/bin/sh -c '\
-  CARD=$(aplay -l 2>/dev/null | grep -iE "CM108|C-Media|USB Audio" | head -1 | sed "s/.*card //;s/:.*//" | tr -d " "); \
-  [ -z "$CARD" ] && exit 0; \
-  echo "ALSA: configurando tarjeta $CARD (CM108)"; \
-  amixer -c "$CARD" sset "Speaker"   100% unmute 2>/dev/null || true; \
-  amixer -c "$CARD" sset "Headphone" 100% unmute 2>/dev/null || true; \
-  amixer -c "$CARD" sset "PCM"       100%         2>/dev/null || true; \
-  amixer -c "$CARD" sset "Mic"        40% unmute  2>/dev/null || true; \
-  amixer -c "$CARD" sset "Capture"    40% unmute  2>/dev/null || true; \
-  true'
+# El script detecta automaticamente el numero de tarjeta CM108.
+ExecStartPre=+/bin/sh /opt/eqso-asorapa/artifacts/relay-daemon/install/alsa-setup.sh
+
 ExecStart=/usr/bin/node --enable-source-maps dist/main.mjs
 
 # Reinicio automatico: siempre, excepto si se para manualmente
@@ -102,8 +65,8 @@ NoNewPrivileges=true
 SupplementaryGroups=audio
 
 # Senales de parada:
-# SIGTERM → Node recibe la señal, cierra stdin de aplay, espera que aplay
-# vacie su buffer DMA (≤1.5s) y luego llama process.exit(0).
+# SIGTERM → Node recibe la senal, cierra stdin de aplay, espera que aplay
+# vacie su buffer DMA (<=1.5s) y luego llama process.exit(0).
 # Esto evita el D-state: el D-state ocurre cuando SIGKILL mata aplay en
 # mitad de una escritura USB DMA. Con cierre graceful, aplay termina la
 # escritura antes de salir y el kernel no queda bloqueado.
@@ -112,15 +75,8 @@ KillMode=control-group
 KillSignal=SIGTERM
 TimeoutStopSec=8
 
-# Limpieza post-parada: reset USB via sysfs (mismo metodo que ExecStartPre).
-ExecStopPost=+/bin/sh -c '\
-  pkill -KILL -x aplay 2>/dev/null; pkill -KILL -x arecord 2>/dev/null; \
-  for d in /sys/bus/usb/devices/*/; do \
-    if grep -qiE "audio|CM108|C-Media" "${d}product" 2>/dev/null; then \
-      echo 0 > "${d}authorized" 2>/dev/null && sleep 0.5 && echo 1 > "${d}authorized" 2>/dev/null; \
-    fi; \
-  done; \
-  true'
+# Limpieza post-parada: mata procesos ALSA residuales y resetea el USB.
+ExecStopPost=+/bin/sh /opt/eqso-asorapa/artifacts/relay-daemon/install/stop-cleanup.sh
 
 [Install]
 WantedBy=multi-user.target
