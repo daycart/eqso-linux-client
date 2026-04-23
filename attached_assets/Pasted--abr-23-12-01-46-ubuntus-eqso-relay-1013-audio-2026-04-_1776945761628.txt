@@ -1,0 +1,72 @@
+
+abr 23 12:01:46 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T12:01:46.403Z [nivel] pico RMS=6 (-74.5 dBFS)  VOXumbral=600  gain=1
+abr 23 12:01:51 ubuntus eqso-relay-[1013]: [audio] 2026-04-23T12:01:51.405Z [nivel] pico RMS=6 (-74.6 dBFS)  VOXumbral=600  gain=1
+abr 23 12:01:55 ubuntus systemd[1]: eqso-relay.service: Failed to kill control group /system.slice/eqso-relay.service, ignoring: Invalid argument
+abr 23 12:01:55 ubuntus systemd[1]: Stopping eqso-relay.service - eQSO Radioenlace \Uffffffff sala ...
+abr 23 12:01:55 ubuntus systemd[1]: eqso-relay.service: Main process exited, code=killed, status=9/KILL
+abr 23 12:01:57 ubuntus systemd[1]: eqso-relay.service: Failed with result 'signal'.
+abr 23 12:01:57 ubuntus systemd[1]: Stopped eqso-relay.service - eQSO Radioenlace \Uffffffff sala .
+abr 23 12:01:57 ubuntus systemd[1]: eqso-relay.service: Consumed 2min 11.997s CPU time.
+abr 23 12:01:57 ubuntus systemd[1]: Starting eqso-relay.service - eQSO Radioenlace \Uffffffff sala ...
+abr 23 12:02:00 ubuntus systemd[1]: Started eqso-relay.service - eQSO Radioenlace \Uffffffff sala .
+abr 23 12:02:00 ubuntus eqso-relay-[4758]: [config] Archivo no encontrado: /etc/eqso-relay/.json \Uffffffff usando valores por defecto
+abr 23 12:02:00 ubuntus eqso-relay-[4758]: [config] Configuracion activa: {
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:   "callsign": "0R-IN70WN",
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:   "room": "CB",
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:   "password": "",
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:   "message": "Radio Enlace",
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:   "server": "127.0.0.1",
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:   "port": 2171,
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:   "reconnectMinMs": 2000,
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:   "reconnectMaxMs": 60000,
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:   "audio": {
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:     "captureDevice": "plughw:1,0",
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:     "playbackDevice": "plughw:1,0",
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:     "vox": true,
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:     "voxThresholdRms": 600,
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:     "voxHangMs": 1000,
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:     "txGateRms": 50,
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:     "inputGain": 1,
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:     "outputGain": 1
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:   },
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:   "control": {
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:     "enabled": true,
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:     "port": 8009,
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:     "host": "127.0.0.1"
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:   },
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:   "ptt": {
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:     "device": "/dev/ttyACM0",
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:     "method": "rts",
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:     "inverted": false
+abr 23 12:02:00 ubuntus eqso-relay-[4758]:   }
+abr 23 12:02:00 ubuntus eqso-relay-[4758]: }
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [main] 2026-04-23T12:02:00.999Z ============================================================
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [main] 2026-04-23T12:02:01.001Z eQSO Relay Daemon arrancado
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [main] 2026-04-23T12:02:01.001Z   Callsign : 0R-IN70WN
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [main] 2026-04-23T12:02:01.001Z   Sala     : CB
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [main] 2026-04-23T12:02:01.002Z   Servidor : 127.0.0.1:2171
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [main] 2026-04-23T12:02:01.002Z   VOX      : ON (umbral=600 hang=1000ms)
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [main] 2026-04-23T12:02:01.002Z   Captura  : plughw:1,0
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [main] 2026-04-23T12:02:01.003Z   Playback : plughw:1,0
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [main] 2026-04-23T12:02:01.003Z   PTT Ser. : /dev/ttyACM0 (rts)
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [main] 2026-04-23T12:02:01.004Z ============================================================
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [ptt] 2026-04-23T12:02:01.006Z Iniciando PTT serial: /dev/ttyACM0 (rts)
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [audio] 2026-04-23T12:02:01.091Z arecord -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --buffer-size=1024
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [main] 2026-04-23T12:02:01.117Z Conectando a 127.0.0.1:2171 como "0R-IN70WN" en sala "CB"\Uffffffff
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [control] 2026-04-23T12:02:01.219Z Control HTTP escuchando en http://127.0.0.1:8009
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [ptt] 2026-04-23T12:02:01.259Z [ptt-helper] error abriendo /dev/ttyACM0: [Errno 13] Permission denied: '/dev/ttyACM0'
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [eqso] 2026-04-23T12:02:01.393Z TCP conectado a 127.0.0.1:2171
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [eqso] 2026-04-23T12:02:01.460Z Handshake recibido \Uffffffff conexion establecida
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [main] 2026-04-23T12:02:01.467Z Conectado \Uffffffff enviando JOIN\Uffffffff
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [eqso] 2026-04-23T12:02:01.471Z JOIN enviado: callsign="0R-IN70WN" sala="CB"
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [eqso] 2026-04-23T12:02:01.475Z Salas disponibles: GENERAL, CB, ASORAPA, PRUEBAS
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [main] 2026-04-23T12:02:01.475Z Salas: GENERAL, CB, ASORAPA, PRUEBAS
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [ptt] 2026-04-23T12:02:01.489Z PTT serial: proceso terminado (code 1)
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [main] 2026-04-23T12:02:01.513Z Sala: 0R-IN53SI se ha unido
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [main] 2026-04-23T12:02:01.513Z Sala: 0R-ASORAPA se ha unido
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [main] 2026-04-23T12:02:01.514Z Sala: 0R-JN11BK se ha unido
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [main] 2026-04-23T12:02:01.514Z Sala: 30RCI184 se ha unido
+abr 23 12:02:01 ubuntus eqso-relay-[4758]: [main] 2026-04-23T12:02:01.520Z Sala: 0R-IN70WN se ha unido
+abr 23 12:02:06 ubuntus eqso-relay-[4758]: [audio] 2026-04-23T12:02:06.117Z [nivel] pico RMS=3195 (-20.2 dBFS)  VOXumbral=600  gain=1 SATURACION: 3 muestras (0.02%)
+abr 23 12:02:11 ubuntus eqso-relay-[4758]: [audio] 2026-04-23T12:02:11.116Z [nivel] pico RMS=6 (-74.5 dBFS)  VOXumbral=600  gain=1
+abr 23 12:02:16 ubuntus eqso-relay-[4758]: [audio] 2026-04-23T12:02:16.117Z [nivel] pico RMS=6 (-74.5 dBFS)  VOXumbral=600  gain=1
