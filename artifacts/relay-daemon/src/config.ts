@@ -88,9 +88,10 @@ function deepMerge<T>(base: T, override: Partial<T>): T {
 }
 
 export function loadConfig(): RelayConfig {
+  const instance = process.env["RELAY_INSTANCE"] || "CB";
   const configFile =
     process.env["CONFIG_FILE"] ??
-    `/etc/eqso-relay/${process.env["RELAY_INSTANCE"] ?? "default"}.json`;
+    `/etc/eqso-relay/${instance}.json`;
 
   let fromFile: Partial<RelayConfig> = {};
   if (fs.existsSync(configFile)) {

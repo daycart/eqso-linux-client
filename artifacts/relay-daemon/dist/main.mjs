@@ -46,7 +46,8 @@ function deepMerge(base, override) {
   return result;
 }
 function loadConfig() {
-  const configFile = process.env["CONFIG_FILE"] ?? `/etc/eqso-relay/${process.env["RELAY_INSTANCE"] ?? "default"}.json`;
+  const instance = process.env["RELAY_INSTANCE"] || "CB";
+  const configFile = process.env["CONFIG_FILE"] ?? `/etc/eqso-relay/${instance}.json`;
   let fromFile = {};
   if (fs.existsSync(configFile)) {
     try {

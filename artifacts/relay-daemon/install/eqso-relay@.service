@@ -66,6 +66,22 @@ for line in out.splitlines(): \
         print(\"USB reset: \" + path); time.sleep(1); \
 " 2>&1 | head -5 || true; \
 sleep 2'
+
+# Post-reset: configurar niveles del mixer ALSA del CM108.
+# Tras el reset USB los niveles vuelven al default del driver (puede ser 0%).
+# Se detecta el numero de tarjeta por nombre y se fijan:
+#   - Playback (Speaker/Headphone/PCM) al maximo para que la senyal llegue al microfono de la radio
+#   - Capture (Mic) al 40% para evitar saturacion y distorsion GSM
+ExecStartPre=+/bin/sh -c '\
+  CARD=$(aplay -l 2>/dev/null | grep -iE "CM108|C-Media|USB Audio" | head -1 | sed "s/.*card //;s/:.*//" | tr -d " "); \
+  [ -z "$CARD" ] && exit 0; \
+  echo "ALSA: configurando tarjeta $CARD (CM108)"; \
+  amixer -c "$CARD" sset "Speaker"   100% unmute 2>/dev/null || true; \
+  amixer -c "$CARD" sset "Headphone" 100% unmute 2>/dev/null || true; \
+  amixer -c "$CARD" sset "PCM"       100%         2>/dev/null || true; \
+  amixer -c "$CARD" sset "Mic"        40% unmute  2>/dev/null || true; \
+  amixer -c "$CARD" sset "Capture"    40% unmute  2>/dev/null || true; \
+  true'
 ExecStart=/usr/bin/node --enable-source-maps dist/main.mjs
 
 # Reinicio automatico: siempre, excepto si se para manualmente

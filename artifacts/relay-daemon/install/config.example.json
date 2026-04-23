@@ -1,37 +1,52 @@
 {
-  "_comment": "Renombra este archivo a /etc/eqso-relay/CB.json (o el nombre de la sala)",
+  "_comment": "Copia a /etc/eqso-relay/CB.json y ajusta los valores",
 
-  "callsign": "0R-ASORAPA",
+  "callsign": "0R-IN70WN",
   "room": "CB",
-  "password": "TU_CONTRASEÑA_AQUI",
-  "message": "Radio Enlace ASORAPA 27.555 MHz",
+  "password": "",
+  "message": "Radio Enlace CB",
 
-  "server": "193.152.83.229",
-  "_comment_port": "Puertos validos: 2171 (eQSO estandar) o 8008 (ASORAPA / alternativo)",
-  "port": 8008,
+  "server": "127.0.0.1",
+  "_comment_port": "Puerto del servidor eQSO local",
+  "port": 2171,
 
   "reconnectMinMs": 2000,
   "reconnectMaxMs": 60000,
 
   "audio": {
-    "_comment_devices": "Usa 'arecord -l' y 'aplay -l' para ver los dispositivos disponibles",
-    "captureDevice":  "default",
-    "playbackDevice": "default",
+    "_comment_devices": "Usa 'arecord -l' y 'aplay -l' para ver los dispositivos. CM108 suele ser plughw:1,0",
+    "captureDevice":  "plughw:1,0",
+    "playbackDevice": "plughw:1,0",
 
-    "_comment_vox": "VOX: activacion automatica por nivel de audio",
+    "_comment_vox": "VOX: activacion automatica por nivel de audio de la radio CB",
     "vox": true,
-    "voxThresholdRms": 800,
+    "voxThresholdRms": 600,
     "voxHangMs": 1000,
+    "txGateRms": 50,
 
-    "_comment_gain": "Ganancia: 1.0 = sin cambio, 2.0 = doble volumen",
-    "inputGain": 1.0,
-    "outputGain": 1.0
+    "_comment_gain": [
+      "inputGain: ganancia del microfono CM108 (CB→servidor).",
+      "  Si ves SATURACION en journalctl, baja este valor (0.3-0.5).",
+      "  Si el audio llega muy bajo al cliente, subelo (max 1.5).",
+      "outputGain: amplificacion de audio del servidor hacia la radio CB.",
+      "  Si la radio transmite silencio aunque aplay este corriendo, sube este valor.",
+      "  Tipicamente 2.0-3.0 dependiendo del nivel de salida del CM108 y la sensibilidad del micro de la radio."
+    ],
+    "inputGain":  0.4,
+    "outputGain": 2.5
   },
 
   "control": {
-    "_comment": "Servidor HTTP de control en localhost. Acceso: curl http://127.0.0.1:8009/status",
+    "_comment": "HTTP de control local. Estado: curl http://127.0.0.1:8009/status",
     "enabled": true,
     "port": 8009,
     "host": "127.0.0.1"
+  },
+
+  "ptt": {
+    "_comment": "PTT serial para activar TX de la radio CB. method: rts o dtr. inverted: true si la logica es invertida.",
+    "device":   "/dev/ttyACM0",
+    "method":   "rts",
+    "inverted": false
   }
 }
