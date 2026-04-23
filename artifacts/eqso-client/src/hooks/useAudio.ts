@@ -26,6 +26,14 @@ const GSM_RATE = 8000;
 // sin reiniciar el scheduler (el reinicio a "now" causa solapamiento).
 const MAX_QUEUE_AHEAD_SEC = 3.0;
 
+// Jitter buffer: cuando el scheduler se reinicia (primera transmision o gap grande),
+// se adelanta JITTER_BUFFER_SEC segundos respecto a "now" en lugar de snap exacto.
+// Esto absorbe retrasos de hasta 200ms en la entrega de paquetes (jitter del event
+// loop del servidor o red) sin silencio audible.
+// Sin buffer: cualquier paquete >0ms tarde => silencio del mismo tamanyo.
+// Con 200ms: paquetes que lleguen hasta 200ms tarde => sin silencio.
+const JITTER_BUFFER_SEC = 0.20;
+
 // Warmup: discard the first 80 ms of mic audio to absorb hardware startup pop.
 // 80 ms is enough; 500 ms was wasting ~400 ms of every PTT press.
 const TX_WARMUP_SECONDS = 0.08;
@@ -403,9 +411,12 @@ export function useAudio(): UseAudioReturn {
 
       const now = ctx.currentTime;
 
-      // Si el scheduler quedó atrás (silencio entre transmisiones), adelantarlo a now.
+      // Si el scheduler quedó atrás: adelantarlo a now + JITTER_BUFFER_SEC.
+      // Sin el buffer, cualquier paquete que llegue >0ms tarde (jitter del servidor
+      // o red) causa un silencio del mismo tamanyo. Con 200ms de buffer, los paquetes
+      // pueden llegar hasta 200ms tarde sin silencio audible.
       if (nextPlayTimeRef.current < now) {
-        nextPlayTimeRef.current = now;
+        nextPlayTimeRef.current = now + JITTER_BUFFER_SEC;
       }
 
       // Si la cola ya tiene MAX_QUEUE_AHEAD_SEC de audio programado, DESCARTAR este
