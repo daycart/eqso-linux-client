@@ -44,14 +44,28 @@ WorkingDirectory=/opt/eqso-asorapa/artifacts/relay-daemon
 #   echo 1 > .../authorized  → reconecta el dispositivo USB al kernel
 # Se ejecuta como root (prefijo '+') para poder escribir en /sys.
 ExecStartPre=+/bin/sh -c '\
-  pkill -KILL -x aplay 2>/dev/null; pkill -KILL -x arecord 2>/dev/null; \
-  for d in /sys/bus/usb/devices/*/; do \
-    if grep -qiE "audio|CM108|C-Media" "${d}product" 2>/dev/null; then \
-      echo "eqso-relay-pre: reseteando USB $(cat ${d}product)" >&2; \
-      echo 0 > "${d}authorized" 2>/dev/null && sleep 1 && echo 1 > "${d}authorized" 2>/dev/null; \
-    fi; \
-  done; \
-  sleep 1'
+  pkill -KILL -x aplay 2>/dev/null; pkill -KILL -x arecord 2>/dev/null; sleep 0.3; \
+  python3 -c "\
+import fcntl, subprocess, re, time, sys; \
+USBDEVFS_RESET = 21524; \
+out = subprocess.check_output([\"lsusb\"]).decode(); \
+found = False; \
+[ (setattr(sys, \"_m\", re.search(r\"Bus (\d+) Device (\d+)\", l)) or True) and sys._m and re.search(r\"audio|CM108|C-Media\", l, re.I) and __import__(\"builtins\").__dict__.update({\"_p\": f\"/dev/bus/usb/{sys._m.group(1)}/{sys._m.group(2).zfill(3)}\"}) or True for l in out.splitlines()]; \
+p = globals().get(\"_p\") or None; \
+[ open(p, \"wb\") and True for p in ([p] if p else []) and [open(p,\"wb\")] if (lambda f: (fcntl.ioctl(f,USBDEVFS_RESET,0) or True) and f.close() or True)(open(p,\"wb\")) else [] ]; \
+" 2>/dev/null || true; \
+python3 -c "\
+import fcntl, subprocess, re, time; \
+USBDEVFS_RESET = 21524; \
+out = subprocess.check_output([\"lsusb\"]).decode(); \
+for line in out.splitlines(): \
+    m = re.search(r\"Bus (\d+) Device (\d+)\", line); \
+    if m and re.search(r\"audio|CM108|C-Media\", line, re.I): \
+        path = \"/dev/bus/usb/{}/{}\".format(m.group(1), m.group(2).zfill(3)); \
+        fd = open(path, \"wb\"); fcntl.ioctl(fd, USBDEVFS_RESET, 0); fd.close(); \
+        print(\"USB reset: \" + path); time.sleep(1); \
+" 2>&1 | head -5 || true; \
+sleep 2'
 ExecStart=/usr/bin/node --enable-source-maps dist/main.mjs
 
 # Reinicio automatico: siempre, excepto si se para manualmente
