@@ -33,6 +33,14 @@ Environment=NODE_ENV=production
 
 # Ruta al daemon compilado (ajustar si se instala en otro lugar)
 WorkingDirectory=/opt/eqso-asorapa/artifacts/relay-daemon
+
+# Pre-arranque: liberar cualquier proceso aplay/arecord residual y resetear el
+# modulo USB audio.  Esto es necesario cuando un aplay anterior quedo bloqueado
+# en D-state (sleep ininterrumpible en el driver snd_usb_audio): ni siquiera
+# SIGKILL puede matar un proceso en D-state, pero descargar y recargar el modulo
+# del kernel fuerza la liberacion del dispositivo ALSA antes de arrancar.
+# Se ejecuta como root (prefijo '+') para poder usar modprobe.
+ExecStartPre=+/bin/sh -c 'pkill -KILL -x aplay 2>/dev/null; pkill -KILL -x arecord 2>/dev/null; sleep 0.5; modprobe -r snd_usb_audio 2>/dev/null || true; sleep 0.3; modprobe snd_usb_audio 2>/dev/null || true; sleep 1'
 ExecStart=/usr/bin/node --enable-source-maps dist/main.mjs
 
 # Reinicio automatico: siempre, excepto si se para manualmente
@@ -62,9 +70,9 @@ KillMode=control-group
 KillSignal=SIGKILL
 TimeoutStopSec=5
 
-# Limpieza post-parada: mata cualquier aplay/arecord residual que aun pueda
-# estar bloqueado en el driver ALSA USB y libera el dispositivo de audio.
-ExecStopPost=/bin/sh -c 'pkill -9 -x aplay 2>/dev/null; pkill -9 -x arecord 2>/dev/null; sleep 0.5; true'
+# Limpieza post-parada: mata procesos residuales y descarga/recarga el modulo
+# USB audio para liberar cualquier proceso en D-state que siga reteniendo ALSA.
+ExecStopPost=+/bin/sh -c 'pkill -KILL -x aplay 2>/dev/null; pkill -KILL -x arecord 2>/dev/null; sleep 0.5; modprobe -r snd_usb_audio 2>/dev/null || true; sleep 0.3; modprobe snd_usb_audio 2>/dev/null || true'
 
 [Install]
 WantedBy=multi-user.target
