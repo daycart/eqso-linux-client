@@ -23507,7 +23507,7 @@ var require_express = __commonJS({
   "../../node_modules/.pnpm/express@5.2.1/node_modules/express/lib/express.js"(exports, module) {
     "use strict";
     var bodyParser = require_body_parser();
-    var EventEmitter4 = __require("node:events").EventEmitter;
+    var EventEmitter5 = __require("node:events").EventEmitter;
     var mixin = require_merge_descriptors();
     var proto = require_application();
     var Router8 = require_router();
@@ -23518,7 +23518,7 @@ var require_express = __commonJS({
       var app2 = function(req2, res2, next) {
         app2.handle(req2, res2, next);
       };
-      mixin(app2, EventEmitter4.prototype, false);
+      mixin(app2, EventEmitter5.prototype, false);
       mixin(app2, proto, false);
       app2.request = Object.create(req, {
         app: { configurable: true, enumerable: true, writable: true, value: app2 }
@@ -25004,7 +25004,7 @@ var require_sonic_boom = __commonJS({
   "../../node_modules/.pnpm/sonic-boom@4.2.1/node_modules/sonic-boom/index.js"(exports, module) {
     "use strict";
     var fs2 = __require("fs");
-    var EventEmitter4 = __require("events");
+    var EventEmitter5 = __require("events");
     var inherits = __require("util").inherits;
     var path3 = __require("path");
     var sleep = require_atomic_sleep();
@@ -25241,7 +25241,7 @@ var require_sonic_boom = __commonJS({
       sonic._asyncDrainScheduled = false;
       sonic.emit("drain");
     }
-    inherits(SonicBoom, EventEmitter4);
+    inherits(SonicBoom, EventEmitter5);
     function mergeBuf(bufs, len) {
       if (bufs.length === 0) {
         return kEmptyBuffer;
@@ -25819,7 +25819,7 @@ var require_thread_stream = __commonJS({
   "../../node_modules/.pnpm/thread-stream@3.1.0/node_modules/thread-stream/index.js"(exports, module) {
     "use strict";
     var { version: version3 } = require_package();
-    var { EventEmitter: EventEmitter4 } = __require("events");
+    var { EventEmitter: EventEmitter5 } = __require("events");
     var { Worker } = __require("worker_threads");
     var { join } = __require("path");
     var { pathToFileURL } = __require("url");
@@ -25975,7 +25975,7 @@ var require_thread_stream = __commonJS({
       stream.worker.off("exit", onWorkerExit);
       destroy(stream, code !== 0 ? new Error("the worker thread exited") : null);
     }
-    var ThreadStream = class extends EventEmitter4 {
+    var ThreadStream = class extends EventEmitter5 {
       constructor(opts = {}) {
         super();
         if (opts.bufferSize < 4) {
@@ -26932,7 +26932,7 @@ var require_meta = __commonJS({
 var require_proto = __commonJS({
   "../../node_modules/.pnpm/pino@9.14.0/node_modules/pino/lib/proto.js"(exports, module) {
     "use strict";
-    var { EventEmitter: EventEmitter4 } = __require("node:events");
+    var { EventEmitter: EventEmitter5 } = __require("node:events");
     var {
       lsCacheSym,
       levelValSym,
@@ -27014,7 +27014,7 @@ var require_proto = __commonJS({
       [getLevelSym]: getLevel,
       [setLevelSym]: setLevel
     };
-    Object.setPrototypeOf(prototype, EventEmitter4.prototype);
+    Object.setPrototypeOf(prototype, EventEmitter5.prototype);
     module.exports = function() {
       return Object.create(prototype);
     };
@@ -30386,10 +30386,10 @@ var require_result = __commonJS({
 var require_query = __commonJS({
   "../../node_modules/.pnpm/pg@8.20.0/node_modules/pg/lib/query.js"(exports, module) {
     "use strict";
-    var { EventEmitter: EventEmitter4 } = __require("events");
+    var { EventEmitter: EventEmitter5 } = __require("events");
     var Result2 = require_result();
     var utils = require_utils4();
-    var Query2 = class extends EventEmitter4 {
+    var Query2 = class extends EventEmitter5 {
       constructor(config2, values, callback) {
         super();
         config2 = utils.normalizeQueryConfig(config2, values, callback);
@@ -31511,13 +31511,13 @@ var require_stream = __commonJS({
 var require_connection = __commonJS({
   "../../node_modules/.pnpm/pg@8.20.0/node_modules/pg/lib/connection.js"(exports, module) {
     "use strict";
-    var EventEmitter4 = __require("events").EventEmitter;
+    var EventEmitter5 = __require("events").EventEmitter;
     var { parse: parse3, serialize } = require_dist2();
     var { getStream, getSecureStream } = require_stream();
     var flushBuffer = serialize.flush();
     var syncBuffer = serialize.sync();
     var endBuffer = serialize.end();
-    var Connection2 = class extends EventEmitter4 {
+    var Connection2 = class extends EventEmitter5 {
       constructor(config2) {
         super();
         config2 = config2 || {};
@@ -31986,7 +31986,7 @@ var require_lib4 = __commonJS({
 // ../../node_modules/.pnpm/pg@8.20.0/node_modules/pg/lib/client.js
 var require_client = __commonJS({
   "../../node_modules/.pnpm/pg@8.20.0/node_modules/pg/lib/client.js"(exports, module) {
-    var EventEmitter4 = __require("events").EventEmitter;
+    var EventEmitter5 = __require("events").EventEmitter;
     var utils = require_utils4();
     var nodeUtils = __require("util");
     var sasl = require_sasl();
@@ -32021,7 +32021,7 @@ var require_client = __commonJS({
       },
       "Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead."
     );
-    var Client2 = class extends EventEmitter4 {
+    var Client2 = class extends EventEmitter5 {
       constructor(config2) {
         super();
         this.connectionParameters = new ConnectionParameters(config2);
@@ -32605,7 +32605,7 @@ var require_client = __commonJS({
 var require_pg_pool = __commonJS({
   "../../node_modules/.pnpm/pg-pool@3.13.0_pg@8.20.0/node_modules/pg-pool/index.js"(exports, module) {
     "use strict";
-    var EventEmitter4 = __require("events").EventEmitter;
+    var EventEmitter5 = __require("events").EventEmitter;
     var NOOP = function() {
     };
     var removeWhere = (list, predicate) => {
@@ -32656,7 +32656,7 @@ var require_pg_pool = __commonJS({
         pool2.emit("error", err, client);
       };
     }
-    var Pool4 = class extends EventEmitter4 {
+    var Pool4 = class extends EventEmitter5 {
       constructor(options, Client2) {
         super();
         this.options = Object.assign({}, options);
@@ -33031,11 +33031,11 @@ var require_pg_pool = __commonJS({
 var require_query2 = __commonJS({
   "../../node_modules/.pnpm/pg@8.20.0/node_modules/pg/lib/native/query.js"(exports, module) {
     "use strict";
-    var EventEmitter4 = __require("events").EventEmitter;
+    var EventEmitter5 = __require("events").EventEmitter;
     var util2 = __require("util");
     var utils = require_utils4();
     var NativeQuery = module.exports = function(config2, values, callback) {
-      EventEmitter4.call(this);
+      EventEmitter5.call(this);
       config2 = utils.normalizeQueryConfig(config2, values, callback);
       this.text = config2.text;
       this.values = config2.values;
@@ -33052,7 +33052,7 @@ var require_query2 = __commonJS({
         }.bind(this)
       );
     };
-    util2.inherits(NativeQuery, EventEmitter4);
+    util2.inherits(NativeQuery, EventEmitter5);
     var errorFieldMap = {
       sqlState: "code",
       statementPosition: "position",
@@ -33179,7 +33179,7 @@ var require_client2 = __commonJS({
       throw e;
     }
     var TypeOverrides2 = require_type_overrides();
-    var EventEmitter4 = __require("events").EventEmitter;
+    var EventEmitter5 = __require("events").EventEmitter;
     var util2 = __require("util");
     var ConnectionParameters = require_connection_parameters();
     var NativeQuery = require_query2();
@@ -33189,7 +33189,7 @@ var require_client2 = __commonJS({
       "Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead."
     );
     var Client2 = module.exports = function(config2) {
-      EventEmitter4.call(this);
+      EventEmitter5.call(this);
       config2 = config2 || {};
       this._Promise = config2.Promise || global.Promise;
       this._types = new TypeOverrides2(config2.types);
@@ -33216,7 +33216,7 @@ var require_client2 = __commonJS({
       this.namedQueries = {};
     };
     Client2.Query = NativeQuery;
-    util2.inherits(Client2, EventEmitter4);
+    util2.inherits(Client2, EventEmitter5);
     Client2.prototype._errorAllQueries = function(err) {
       const enqueueError = (query) => {
         process.nextTick(() => {
@@ -35693,7 +35693,7 @@ var require_extension = __commonJS({
 var require_websocket = __commonJS({
   "../../node_modules/.pnpm/ws@8.20.0/node_modules/ws/lib/websocket.js"(exports, module) {
     "use strict";
-    var EventEmitter4 = __require("events");
+    var EventEmitter5 = __require("events");
     var https = __require("https");
     var http2 = __require("http");
     var net3 = __require("net");
@@ -35725,7 +35725,7 @@ var require_websocket = __commonJS({
     var protocolVersions = [8, 13];
     var readyStates = ["CONNECTING", "OPEN", "CLOSING", "CLOSED"];
     var subprotocolRegex = /^[!#$%&'*+\-.0-9A-Z^_`|a-z~]+$/;
-    var WebSocket2 = class _WebSocket extends EventEmitter4 {
+    var WebSocket2 = class _WebSocket extends EventEmitter5 {
       /**
        * Create a new `WebSocket`.
        *
@@ -36722,7 +36722,7 @@ var require_subprotocol = __commonJS({
 var require_websocket_server = __commonJS({
   "../../node_modules/.pnpm/ws@8.20.0/node_modules/ws/lib/websocket-server.js"(exports, module) {
     "use strict";
-    var EventEmitter4 = __require("events");
+    var EventEmitter5 = __require("events");
     var http2 = __require("http");
     var { Duplex } = __require("stream");
     var { createHash } = __require("crypto");
@@ -36735,7 +36735,7 @@ var require_websocket_server = __commonJS({
     var RUNNING = 0;
     var CLOSING = 1;
     var CLOSED = 2;
-    var WebSocketServer2 = class extends EventEmitter4 {
+    var WebSocketServer2 = class extends EventEmitter5 {
       /**
        * Create a `WebSocketServer` instance.
        *
@@ -60863,518 +60863,88 @@ var EqsoProxy = class extends EventEmitter2 {
   }
 };
 
-// src/eqso/gsm610.ts
-function GSM_ADD(a, b) {
-  const s = a + b | 0;
-  if (a > 0 && b > 0 && s < 0) return 32767;
-  if (a < 0 && b < 0 && s > 0) return -32768;
-  return s;
-}
-function GSM_MULT(a, b) {
-  if (a === -32768 && b === -32768) return 32767;
-  return a * b >> 15 | 0;
-}
-function GSM_MULT_R(a, b) {
-  if (a === -32768 && b === -32768) return 32767;
-  return a * b + 16384 >> 15 | 0;
-}
-function SASR(x, by) {
-  return x >> by | 0;
-}
-function GSM_ABS(x) {
-  return x < 0 ? x === -32768 ? 32767 : -x : x;
-}
-function CLIP(x, lo, hi) {
-  return x < lo ? lo : x > hi ? hi : x;
-}
-function norm32(x) {
-  if (x === 0) return 0;
-  if (x < 0) x = ~x;
-  let n = 0;
-  if ((x & 4294901760) === 0) {
-    n += 16;
-    x <<= 16;
-  }
-  if ((x & 4278190080) === 0) {
-    n += 8;
-    x <<= 8;
-  }
-  if ((x & 4026531840) === 0) {
-    n += 4;
-    x <<= 4;
-  }
-  if ((x & 3221225472) === 0) {
-    n += 2;
-    x <<= 2;
-  }
-  if ((x & 2147483648) === 0) {
-    n += 1;
-  }
-  return n;
-}
-function Autocorrelation(s) {
-  let smax = 0;
-  for (let i = 0; i < 160; i++) {
-    const a = GSM_ABS(s[i]);
-    if (a > smax) smax = a;
-  }
-  let scalauto = 0;
-  if (smax !== 0) {
-    let tmp = smax << 16 | 0;
-    if (tmp < 0) tmp = ~tmp;
-    const n = norm32(tmp);
-    scalauto = 4 - n;
-  }
-  const fasr = new Int16Array(160);
-  if (scalauto > 0) {
-    const factor = SASR(32767, scalauto - 1);
-    for (let i = 0; i < 160; i++) fasr[i] = GSM_MULT(s[i], factor);
-  } else {
-    for (let i = 0; i < 160; i++) fasr[i] = SASR(s[i], -scalauto);
-  }
-  const L_ACF = new Array(9).fill(0);
-  for (let k = 0; k <= 8; k++) {
-    let acc = 0;
-    for (let i = k; i < 160; i++) acc += fasr[i] * fasr[i - k];
-    L_ACF[k] = acc | 0;
-  }
-  return L_ACF;
-}
-function Reflection_coefficients(L_ACF) {
-  const r = new Int16Array(8);
-  const P = new Int16Array(9);
-  const K = new Int16Array(9);
-  if (L_ACF[0] === 0) return r;
-  const n = norm32(L_ACF[0]);
-  let temp;
-  for (let i = 0; i <= 8; i++) {
-    P[i] = SASR(L_ACF[i], 32 - 16 - n) | 0;
-  }
-  for (let i = 1; i <= 8; i++) K[i] = P[i];
-  for (let idx = 1; idx <= 8; idx++) {
-    if (P[0] === 0) break;
-    temp = GSM_ABS(P[0]);
-    if (temp === 0) {
-      r[idx - 1] = 0;
-      break;
-    }
-    if (K[idx] < 0) {
-      r[idx - 1] = CLIP(SASR(-K[idx], 0), -32768, 32767);
-    } else {
-      r[idx - 1] = CLIP(SASR(-K[idx], 0), -32768, 32767);
-    }
-    {
-      let num = K[idx];
-      let den = P[0];
-      if (den === 0) {
-        r[idx - 1] = 0;
-      } else {
-        let neg = false;
-        if (num < 0) {
-          neg = !neg;
-          num = -num;
-        }
-        if (den < 0) {
-          neg = !neg;
-          den = -den;
-        }
-        if (num >= den) {
-          r[idx - 1] = neg ? -32767 : 32767;
-        } else {
-          let q = 0;
-          for (let i = 0; i < 15; i++) {
-            num <<= 1;
-            q <<= 1;
-            if (num >= den) {
-              q |= 1;
-              num -= den;
-            }
-          }
-          r[idx - 1] = neg ? -q : q;
-        }
-      }
-    }
-    if (idx === 8) break;
-    const rn = r[idx - 1];
-    for (let i = 0; i <= 8 - idx; i++) {
-      P[i] = GSM_ADD(P[i], GSM_MULT_R(rn, K[i + 1]));
-    }
-    for (let i = 1; i <= 8 - idx; i++) {
-      K[i] = GSM_ADD(K[i + 1], GSM_MULT_R(rn, P[i]));
-    }
-  }
-  return r;
-}
-function Transformation_to_Log_Area_Ratios(r) {
-  const LAR = new Int16Array(8);
-  for (let i = 0; i < 8; i++) {
-    const ri = r[i];
-    const a = GSM_ABS(ri);
-    let lar;
-    if (a < 22118) {
-      lar = SASR(ri, 1);
-    } else if (a < 31130) {
-      lar = ri < 0 ? -CLIP(-ri - 11059, 0, 32767) : CLIP(ri - 11059, 0, 32767);
-      lar = GSM_ADD(SASR(ri, 2), ri < 0 ? -11059 / 2 : 11059 / 2);
-      lar = SASR(GSM_ADD(ri, ri < 0 ? 8 : -8), 2) + (ri < 0 ? -3276 : 3276);
-    } else {
-      lar = ri < 0 ? -32767 : 32767;
-    }
-    LAR[i] = lar;
-  }
-  return LAR;
-}
-function Quantization_and_coding(LAR) {
-  const LARc = new Int16Array(8);
-  const steps = [
-    [20480, 0, 31, -32],
-    [20480, 0, 31, -32],
-    [20480, 2048, 15, -16],
-    [20480, -2560, 15, -16],
-    [13964, 94, 7, -8],
-    [15360, -1792, 7, -8],
-    [8533, -341, 3, -4],
-    [9036, -1144, 3, -4]
-  ];
-  for (let i = 0; i < 8; i++) {
-    const [A, B, MAC, MIC] = steps[i];
-    let temp = GSM_MULT(A, LAR[i]);
-    temp = GSM_ADD(temp, B);
-    LARc[i] = CLIP(temp, MIC, MAC);
-  }
-  return LARc;
-}
-function gsm_LPC_Analysis(s) {
-  const L_ACF = Autocorrelation(s);
-  const r = Reflection_coefficients(L_ACF);
-  const LAR = Transformation_to_Log_Area_Ratios(r);
-  return Quantization_and_coding(LAR);
-}
-function LARc_to_LARp(LARc) {
-  const LARp = new Int16Array(8);
-  const steps = [
-    [13107, 0],
-    [13107, 0],
-    [13107, -1536],
-    [13107, 1792],
-    [19223, -66],
-    [17476, 1344],
-    [31454, 256],
-    [29708, 856]
-  ];
-  for (let i = 0; i < 8; i++) {
-    const [A, B] = steps[i];
-    LARp[i] = CLIP(GSM_ADD(GSM_MULT(A, LARc[i]), B), -32767, 32767);
-  }
-  return LARp;
-}
-function LARp_to_rp(LARp) {
-  for (let i = 0; i < 8; i++) {
-    let temp = LARp[i];
-    const neg = temp < 0;
-    if (neg) temp = temp === -32768 ? 32767 : -temp;
-    let rp;
-    if (temp < 11059) rp = temp << 1;
-    else if (temp < 20070) rp = GSM_ADD(temp, 11059);
-    else rp = GSM_ADD(SASR(temp, 2), 26112);
-    LARp[i] = neg ? -rp : rp;
-  }
-}
-function LARc_to_r(LARc) {
-  const rrp = LARc_to_LARp(LARc);
-  LARp_to_rp(rrp);
-  return rrp;
-}
-function parcorAnalysis(rrp, u, s, d, sOffset, dOffset, count2) {
-  for (let k = 0; k < count2; k++) {
-    let di = s[sOffset + k];
-    for (let i = 7; i >= 0; i--) {
-      di = GSM_ADD(di, -GSM_MULT_R(rrp[i], u[i]));
-      u[i] = GSM_ADD(u[i], GSM_MULT_R(rrp[i], di));
-    }
-    d[dOffset + k] = di;
-  }
-}
-function gsm_short_term_analysis(s, LARc, d, prevLARp, u) {
-  const currLARp = LARc_to_LARp(LARc);
-  const weights = [
-    [3, 1],
-    [2, 2],
-    [1, 3],
-    [0, 4]
-  ];
-  for (let sub = 0; sub < 4; sub++) {
-    const [wp, wc] = weights[sub];
-    const rrp = new Int16Array(8);
-    for (let i = 0; i < 8; i++) {
-      const pTerm = wp === 0 ? 0 : GSM_MULT_R(prevLARp[i], wp << 13);
-      const cTerm = wc === 4 ? currLARp[i] : GSM_MULT_R(currLARp[i], wc << 13);
-      rrp[i] = GSM_ADD(pTerm, cTerm);
-    }
-    LARp_to_rp(rrp);
-    parcorAnalysis(rrp, u, s, d, sub * 40, sub * 40, 40);
-  }
-  for (let i = 0; i < 8; i++) prevLARp[i] = currLARp[i];
-}
-var BCQ = [0, 3277, 13107, 26214];
-var dp = new Int16Array(120);
-function gsm_long_term(d, dpLocal, seg) {
-  const off = seg * 40;
-  let bestNc = 40, bestBc = 0;
-  let bestR = -Infinity;
-  for (let nc = 40; nc <= 120; nc++) {
-    let cross = 0, energy = 0;
-    for (let k = 0; k < 40; k++) {
-      const dpIdx = off + k - nc;
-      const dpVal = dpIdx >= 0 ? d[dpIdx] : dpLocal[dpLocal.length + dpIdx];
-      cross += d[off + k] * dpVal;
-      energy += dpVal * dpVal;
-    }
-    if (energy === 0) continue;
-    const r = cross * cross / energy;
-    if (r > bestR) {
-      bestR = r;
-      bestNc = nc;
-    }
-  }
-  {
-    const nc = bestNc;
-    let bestScore = -Infinity;
-    for (let bc = 0; bc < 4; bc++) {
-      const gain2 = BCQ[bc] / 32768;
-      let score = 0;
-      for (let k = 0; k < 40; k++) {
-        const dpIdx = off + k - nc;
-        const dpVal = dpIdx >= 0 ? d[dpIdx] : dpLocal[dpLocal.length + dpIdx];
-        const pred = d[off + k] - gain2 * dpVal;
-        score -= pred * pred;
-      }
-      if (score > bestScore) {
-        bestScore = score;
-        bestBc = bc;
-      }
-    }
-  }
-  const e = new Int16Array(40);
-  const gain = BCQ[bestBc] / 32768;
-  for (let k = 0; k < 40; k++) {
-    const dpIdx = off + k - bestNc;
-    const dpVal = dpIdx >= 0 ? d[dpIdx] : dpLocal[dpLocal.length + dpIdx];
-    e[k] = CLIP(Math.round(d[off + k] - gain * dpVal), -32768, 32767);
-  }
-  return { bc: bestBc, nc: bestNc, e };
-}
-function xmaxEncode(xmax) {
-  if (xmax === 0) return 0;
-  let exp = 0;
-  let x = xmax;
-  while (x > 7) {
-    x >>= 1;
-    exp++;
-  }
-  const mant = Math.min(7, x);
-  return exp << 3 | mant;
-}
-function xmaxDecode(q) {
-  const exp = q >> 3 & 7;
-  const mant = q & 7;
-  return mant + 8 << exp >> 1;
-}
-function xQuantize(x, xmax_dec) {
-  if (xmax_dec === 0) return 4;
-  const norm = Math.max(-1, Math.min(1, x / xmax_dec));
-  const q = Math.round((norm + 1) * 3.5);
-  return CLIP(q, 0, 7);
-}
-function gsm_RPE_encode(e) {
-  let bestMc = 0, bestEnergy = -1;
-  for (let mc2 = 0; mc2 < 4; mc2++) {
-    let energy = 0;
-    for (let k = 0; k < 13; k++) {
-      const s = e[mc2 + 3 * k];
-      energy += s * s;
-    }
-    if (energy > bestEnergy) {
-      bestEnergy = energy;
-      bestMc = mc2;
-    }
-  }
-  let xmax = 0;
-  const mc = bestMc;
-  for (let k = 0; k < 13; k++) {
-    const a = GSM_ABS(e[mc + 3 * k]);
-    if (a > xmax) xmax = a;
-  }
-  const xmaxQ = xmaxEncode(xmax);
-  const xmaxD = xmaxDecode(xmaxQ);
-  const x = [];
-  for (let k = 0; k < 13; k++) {
-    x.push(xQuantize(e[mc + 3 * k], xmaxD));
-  }
-  return { mc, xmax: xmaxQ, x };
-}
-function packBits(LARc, segs) {
-  const out = new Uint8Array(33);
-  let bp = 0;
-  function writeBits(val, bits) {
-    for (let i = bits - 1; i >= 0; i--) {
-      const byteIdx = bp >> 3;
-      const bitIdx = 7 - (bp & 7);
-      if (val >> i & 1) out[byteIdx] |= 1 << bitIdx;
-      bp++;
-    }
-  }
-  out[0] = 208;
-  bp = 4;
-  const larBits = [6, 6, 5, 5, 4, 4, 3, 3];
-  const larOff = [32, 32, 16, 16, 8, 8, 4, 4];
-  for (let i = 0; i < 8; i++) {
-    writeBits(LARc[i] + larOff[i], larBits[i]);
-  }
-  for (const seg of segs) {
-    writeBits(seg.nc, 7);
-    writeBits(seg.bc, 2);
-    writeBits(seg.mc, 2);
-    writeBits(seg.xmax, 6);
-    for (const xk of seg.x) writeBits(xk, 3);
-  }
-  return out;
-}
-var GsmEncoder = class {
-  // LTP delay history: last 120 samples of LPC residual from the previous frame.
-  // dpState[0] = oldest, dpState[119] = most recent.
-  dpState = new Int16Array(120);
-  // Short-term analysis filter lattice state (8 reflection stages)
-  stU = new Int16Array(8);
-  // LARp from previous frame (for interpolation in analysis filter)
-  prevLARp = new Int16Array(8);
-  encodeFrame(s) {
-    if (s.length !== 160) throw new Error("GSM frame requires 160 samples");
-    const LARc = gsm_LPC_Analysis(s);
-    const d = new Int16Array(160);
-    gsm_short_term_analysis(s, LARc, d, this.prevLARp, this.stU);
-    const dpLocal = new Int16Array(this.dpState);
-    const segs = [];
-    for (let seg = 0; seg < 4; seg++) {
-      const { bc, nc, e } = gsm_long_term(d, dpLocal, seg);
-      const rpe = gsm_RPE_encode(e);
-      segs.push({ nc, bc, mc: rpe.mc, xmax: rpe.xmax, x: rpe.x });
-    }
-    for (let k = 0; k < 120; k++) {
-      this.dpState[k] = d[k + 40];
-    }
-    return packBits(LARc, segs);
-  }
-};
-function unpackBits(frame) {
-  if (frame.length < 33) return null;
-  let bp = 4;
-  function readBits(n) {
-    let v = 0;
-    for (let i = 0; i < n; i++) {
-      const byteIdx = bp >> 3;
-      const bitIdx = 7 - (bp & 7);
-      v = v << 1 | frame[byteIdx] >> bitIdx & 1;
-      bp++;
-    }
-    return v;
-  }
-  const larBits = [6, 6, 5, 5, 4, 4, 3, 3];
-  const larOff = [32, 32, 16, 16, 8, 8, 4, 4];
-  const LARc = new Int16Array(8);
-  for (let i = 0; i < 8; i++) {
-    LARc[i] = readBits(larBits[i]) - larOff[i];
-  }
-  const segs = [];
-  for (let s = 0; s < 4; s++) {
-    const nc = readBits(7);
-    const bc = readBits(2);
-    const mc = readBits(2);
-    const xmax = readBits(6);
-    const x = [];
-    for (let k = 0; k < 13; k++) x.push(readBits(3));
-    segs.push({ nc, bc, mc, xmax, x });
-  }
-  return { LARc, segs };
-}
-var RPE_FAC = new Int16Array([-28521, -20972, -12124, -3835, 3835, 12124, 20972, 28521]);
-function interpolateLARc(prev, curr) {
-  const out = [];
-  for (let sub = 0; sub < 4; sub++) {
-    const larInterp = new Int16Array(8);
-    for (let i = 0; i < 8; i++) {
-      let lar;
-      if (sub === 0) lar = SASR(GSM_ADD(GSM_ADD(prev[i], prev[i]), GSM_ADD(prev[i], curr[i])), 2);
-      else if (sub === 1) lar = SASR(GSM_ADD(prev[i], curr[i]), 1);
-      else if (sub === 2) lar = SASR(GSM_ADD(prev[i], GSM_ADD(curr[i], GSM_ADD(curr[i], curr[i]))), 2);
-      else lar = curr[i];
-      larInterp[i] = lar;
-    }
-    out.push(LARc_to_r(larInterp));
-  }
-  return out;
-}
-var GsmDecoder = class {
-  // LTP history: 120 samples, oldest at index 0, newest at index 119.
-  dp = new Int16Array(120);
-  // Synthesis lattice state v[0..7].
-  v = new Int16Array(8);
-  // Previous frame LARc for interpolation.
-  prevLARc = new Int16Array(8);
-  /** Decode a 198-byte GSM packet (6 frames) → 960 Int16 PCM samples. */
-  decodePacket(data) {
-    const out = new Int16Array(GSM_FRAME_SAMPLES * FRAMES_PER_PACKET);
-    for (let f = 0; f < FRAMES_PER_PACKET; f++) {
-      const frame = data.slice(f * GSM_FRAME_BYTES, (f + 1) * GSM_FRAME_BYTES);
-      out.set(this.decodeFrame(frame), f * GSM_FRAME_SAMPLES);
-    }
-    return out;
-  }
-  decodeFrame(frame) {
-    const params = unpackBits(frame);
-    if (!params) return new Int16Array(160);
-    const { LARc, segs } = params;
-    const rpPerSeg = interpolateLARc(this.prevLARc, LARc);
-    this.prevLARc = new Int16Array(LARc);
-    const out = new Int16Array(160);
-    for (let seg = 0; seg < 4; seg++) {
-      const { nc, bc, mc, xmax, x } = segs[seg];
-      const off = seg * 40;
-      const rp = rpPerSeg[seg];
-      const xmaxD = xmaxDecode(xmax);
-      const ep = new Int16Array(40);
-      for (let k = 0; k < 13; k++) {
-        const temp = GSM_MULT_R(xmaxD, RPE_FAC[x[k]]);
-        ep[mc + 3 * k] = CLIP(GSM_ADD(temp, temp), -32768, 32767);
-      }
-      const wt = new Int16Array(40);
-      const bcGain = BCQ[bc];
-      for (let k = 0; k < 40; k++) {
-        const histIdx = 120 - nc + k;
-        const drp = histIdx >= 0 && histIdx < 120 ? this.dp[histIdx] : 0;
-        wt[k] = CLIP(GSM_ADD(ep[k], GSM_MULT_R(bcGain, drp)), -32768, 32767);
-      }
-      this.dp.copyWithin(0, 40);
-      this.dp.set(wt, 80);
-      for (let k = 0; k < 40; k++) {
-        let sri = wt[k];
-        for (let i = 7; i >= 0; i--) {
-          sri = CLIP(sri - GSM_MULT_R(rp[i], this.v[i]), -32768, 32767);
-          this.v[i] = CLIP(this.v[i] + GSM_MULT_R(rp[i], sri), -32768, 32767);
-        }
-        this.v[0] = sri;
-        out[off + k] = sri;
-      }
-    }
-    return out;
-  }
-};
+// src/eqso/gsm-decoder-ffmpeg.ts
+import { spawn as spawn2 } from "child_process";
+import { EventEmitter as EventEmitter3 } from "events";
 var GSM_FRAME_BYTES = 33;
 var GSM_FRAME_SAMPLES = 160;
 var FRAMES_PER_PACKET = 6;
 var GSM_PACKET_BYTES = GSM_FRAME_BYTES * FRAMES_PER_PACKET;
-var globalEncoder = new GsmEncoder();
-var globalDecoder = new GsmDecoder();
+var PCM_PACKET_BYTES = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET * 2;
+var GsmFfmpegDecoder = class extends EventEmitter3 {
+  proc = null;
+  accum = Buffer.alloc(0);
+  _ready = false;
+  get ready() {
+    return this._ready;
+  }
+  start() {
+    if (this.proc) return;
+    this.proc = spawn2("ffmpeg", [
+      "-hide_banner",
+      "-loglevel",
+      "quiet",
+      "-probesize",
+      "32",
+      "-analyzeduration",
+      "0",
+      "-f",
+      "gsm",
+      "-ar",
+      "8000",
+      "-i",
+      "pipe:0",
+      "-f",
+      "s16le",
+      "-ar",
+      "8000",
+      "-avioflags",
+      "direct",
+      "pipe:1"
+    ], { stdio: ["pipe", "pipe", "pipe"] });
+    this.proc.stderr.on("data", () => {
+    });
+    this.proc.on("error", (err) => {
+      console.error(`[gsm-dec-ffmpeg] process error: ${err.message}`);
+    });
+    this.proc.on("close", () => {
+      this.proc = null;
+      this._ready = false;
+    });
+    this.proc.stdout.on("data", (chunk) => {
+      this.accum = Buffer.concat([this.accum, chunk]);
+      while (this.accum.length >= PCM_PACKET_BYTES) {
+        const pcmBuf = this.accum.slice(0, PCM_PACKET_BYTES);
+        this.accum = this.accum.slice(PCM_PACKET_BYTES);
+        const pcm = new Int16Array(
+          pcmBuf.buffer.slice(pcmBuf.byteOffset, pcmBuf.byteOffset + PCM_PACKET_BYTES)
+        );
+        this.emit("pcm", pcm);
+      }
+    });
+    setTimeout(() => {
+      this._ready = true;
+    }, 500);
+  }
+  decode(gsm) {
+    if (!this.proc || !this._ready) return;
+    if (gsm.length < GSM_PACKET_BYTES) return;
+    try {
+      this.proc.stdin.write(gsm.slice(0, GSM_PACKET_BYTES));
+    } catch {
+    }
+  }
+  stop() {
+    try {
+      this.proc?.stdin.end();
+      this.proc?.kill("SIGTERM");
+    } catch {
+    }
+    this.proc = null;
+    this._ready = false;
+    this.accum = Buffer.alloc(0);
+  }
+};
 
 // src/eqso/pcm-utils.ts
 function pcmToFloat32Normalized(pcm) {
@@ -61437,7 +61007,7 @@ var RelayManager = class {
       txPackets: 0,
       remoteUsers: [],
       transmitting: false,
-      decoder: new GsmDecoder()
+      decoder: new GsmFfmpegDecoder()
     };
   }
   startRelay(config2) {
@@ -61448,6 +61018,12 @@ var RelayManager = class {
     const state = this.makeState(config2);
     this.relays.set(config2.id, state);
     const listenerId = `relay-${config2.id}`;
+    state.decoder.on("pcm", (pcm) => {
+      const float322 = pcmToFloat32Normalized(pcm);
+      const wsPkt = Buffer.concat([Buffer.from([17]), Buffer.from(float322.buffer)]);
+      roomManager.broadcastBinToLocalWsClients(config2.localRoom, wsPkt, listenerId);
+    });
+    state.decoder.start();
     roomManager.addRoomListener(listenerId, [config2.localRoom], (_room, data, senderId) => {
       if (senderId === listenerId) return;
       if (!state.proxy || state.status !== "connected") return;
@@ -61516,11 +61092,8 @@ var RelayManager = class {
           const audioPkt = event.data;
           roomManager.broadcastToTcpAndRelays(config2.localRoom, audioPkt, listenerId);
           if (audioPkt.length >= 1 + AUDIO_PAYLOAD_SIZE) {
-            const gsmPayload = new Uint8Array(audioPkt.buffer, audioPkt.byteOffset + 1, AUDIO_PAYLOAD_SIZE);
-            const pcm = state.decoder.decodePacket(gsmPayload);
-            const float322 = pcmToFloat32Normalized(pcm);
-            const wsPkt = Buffer.concat([Buffer.from([17]), Buffer.from(float322.buffer)]);
-            roomManager.broadcastBinToLocalWsClients(config2.localRoom, wsPkt, listenerId);
+            const gsmPayload = Buffer.from(audioPkt.buffer, audioPkt.byteOffset + 1, AUDIO_PAYLOAD_SIZE);
+            state.decoder.decode(gsmPayload);
           }
           state.rxPackets++;
           break;
@@ -61588,6 +61161,8 @@ var RelayManager = class {
       }
       state.transmitting = false;
     }
+    state.decoder.stop();
+    state.decoder.removeAllListeners();
     state.proxy?.disconnect();
     state.proxy = null;
     state.status = "disconnected";
@@ -61649,7 +61224,7 @@ var RelayManager = class {
 var relayManager = new RelayManager();
 
 // src/eqso/courtesy-beep-manager.ts
-import { spawn as spawn2 } from "child_process";
+import { spawn as spawn3 } from "child_process";
 var SAMPLE_RATE = 8e3;
 var AUDIO_PAYLOAD_SIZE2 = 198;
 var COURTESY_TONES = [
@@ -61732,7 +61307,7 @@ function pcmToWav(pcm) {
 }
 async function wavToGsmPackets(wavBuf) {
   return new Promise((resolve, reject) => {
-    const ff = spawn2("ffmpeg", [
+    const ff = spawn3("ffmpeg", [
       "-i",
       "pipe:0",
       "-ar",
@@ -62586,13 +62161,7 @@ function processMultiByte(state, byte) {
           const gsmPayload = state.buf.slice(0, AUDIO_PAYLOAD_SIZE);
           const gsmPkt = Buffer.concat([Buffer.from([1]), gsmPayload]);
           roomManager.broadcastToTcpAndRelays(client.room, gsmPkt, state.id);
-          const decoder = tcpDecoders.get(state.id);
-          if (decoder) {
-            const pcm = decoder.decodePacket(new Uint8Array(gsmPayload));
-            const float322 = pcmToFloat32Normalized(pcm);
-            const wsPkt = Buffer.concat([Buffer.from([17]), Buffer.from(float322.buffer)]);
-            roomManager.broadcastBinToLocalWsClients(client.room, wsPkt, state.id);
-          }
+          tcpDecoders.get(state.id)?.decode(gsmPayload);
         }
         state.buf = state.buf.slice(AUDIO_PAYLOAD_SIZE);
         if (state.buf.length === 0) {
@@ -62695,7 +62264,11 @@ function handleData(state, data) {
 function handleDisconnect(state) {
   if (state.disconnected) return;
   state.disconnected = true;
-  tcpDecoders.delete(state.id);
+  const dec = tcpDecoders.get(state.id);
+  if (dec) {
+    dec.stop();
+    tcpDecoders.delete(state.id);
+  }
   const client = roomManager.getClient(state.id);
   if (client?.room) {
     const leftPkt = buildUserLeft(client.name);
@@ -62741,7 +62314,17 @@ function startTcpServer(port2) {
     };
     roomManager.addClient(clientInfo);
     logger.info({ id, addr: socket.remoteAddress }, "eQSO TCP client registered \u2014 waiting for handshake");
-    tcpDecoders.set(id, new GsmDecoder());
+    const tcpDecoder = new GsmFfmpegDecoder();
+    tcpDecoder.on("pcm", (pcm) => {
+      const client = roomManager.getClient(state.id);
+      if (client?.room) {
+        const float322 = pcmToFloat32Normalized(pcm);
+        const wsPkt = Buffer.concat([Buffer.from([17]), Buffer.from(float322.buffer)]);
+        roomManager.broadcastBinToLocalWsClients(client.room, wsPkt, state.id);
+      }
+    });
+    tcpDecoder.start();
+    tcpDecoders.set(id, tcpDecoder);
     socket.setKeepAlive(true, 3e4);
     const keepaliveInterval = setInterval(() => {
       if (!state.disconnected) safeWrite(state, KEEPALIVE_PACKET);
@@ -62784,21 +62367,21 @@ var import_websocket_server = __toESM(require_websocket_server(), 1);
 import { randomUUID as randomUUID3 } from "crypto";
 
 // src/eqso/ffmpeg-gsm.ts
-import { spawn as spawn3 } from "child_process";
-import { EventEmitter as EventEmitter3 } from "events";
+import { spawn as spawn4 } from "child_process";
+import { EventEmitter as EventEmitter4 } from "events";
 var GSM_FRAME_BYTES2 = 33;
 var GSM_FRAME_SAMPLES2 = 160;
 var FRAMES_PER_PACKET2 = 6;
 var GSM_PACKET_BYTES2 = GSM_FRAME_BYTES2 * FRAMES_PER_PACKET2;
-var PCM_PACKET_BYTES = GSM_FRAME_SAMPLES2 * FRAMES_PER_PACKET2 * 2;
-var FfmpegGsmDecoder = class extends EventEmitter3 {
+var PCM_PACKET_BYTES2 = GSM_FRAME_SAMPLES2 * FRAMES_PER_PACKET2 * 2;
+var FfmpegGsmDecoder = class extends EventEmitter4 {
   proc = null;
   accumulator = Buffer.alloc(0);
   ready = false;
   /** Spawn the ffmpeg decoder process and mark ready after startup delay. */
   start() {
     if (this.proc) return;
-    this.proc = spawn3("ffmpeg", [
+    this.proc = spawn4("ffmpeg", [
       "-hide_banner",
       "-loglevel",
       "quiet",
@@ -62834,13 +62417,13 @@ var FfmpegGsmDecoder = class extends EventEmitter3 {
     });
     this.proc.stdout.on("data", (chunk) => {
       this.accumulator = Buffer.concat([this.accumulator, chunk]);
-      while (this.accumulator.length >= PCM_PACKET_BYTES) {
-        const pcmBuf = this.accumulator.slice(0, PCM_PACKET_BYTES);
-        this.accumulator = this.accumulator.slice(PCM_PACKET_BYTES);
+      while (this.accumulator.length >= PCM_PACKET_BYTES2) {
+        const pcmBuf = this.accumulator.slice(0, PCM_PACKET_BYTES2);
+        this.accumulator = this.accumulator.slice(PCM_PACKET_BYTES2);
         const pcm = new Int16Array(
           pcmBuf.buffer.slice(
             pcmBuf.byteOffset,
-            pcmBuf.byteOffset + PCM_PACKET_BYTES
+            pcmBuf.byteOffset + PCM_PACKET_BYTES2
           )
         );
         this.emit("pcm", pcm);
@@ -62878,14 +62461,14 @@ var FfmpegGsmDecoder = class extends EventEmitter3 {
     this.accumulator = Buffer.alloc(0);
   }
 };
-var FfmpegGsmEncoder = class extends EventEmitter3 {
+var FfmpegGsmEncoder = class extends EventEmitter4 {
   proc = null;
   accumulator = Buffer.alloc(0);
   ready = false;
   /** Spawn the ffmpeg encoder process and mark ready after startup delay. */
   start() {
     if (this.proc) return;
-    this.proc = spawn3("ffmpeg", [
+    this.proc = spawn4("ffmpeg", [
       "-hide_banner",
       "-loglevel",
       "quiet",

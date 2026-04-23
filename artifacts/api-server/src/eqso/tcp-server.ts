@@ -2,7 +2,7 @@ import net from "net";
 import { randomUUID } from "crypto";
 import { logger } from "../lib/logger";
 import { roomManager, ClientInfo } from "./room-manager";
-import { GsmDecoder } from "./gsm610";
+import { GsmFfmpegDecoder } from "./gsm-decoder-ffmpeg";
 import { inactivityManager } from "./inactivity-manager";
 import { moderationManager } from "./moderation-manager";
 import { courtesyBeepManager } from "./courtesy-beep-manager";
@@ -29,8 +29,9 @@ import {
 
 const SERVER_VERSION = "eQSO Linux Server v1.0";
 
-// One native GSM decoder per TCP client (stateful, keyed by client UUID)
-const tcpDecoders = new Map<string, GsmDecoder>();
+// Un decoder GSM FFmpeg por cliente TCP (stateful, clave = UUID del cliente).
+// Se crea al conectar y se destruye al desconectar.
+const tcpDecoders = new Map<string, GsmFfmpegDecoder>();
 
 interface TcpClientState {
   id: string;
@@ -239,15 +240,9 @@ function processMultiByte(state: TcpClientState, byte: number): void {
           const gsmPkt = Buffer.concat([Buffer.from([0x01]), gsmPayload]);
           roomManager.broadcastToTcpAndRelays(client.room, gsmPkt, state.id);
 
-          // Decode GSM → Int16 PCM → Float32 and broadcast to WS browser clients.
-          // Native synchronous decode: no subprocess, no pipe, no timer race condition.
-          const decoder = tcpDecoders.get(state.id);
-          if (decoder) {
-            const pcm = decoder.decodePacket(new Uint8Array(gsmPayload));
-            const float32 = pcmToFloat32Normalized(pcm);
-            const wsPkt = Buffer.concat([Buffer.from([0x11]), Buffer.from(float32.buffer)]);
-            roomManager.broadcastBinToLocalWsClients(client.room, wsPkt, state.id);
-          }
+          // Decode GSM → Float32 vía FFmpeg (asíncrono).
+          // El handler del evento "pcm" (registrado al conectar) envía a clientes WS.
+          tcpDecoders.get(state.id)?.decode(gsmPayload);
         }
         state.buf = state.buf.slice(AUDIO_PAYLOAD_SIZE);
         if (state.buf.length === 0) {
@@ -377,7 +372,8 @@ function handleDisconnect(state: TcpClientState): void {
   if (state.disconnected) return; // guard: error event is always followed by close event
   state.disconnected = true;
 
-  tcpDecoders.delete(state.id);
+  const dec = tcpDecoders.get(state.id);
+  if (dec) { dec.stop(); tcpDecoders.delete(state.id); }
 
   const client = roomManager.getClient(state.id);
   if (client?.room) {
@@ -427,10 +423,20 @@ export function startTcpServer(port: number): net.Server {
     roomManager.addClient(clientInfo);
     logger.info({ id, addr: socket.remoteAddress }, "eQSO TCP client registered — waiting for handshake");
 
-    // Instancia de decoder GSM nativo (puro JS, stateful) por cliente.
-    // La decodificación es síncrona: un paquete GSM in → Int16 PCM out
-    // en el mismo tick de Node.js, sin subprocess ni pipe.
-    tcpDecoders.set(id, new GsmDecoder());
+    // Decoder GSM vía FFmpeg por cliente TCP (async, event-based).
+    // Cuando el relay daemon envía GSM, ffmpeg lo decodifica a PCM y emite
+    // el evento "pcm" que aquí se reenvía a los clientes WS del navegador.
+    const tcpDecoder = new GsmFfmpegDecoder();
+    tcpDecoder.on("pcm", (pcm: Int16Array) => {
+      const client = roomManager.getClient(state.id);
+      if (client?.room) {
+        const float32 = pcmToFloat32Normalized(pcm);
+        const wsPkt = Buffer.concat([Buffer.from([0x11]), Buffer.from(float32.buffer)]);
+        roomManager.broadcastBinToLocalWsClients(client.room, wsPkt, state.id);
+      }
+    });
+    tcpDecoder.start();
+    tcpDecoders.set(id, tcpDecoder);
 
     // TCP keepalive a nivel kernel: tras 30s de inactividad de aplicacion, el
     // OS envía probes TCP al extremo remoto. Si este responde (connection alive),
