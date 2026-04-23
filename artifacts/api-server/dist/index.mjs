@@ -61157,7 +61157,7 @@ function generatePcm(id) {
       return buf;
     }
     case "beep-roger":
-      return sine(1750, 100);
+      return concat(sine(1750, 200), silence(50));
     case "beep-cw-k":
       return concat(
         sine(700, 300),
