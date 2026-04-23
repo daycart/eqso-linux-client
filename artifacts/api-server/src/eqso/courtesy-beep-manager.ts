@@ -122,7 +122,7 @@ async function wavToGsmPackets(wavBuf: Buffer): Promise<Buffer[]> {
 class CourtesyBeepManager {
   private tonePackets = new Map<string, Buffer[]>();
   private selectedId = "beep-simple";
-  private _enabled = false;
+  private _enabled = true;
 
   async init(): Promise<void> {
     // Load config from DB
