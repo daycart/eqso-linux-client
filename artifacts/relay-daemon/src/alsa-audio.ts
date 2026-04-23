@@ -193,13 +193,27 @@ export class AlsaAudio extends EventEmitter {
   // ── arecord ───────────────────────────────────────────────────────────────
 
   private startRecorder(): void {
+    // --period-size=480: el acumulador en feedPcm necesita 960 muestras para
+    // emitir un paquete GSM (6 frames × 160). Con 480 muestras/period se necesitan
+    // exactamente 2 periods = 2 × 60ms = 120ms de reloj real por paquete.
+    // 960 muestras / 8000 Hz = 120ms de audio → reloj real == duración audio.
+    //
+    // Sin esto, arecord entrega chunks de ~512 muestras cada 64ms. Para
+    // acumular 960 muestras hacen falta 2 chunks = 128ms de reloj real,
+    // pero el paquete contiene solo 120ms de audio. El browser programa
+    // 120ms de audio cada 128ms → se acumula un déficit de 8ms por paquete.
+    // Tras ~15 paquetes (~1.9s) el déficit llega a 120ms = 1 paquete completo,
+    // el scheduler hace reset y se produce un silencio audible equidistante.
+    //
+    // Con period=480: 2×480=960 muestras en exactamente 120ms → sin drift.
     const args = [
       "-D", this.cfg.captureDevice,
       "-f", "S16_LE",
       "-r", "8000",
       "-c", "1",
       "-q",
-      "--buffer-size=1024",
+      "--period-size=480",
+      "--buffer-size=1920",
     ];
 
     log(`arecord ${args.join(" ")}`);
