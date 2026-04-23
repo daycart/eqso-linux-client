@@ -6,6 +6,7 @@ import { roomManager } from "./room-manager";
 import { AUDIO_PAYLOAD_SIZE } from "./protocol";
 import { buildPttStarted, buildPttReleased, buildUserJoined, buildUserLeft } from "./protocol";
 import { GsmDecoder } from "./gsm610";
+import { pcmToFloat32Normalized } from "./pcm-utils";
 
 interface RelayConfig {
   id: number;
@@ -172,10 +173,7 @@ class RelayManager {
           if (audioPkt.length >= 1 + AUDIO_PAYLOAD_SIZE) {
             const gsmPayload = new Uint8Array(audioPkt.buffer, audioPkt.byteOffset + 1, AUDIO_PAYLOAD_SIZE);
             const pcm = state.decoder.decodePacket(gsmPayload);
-            const float32 = new Float32Array(pcm.length);
-            for (let i = 0; i < pcm.length; i++) {
-              float32[i] = Math.max(-0.45, Math.min(0.45, pcm[i] / 32768.0));
-            }
+            const float32 = pcmToFloat32Normalized(pcm);
             const wsPkt = Buffer.concat([Buffer.from([0x11]), Buffer.from(float32.buffer)]);
             roomManager.broadcastBinToLocalWsClients(config.localRoom, wsPkt, listenerId);
           }

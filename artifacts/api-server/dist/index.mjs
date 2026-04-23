@@ -61376,6 +61376,25 @@ var GSM_PACKET_BYTES = GSM_FRAME_BYTES * FRAMES_PER_PACKET;
 var globalEncoder = new GsmEncoder();
 var globalDecoder = new GsmDecoder();
 
+// src/eqso/pcm-utils.ts
+function pcmToFloat32Normalized(pcm) {
+  const TARGET_RMS = 0.15;
+  const MAX_SCALE = 4;
+  const MIN_RMS = 3e-3;
+  let sumSq = 0;
+  for (let i = 0; i < pcm.length; i++) {
+    const s = pcm[i] / 32768;
+    sumSq += s * s;
+  }
+  const rms = pcm.length > 0 ? Math.sqrt(sumSq / pcm.length) : 0;
+  const scale = rms > MIN_RMS ? Math.min(MAX_SCALE, TARGET_RMS / rms) : 1;
+  const float322 = new Float32Array(pcm.length);
+  for (let i = 0; i < pcm.length; i++) {
+    float322[i] = Math.max(-1, Math.min(1, pcm[i] / 32768 * scale));
+  }
+  return float322;
+}
+
 // src/eqso/relay-manager.ts
 var MAX_RECONNECT_DELAY_MS = 1e4;
 var PTT_INACTIVITY_TIMEOUT_MS = 5e3;
@@ -61500,10 +61519,7 @@ var RelayManager = class {
           if (audioPkt.length >= 1 + AUDIO_PAYLOAD_SIZE) {
             const gsmPayload = new Uint8Array(audioPkt.buffer, audioPkt.byteOffset + 1, AUDIO_PAYLOAD_SIZE);
             const pcm = state.decoder.decodePacket(gsmPayload);
-            const float322 = new Float32Array(pcm.length);
-            for (let i = 0; i < pcm.length; i++) {
-              float322[i] = Math.max(-0.45, Math.min(0.45, pcm[i] / 32768));
-            }
+            const float322 = pcmToFloat32Normalized(pcm);
             const wsPkt = Buffer.concat([Buffer.from([17]), Buffer.from(float322.buffer)]);
             roomManager.broadcastBinToLocalWsClients(config2.localRoom, wsPkt, listenerId);
           }
@@ -62574,10 +62590,7 @@ function processMultiByte(state, byte) {
           const decoder = tcpDecoders.get(state.id);
           if (decoder) {
             const pcm = decoder.decodePacket(new Uint8Array(gsmPayload));
-            const float322 = new Float32Array(pcm.length);
-            for (let i = 0; i < pcm.length; i++) {
-              float322[i] = Math.max(-0.45, Math.min(0.45, pcm[i] / 32768));
-            }
+            const float322 = pcmToFloat32Normalized(pcm);
             const wsPkt = Buffer.concat([Buffer.from([17]), Buffer.from(float322.buffer)]);
             roomManager.broadcastBinToLocalWsClients(client.room, wsPkt, state.id);
           }
@@ -62993,10 +63006,7 @@ function handleLocalMode(ws, id, keepaliveTimer) {
     roomManager.broadcastToTcpAndRelays(client.room, gsmPkt, id);
   });
   localDecoder.on("pcm", (pcm) => {
-    const float322 = new Float32Array(pcm.length);
-    for (let i = 0; i < pcm.length; i++) {
-      float322[i] = Math.max(-0.45, Math.min(0.45, pcm[i] / 32768));
-    }
+    const float322 = pcmToFloat32Normalized(pcm);
     const payload = Buffer.from(float322.buffer);
     const out = Buffer.allocUnsafe(1 + payload.length);
     out[0] = WS_AUDIO_REMOTE;
@@ -63243,18 +63253,11 @@ function handleRemoteMode(ws, id, host, port2) {
   decoder.start();
   encoder.start();
   decoder.on("pcm", (pcm) => {
-    let peak = 0;
-    const float322 = new Float32Array(pcm.length);
-    for (let i = 0; i < pcm.length; i++) {
-      const a = Math.abs(pcm[i]);
-      if (a > peak) peak = a;
-      float322[i] = Math.max(-0.45, Math.min(0.45, pcm[i] / 32768));
-    }
+    const float322 = pcmToFloat32Normalized(pcm);
     const header = Buffer.alloc(1);
     header[0] = WS_AUDIO_REMOTE;
     const payload = Buffer.from(float322.buffer);
     sendBin(ws, Buffer.concat([header, payload]));
-    logger.info({ samples: pcm.length, peak }, "Remote RX: sent Float32 to browser");
   });
   encoder.on("gsm", (gsm) => {
     if (!pttGranted) return;

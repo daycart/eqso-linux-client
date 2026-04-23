@@ -17,6 +17,7 @@ import {
 } from "./protocol";
 import { EqsoProxy, ProxyEvent } from "./eqso-proxy";
 import { validateSession } from "../lib/auth";
+import { pcmToFloat32Normalized } from "./pcm-utils";
 import { moderationManager } from "./moderation-manager";
 import {
   FfmpegGsmEncoder,
@@ -97,12 +98,7 @@ function handleLocalMode(
   });
 
   localDecoder.on("pcm", (pcm: Int16Array) => {
-    const float32 = new Float32Array(pcm.length);
-    for (let i = 0; i < pcm.length; i++) {
-      // Clamp to ±0.45 so that with the browser's 2× gain node the peak is
-      // 0.9 FS — prevents hard clipping on full-scale radio audio.
-      float32[i] = Math.max(-0.45, Math.min(0.45, pcm[i] / 32768));
-    }
+    const float32 = pcmToFloat32Normalized(pcm);
     const payload = Buffer.from(float32.buffer);
     const out = Buffer.allocUnsafe(1 + payload.length);
     out[0] = WS_AUDIO_REMOTE;
@@ -392,20 +388,11 @@ function handleRemoteMode(
 
   // When decoder produces a decoded PCM packet, send it to browser
   decoder.on("pcm", (pcm: Int16Array) => {
-    let peak = 0;
-    const float32 = new Float32Array(pcm.length);
-    for (let i = 0; i < pcm.length; i++) {
-      const a = Math.abs(pcm[i]);
-      if (a > peak) peak = a;
-      // Clamp a ±0.45 para que el nodo gain×2 del navegador no supere 0.90 FS.
-      // ±0.85 anterior causaba clipping (0.85×2=1.70) con el radioenlace amplificado.
-      float32[i] = Math.max(-0.45, Math.min(0.45, pcm[i] / 32768));
-    }
+    const float32 = pcmToFloat32Normalized(pcm);
     const header = Buffer.alloc(1);
     header[0] = WS_AUDIO_REMOTE;
     const payload = Buffer.from(float32.buffer);
     sendBin(ws, Buffer.concat([header, payload]));
-    logger.info({ samples: pcm.length, peak }, "Remote RX: sent Float32 to browser");
   });
 
   // When encoder produces a GSM packet, forward it to the eQSO server

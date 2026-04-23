@@ -9,6 +9,7 @@ import { courtesyBeepManager } from "./courtesy-beep-manager";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { pcmToFloat32Normalized } from "./pcm-utils";
 import {
   EQSO_COMMANDS,
   AUDIO_PAYLOAD_SIZE,
@@ -243,10 +244,7 @@ function processMultiByte(state: TcpClientState, byte: number): void {
           const decoder = tcpDecoders.get(state.id);
           if (decoder) {
             const pcm = decoder.decodePacket(new Uint8Array(gsmPayload));
-            const float32 = new Float32Array(pcm.length);
-            for (let i = 0; i < pcm.length; i++) {
-              float32[i] = Math.max(-0.45, Math.min(0.45, pcm[i] / 32768.0));
-            }
+            const float32 = pcmToFloat32Normalized(pcm);
             const wsPkt = Buffer.concat([Buffer.from([0x11]), Buffer.from(float32.buffer)]);
             roomManager.broadcastBinToLocalWsClients(client.room, wsPkt, state.id);
           }
