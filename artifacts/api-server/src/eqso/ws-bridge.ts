@@ -466,13 +466,13 @@ function handleRemoteMode(
         break;
       }
       case "audio": {
-        // Incoming GSM packet from remote eQSO server: [0x01][198 bytes GSM]
+        // Incoming GSM packet from remote eQSO server: [0x01][33 bytes GSM]
         const pkt = ev.data as Buffer;
         if (pkt.length < 1 + AUDIO_PAYLOAD_SIZE) break;
         roomManager.updateRemoteConn(id, {
           rxBytes: (roomManager.getRemoteConn(id)?.rxBytes ?? 0) + pkt.length,
         });
-        // Feed 198-byte GSM payload into the streaming decoder
+        // Feed 33-byte GSM frame into the streaming decoder
         const gsmBuf = Buffer.from(
           pkt.buffer,
           pkt.byteOffset + 1,
