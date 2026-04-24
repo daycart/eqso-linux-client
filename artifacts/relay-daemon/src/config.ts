@@ -11,6 +11,10 @@ export interface AudioConfig {
    *  0 = sin gate (envía todo durante VOX active). Por defecto 50 (elimina
    *  silencio absoluto sin cortar voz suave). */
   txGateRms: number;
+  /** Chunks consecutivos sobre umbral antes de emitir ptt_start (anti-click).
+   *  1 chunk = 60ms (period=480 a 8kHz). Defecto 5 = 300ms de voz sostenida.
+   *  Filtra clics de squelch (<120ms) sin retrasar la activacion de voz real. */
+  voxDebounceChunks: number;
   inputGain: number;
   outputGain: number;
 }
@@ -57,6 +61,7 @@ const DEFAULTS: RelayConfig = {
     voxThresholdRms: 600,
     voxHangMs: 2500,
     txGateRms: 50,
+    voxDebounceChunks: 5,
     inputGain: 1.0,
     outputGain: 3.0,
   },

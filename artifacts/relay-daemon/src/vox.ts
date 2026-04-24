@@ -5,8 +5,17 @@
  * para abrir/cerrar el canal de transmision automaticamente.
  *
  * Parametros configurables:
- *  - thresholdRms: nivel minimo de señal para activar (0–32767, defecto 800)
- *  - hangMs:       tiempo que espera en silencio antes de desactivar (defecto 1000 ms)
+ *  - thresholdRms:   nivel minimo de señal para activar (0–32767, defecto 600)
+ *  - hangMs:         tiempo que espera en silencio antes de desactivar (defecto 2500ms)
+ *  - debounceChunks: chunks CONSECUTIVOS sobre umbral antes de emitir ptt_start
+ *                    (1 chunk = 60ms a period=480/8kHz; defecto 5 = 300ms)
+ *
+ * Por que debounce:
+ *   Sin debounce, un click de squelch (~60ms, RMS=12000) dispara ptt_start
+ *   igual que 30 segundos de voz. Ese click se manda a la red eQSO como
+ *   "transmision" y el receptor lo oye como eco o ruido.
+ *   Con debounce=5 (300ms), un click de 60ms se filtra. La voz sostenida
+ *   (> 300ms) activa PTT normalmente.
  */
 
 import { EventEmitter } from "events";
@@ -14,10 +23,12 @@ import { EventEmitter } from "events";
 export class Vox extends EventEmitter {
   private active = false;
   private hangTimer: ReturnType<typeof setTimeout> | null = null;
+  private consecutiveAbove = 0; // chunks consecutivos sobre umbral
 
   constructor(
     private readonly thresholdRms: number,
     private readonly hangMs: number,
+    private readonly debounceChunks: number = 5, // 5 × 60ms = 300ms
   ) {
     super();
   }
@@ -29,41 +40,50 @@ export class Vox extends EventEmitter {
     if (rms >= this.thresholdRms) {
       // Señal detectada: cancela el temporizador de hang si estaba activo
       if (this.hangTimer) { clearTimeout(this.hangTimer); this.hangTimer = null; }
-      if (!this.active) {
+      this.consecutiveAbove++;
+
+      if (!this.active && this.consecutiveAbove >= this.debounceChunks) {
+        // N chunks consecutivos sobre umbral → activar PTT
         this.active = true;
+        this.consecutiveAbove = 0;
         this.emit("ptt_start");
       }
-    } else if (this.active && !this.hangTimer) {
-      // Silencio — iniciar temporizador de hang
-      this.hangTimer = setTimeout(() => {
-        this.hangTimer = null;
-        this.active = false;
-        this.emit("ptt_end");
-      }, this.hangMs);
+    } else {
+      // Señal bajo umbral: resetear contador de debounce
+      this.consecutiveAbove = 0;
+
+      if (this.active && !this.hangTimer) {
+        // Iniciar temporizador de hang
+        this.hangTimer = setTimeout(() => {
+          this.hangTimer = null;
+          this.active = false;
+          this.emit("ptt_end");
+        }, this.hangMs);
+      }
     }
   }
 
   /** Forzar PTT activo (control manual desde HTTP). */
   forcePttStart(): void {
     if (this.hangTimer) { clearTimeout(this.hangTimer); this.hangTimer = null; }
+    this.consecutiveAbove = 0;
     if (!this.active) { this.active = true; this.emit("ptt_start"); }
   }
 
   /** Forzar PTT inactivo (control manual desde HTTP). */
   forcePttEnd(): void {
     if (this.hangTimer) { clearTimeout(this.hangTimer); this.hangTimer = null; }
+    this.consecutiveAbove = 0;
     if (this.active) { this.active = false; this.emit("ptt_end"); }
   }
 
   /**
    * Resetear estado interno del VOX sin emitir ptt_end.
-   * Usar cuando queremos cancelar un ciclo de activacion bloqueado
-   * (ej: ptt_start suprimido) para que el VOX pueda re-evaluar
-   * en el siguiente ciclo sin disparar efectos secundarios de ptt_end
-   * (pttActive, postTxSuppressUntil, postRxVoxSuppressUntil).
+   * Usar cuando queremos cancelar un ciclo de activacion bloqueado.
    */
   resetState(): void {
     if (this.hangTimer) { clearTimeout(this.hangTimer); this.hangTimer = null; }
+    this.consecutiveAbove = 0;
     this.active = false;
   }
 

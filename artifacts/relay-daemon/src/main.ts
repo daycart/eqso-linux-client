@@ -99,7 +99,7 @@ const serialPtt = new SerialPtt(cfg.ptt);
 
 // ─── Audio y VOX ─────────────────────────────────────────────────────────────
 const audio = new AlsaAudio(cfg.audio);
-const vox   = new Vox(cfg.audio.voxThresholdRms, cfg.audio.voxHangMs);
+const vox   = new Vox(cfg.audio.voxThresholdRms, cfg.audio.voxHangMs, cfg.audio.voxDebounceChunks ?? 5);
 
 // Gate de transmision: nivel mínimo para enviar un paquete.
 // Evita enviar silencio absoluto durante el colgado del VOX.
@@ -353,7 +353,7 @@ log(`eQSO Relay Daemon arrancado`);
 log(`  Callsign : ${cfg.callsign}`);
 log(`  Sala     : ${cfg.room}`);
 log(`  Servidor : ${cfg.server}:${cfg.port}`);
-log(`  VOX      : ${cfg.audio.vox ? `ON (umbral=${cfg.audio.voxThresholdRms} hang=${cfg.audio.voxHangMs}ms)` : "OFF"}`);
+log(`  VOX      : ${cfg.audio.vox ? `ON (umbral=${cfg.audio.voxThresholdRms} hang=${cfg.audio.voxHangMs}ms debounce=${cfg.audio.voxDebounceChunks ?? 5}chunks)` : "OFF"}`);
 log(`  Captura  : ${cfg.audio.captureDevice}`);
 log(`  Playback : ${cfg.audio.playbackDevice}`);
 log(`  PTT Ser. : ${cfg.ptt.device ? `${cfg.ptt.device} (${cfg.ptt.method}${cfg.ptt.inverted ? ", invertido" : ""})` : "deshabilitado"}`);
