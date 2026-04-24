@@ -209,31 +209,43 @@ export class AlsaAudio extends EventEmitter {
   // ── arecord ───────────────────────────────────────────────────────────────
 
   private startRecorder(): void {
-    // Captura via arecord con period-size=160 y buffer-size=8000.
+    // Captura via arecord a la tasa NATIVA del CM108 (48kHz estéreo) usando hw:
+    // directamente, evitando la capa plughw que agrupaba audio en lotes de ~260ms.
     //
-    // HISTORIA: Se intentó reemplazar arecord por ffmpeg esperando que su modo
-    // poll() no-bloqueante eliminase los gaps de 400-970ms. El resultado fue que
-    // ffmpeg sin -ar negocia el período ALSA del CM108 a su valor nativo (~750ms),
-    // entregando audio solo el 25% del tiempo. Con period-size=160, arecord fuerza
-    // un período de 20ms que el CM108 acepta via plughw, dando audio continuo.
+    // RAIZ DEL PROBLEMA ANTERIOR:
+    //   arecord/ffmpeg con plughw: a 8kHz → la capa de conversión de tasa de
+    //   muestreo de ALSA (plughw plugin) acumula datos en bloques internos de
+    //   ~2080 muestras (260ms) antes de entregarlos. Esto causaba el patrón de
+    //   260ms de audio + 740ms de silencio observado tanto con arecord como con
+    //   ffmpeg, independientemente de period-size o buffer-size.
     //
-    // CAUSA RAÍZ de los gaps anteriores con arecord:
-    //   - buffer-size=480 (60ms): el event loop de Node tardaba >60ms entre lecturas
-    //     → ALSA xrun → snd_pcm_readi() bloqueante por 400-970ms.
-    //   - Con buffer-size=8000 (1s de margen) los xruns no ocurren aunque Node
-    //     tarde hasta 1s entre lecturas del pipe.
-    //   - USB autosuspend (delay=-1000ms ya deshabilitado) no era la causa.
+    // SOLUCION: hw: + 48kHz estéreo + period=480 (10ms) + decimación en Node.js
+    //   - hw: accede al hardware directamente sin capa de conversión
+    //   - 48kHz es la tasa nativa del CM108 → sin resampling de ALSA
+    //   - period=480 (10ms a 48kHz): ALSA entrega datos cada 10ms sin batching
+    //   - buffer=9600 (200ms): margen suficiente para el event loop de Node
+    //   - Decimación 6:1 en Node.js: toma 1 de cada 6 frames, mezcla L+R → mono
+    //     Adecuado para voz (300-3400Hz) ya que no hay contenido de audio relevante
+    //     por encima de 4kHz desde el micrófono de la radio CB.
     //
-    // Con period-size=160 (20ms) y buffer-size=8000 (1s), arecord entrega 160
-    // muestras cada 20ms de forma continua sin gaps.
+    // DISPOSITIVO: hw: en vez de plughw:
+    //   cfg.captureDevice = "plughw:Device,0" → "hw:Device,0" para captura
+    //   El aplay sigue usando plughw: (necesita conversión 8kHz→48kHz para salida)
+    const hwDevice = this.cfg.captureDevice.replace(/^plughw:/, "hw:");
+    const CAPTURE_RATE = 48000;
+    const CAPTURE_CHANNELS = 2;    // estéreo (CM108 nativo)
+    const PERIOD_FRAMES = 480;     // 10ms a 48kHz
+    const BUFFER_FRAMES = 9600;    // 200ms = 20 períodos
+    const DECIMATE = 6;            // 48000 / 8000
+
     const args = [
-      "-D", this.cfg.captureDevice,
+      "-D", hwDevice,
       "-f", "S16_LE",
-      "-r", "8000",
-      "-c", "1",
+      "-r", String(CAPTURE_RATE),
+      "-c", String(CAPTURE_CHANNELS),
       "-q",
-      "--period-size=160",
-      "--buffer-size=8000",
+      `--period-size=${PERIOD_FRAMES}`,
+      `--buffer-size=${BUFFER_FRAMES}`,
     ];
 
     log(`arecord ${args.join(" ")}`);
@@ -269,40 +281,60 @@ export class AlsaAudio extends EventEmitter {
       }
     });
 
-    this.recorder.stdout.on("data", (chunk: Buffer) => {
+    // Buffer acumulador para decimación entre chunks de pipe (chunk puede partir un frame estéreo)
+    let accumBuf = Buffer.alloc(0);
+
+    this.recorder.stdout.on("data", (rawChunk: Buffer) => {
+      // Acumular datos hasta tener frames completos alineados a DECIMATE×channels
+      accumBuf = Buffer.concat([accumBuf, rawChunk]);
+
+      // Cada frame estéreo = 2 canales × 2 bytes = 4 bytes
+      // Cada grupo de DECIMATE frames = 4 × DECIMATE = 24 bytes → produce 1 muestra mono 8kHz
+      const BYTES_PER_STEREO_FRAME = CAPTURE_CHANNELS * 2;
+      const BYTES_PER_DECIMATE_GROUP = BYTES_PER_STEREO_FRAME * DECIMATE; // 24 bytes
+
+      const numOutputSamples = Math.floor(accumBuf.length / BYTES_PER_DECIMATE_GROUP);
+      if (numOutputSamples === 0) return;
+
+      const consumedBytes = numOutputSamples * BYTES_PER_DECIMATE_GROUP;
+
       this.arecordChunkCount++;
       const now = Date.now();
       const gain = this.cfg.inputGain;
-      const sampleCount = Math.floor(chunk.length / 2);
-      // Primeros 8 chunks: diagnostico para verificar que period=160 funciona.
-      // Con period=160 cada chunk debe ser exactamente 160 muestras (320 bytes).
-      // Si ALSA redondea a 256, los chunks serán 256 muestras (512 bytes).
+
+      // Diagnóstico primeros 8 chunks: confirmar que period=480 da ~960 bytes (480 frames × 4 bytes)
       if (this.arecordChunkCount <= 8)
-        log(`[ffmpeg-cap] chunk#${this.arecordChunkCount}: ${sampleCount} muestras (${chunk.length} bytes)`);
-      // Log de gaps ALSA para diagnostico. El CM108 USB experimenta xruns cada
-      // ~950ms que bloquean snd_pcm_readi() durante ~400-500ms. No intentamos
-      // reiniciar arecord ante xruns porque el nuevo proceso tarda ~600ms en
-      // inicializar el dispositivo (peor que esperar la recuperacion natural).
-      // Solucion definitiva: deshabilitar USB autosuspend del CM108 (ver README).
+        log(`[arecord] chunk#${this.arecordChunkCount}: ${rawChunk.length} bytes brutos → ${numOutputSamples} muestras 8kHz`);
+
       const gapMs = this.lastArecordChunkMs > 0 ? now - this.lastArecordChunkMs : 0;
-      if (gapMs > 100)
-        log(`[arecord] GAP ${gapMs}ms (chunk#${this.arecordChunkCount}, ${sampleCount} muestras)`);
+      if (gapMs > 50)
+        log(`[arecord] GAP ${gapMs}ms (chunk#${this.arecordChunkCount}, ${numOutputSamples} muestras)`);
       this.lastArecordChunkMs = now;
-      const pcm = new Int16Array(sampleCount);
+
+      // Decimación + mezcla estéreo → mono + ganancia + soft-clip
+      const pcm = new Int16Array(numOutputSamples);
       let sumSq = 0;
-      for (let i = 0; i < sampleCount; i++) {
-        const raw = chunk.readInt16LE(i * 2);
-        const drive = 1.5;
-        const norm = (raw * gain) / 32768;
+      const drive = 1.5;
+      for (let i = 0; i < numOutputSamples; i++) {
+        const base = i * BYTES_PER_DECIMATE_GROUP;
+        // Tomar el primer frame estéreo del grupo (decimación por punto)
+        const left  = accumBuf.readInt16LE(base);
+        const right = accumBuf.readInt16LE(base + 2);
+        const mono = (left + right) >> 1;  // mezcla L+R sin overflow
+        const norm = (mono * gain) / 32768;
         const limited = Math.tanh(norm * drive) / Math.tanh(drive);
         const s = Math.round(limited * 32767);
         pcm[i] = s;
         sumSq += s * s;
         if (Math.abs(s) > 30000) this.levelClipCount++;
       }
-      const rms = Math.sqrt(sumSq / sampleCount);
+
+      // Conservar bytes no consumidos para el siguiente chunk
+      accumBuf = accumBuf.subarray(consumedBytes);
+
+      const rms = Math.sqrt(sumSq / numOutputSamples);
       if (rms > this.levelPeakRms) this.levelPeakRms = rms;
-      this.levelSamples += sampleCount;
+      this.levelSamples += numOutputSamples;
       this.feedPcm(pcm);
     });
   }
