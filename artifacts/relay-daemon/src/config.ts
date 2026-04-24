@@ -12,8 +12,10 @@ export interface AudioConfig {
    *  silencio absoluto sin cortar voz suave). */
   txGateRms: number;
   /** Chunks consecutivos sobre umbral antes de emitir ptt_start (anti-click).
-   *  1 chunk = 60ms (period=480 a 8kHz). Defecto 5 = 300ms de voz sostenida.
-   *  Filtra clics de squelch (<120ms) sin retrasar la activacion de voz real. */
+   *  1 chunk = 60ms (period=480 a 8kHz). Defecto 1 = sin debounce.
+   *  Aumentar a 2-3 solo si hay clics de squelch muy breves que no filtra el umbral.
+   *  IMPORTANTE: si la voz fluctua alrededor del umbral, aumentar debounce
+   *  impide la activacion (necesitas N chunks consecutivos, no N de M). */
   voxDebounceChunks: number;
   inputGain: number;
   outputGain: number;
@@ -61,7 +63,7 @@ const DEFAULTS: RelayConfig = {
     voxThresholdRms: 600,
     voxHangMs: 2500,
     txGateRms: 50,
-    voxDebounceChunks: 5,
+    voxDebounceChunks: 1,
     inputGain: 1.0,
     outputGain: 3.0,
   },

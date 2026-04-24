@@ -28,7 +28,7 @@ export class Vox extends EventEmitter {
   constructor(
     private readonly thresholdRms: number,
     private readonly hangMs: number,
-    private readonly debounceChunks: number = 5, // 5 × 60ms = 300ms
+    private readonly debounceChunks: number = 1, // 1 = sin debounce efectivo (ver nota)
   ) {
     super();
   }
