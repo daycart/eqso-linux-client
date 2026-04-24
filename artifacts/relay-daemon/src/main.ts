@@ -58,21 +58,21 @@ const POST_TX_SUPPRESS_MS = 1500;
 // El suppress se calcula en dos etapas:
 //   1. POST_RX_SUPPRESS_MS (800ms) desde que el rxInhibitTimer dispara.
 //      Cubre el tiempo de drain de aplay y reinicio de arecord (~750ms).
-//   2. POST_APLAY_VOX_SUPPRESS_MS (1500ms) desde que aplay REALMENTE cierra
+//   2. POST_APLAY_VOX_SUPPRESS_MS (3000ms) desde que aplay REALMENTE cierra
 //      (evento "playback_ended"). Cubre la cola de squelch de la radio CB
-//      (~1-2s de ruido cuando vuelve a RX) que provoca falsos VOX.
-// Sin la segunda etapa: el suppress expiraba ~30ms despues de que arecord
-// reiniciaba, y la cola de squelch (1.5s) activaba un VOX falso → eco.
+//      (~2-3s de ruido cuando vuelve a RX) que provoca falsos VOX.
+// Medido en logs: RMS=13883 durante 2-3s tras fin de aplay con 1500ms no era
+// suficiente (suppress expiraba antes de que el squelch de la CB cerrara).
 let postRxVoxSuppressUntil = 0;
-const POST_RX_SUPPRESS_MS          = 800;   // desde rxInhibitTimer (antes era 400ms)
-const POST_APLAY_VOX_SUPPRESS_MS   = 1500;  // desde cierre real de aplay
+const POST_RX_SUPPRESS_MS          = 800;   // desde rxInhibitTimer
+const POST_APLAY_VOX_SUPPRESS_MS   = 3000;  // desde cierre real de aplay (antes 1500ms)
 
 // ─── Supresion VOX post-TX propio (anti-eco de squelch y canal CB) ────────────
 // Cuando el relay termina su propia TX (VOX ptt_end), la radio vuelve a RX y
-// puede capturar el clic de squelch (~100-300ms) o eco RF residual (~300-500ms).
-// 1500ms cubre ambos casos más el clic de squelch si el pitido llega a jugarse
-// (POST_TX_SUPPRESS_MS es la primera línea de defensa; esta es la segunda).
-const POST_TX_VOX_SUPPRESS_MS = 1500;
+// puede capturar la cola de squelch CB (~2-3s de ruido/carrier residual).
+// Medido en logs: RMS=12439 a los 2s de soltar PTT → trigger falso con 1500ms.
+// 3000ms cubre la cola de squelch con margen.
+const POST_TX_VOX_SUPPRESS_MS = 3000;  // antes 1500ms
 
 function setRxActive(): void {
   const wasActive = rxActive;
