@@ -1,0 +1,82 @@
+# Arrancar solo el correcto (el que tiene la config @CB)
+sudo systemctl start eqso-relay@CB.service
+sudo journalctl -u eqso-relay@CB.service -f
+     Active: inactive (dead) since Fri 2026-04-24 08:49:10 UTC; 2s ago
+     Active: inactive (dead)
+abr 24 08:49:09 ubuntus systemd[1]: eqso-relay@CB.service: Unit process 60907 (python3) remains running after unit stopped.
+abr 24 08:49:09 ubuntus systemd[1]: eqso-relay@CB.service: Unit process 60908 (ffmpeg) remains running after unit stopped.
+abr 24 08:49:09 ubuntus systemd[1]: eqso-relay@CB.service: Unit process 60909 (ffmpeg) remains running after unit stopped.
+abr 24 08:49:08 ubuntus eqso-relay-CB[60893]: [main] 2026-04-24T08:49:08.973Z Se\UffffffffSIGTERM recibida \Uffffffff apagando (graceful)\Uffffffff
+abr 24 08:49:08 ubuntus systemd[1]: Stopping eqso-relay@CB.service - eQSO Radioenlace \Uffffffff sala CB...
+abr 24 08:49:08 ubuntus eqso-relay-CB[60893]: [main] 2026-04-24T08:49:08.992Z Apagado completado.
+abr 24 08:49:09 ubuntus systemd[1]: eqso-relay@CB.service: Deactivated successfully.
+abr 24 08:49:09 ubuntus systemd[1]: eqso-relay@CB.service: Unit process 60907 (python3) remains running after unit stopped.
+abr 24 08:49:09 ubuntus systemd[1]: eqso-relay@CB.service: Unit process 60908 (ffmpeg) remains running after unit stopped.
+abr 24 08:49:09 ubuntus systemd[1]: eqso-relay@CB.service: Unit process 60909 (ffmpeg) remains running after unit stopped.
+abr 24 08:49:09 ubuntus systemd[1]: Stopped eqso-relay@CB.service - eQSO Radioenlace \Uffffffff sala CB.
+abr 24 08:49:09 ubuntus systemd[1]: eqso-relay@CB.service: Consumed 7.141s CPU time, 37.3M memory peak, 0B memory swap peak.
+abr 24 08:49:13 ubuntus systemd[1]: Started eqso-relay@CB.service - eQSO Radioenlace \Uffffffff sala CB.
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [config] Cargado: /etc/eqso-relay/CB.json
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [config] Configuracion activa: {
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:   "callsign": "0R-IN70WN",
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:   "room": "CB",
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:   "password": "",
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:   "message": "Radio Enlace",
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:   "server": "127.0.0.1",
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:   "port": 2171,
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:   "reconnectMinMs": 2000,
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:   "reconnectMaxMs": 60000,
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:   "audio": {
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:     "captureDevice": "plughw:1,0",
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:     "playbackDevice": "plughw:1,0",
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:     "vox": true,
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:     "voxThresholdRms": 3500,
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:     "voxHangMs": 2500,
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:     "txGateRms": 50,
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:     "voxDebounceChunks": 1,
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:     "inputGain": 0.4,
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:     "outputGain": 3
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:   },
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:   "control": {
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:     "enabled": true,
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:     "port": 8009,
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:     "host": "127.0.0.1"
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:   },
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:   "ptt": {
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:     "device": "/dev/ttyACM0",
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:     "method": "rts",
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:     "inverted": false
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]:   }
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: }
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [main] 2026-04-24T08:49:14.271Z ============================================================
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [main] 2026-04-24T08:49:14.272Z eQSO Relay Daemon arrancado
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [main] 2026-04-24T08:49:14.272Z   Callsign : 0R-IN70WN
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [main] 2026-04-24T08:49:14.272Z   Sala     : CB
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [main] 2026-04-24T08:49:14.273Z   Servidor : 127.0.0.1:2171
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [main] 2026-04-24T08:49:14.273Z   VOX      : ON (umbral=3500 hang=2500ms debounce=1chunks)
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [main] 2026-04-24T08:49:14.273Z   Captura  : plughw:1,0
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [main] 2026-04-24T08:49:14.274Z   Playback : plughw:1,0
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [main] 2026-04-24T08:49:14.274Z   PTT Ser. : /dev/ttyACM0 (rts)
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [main] 2026-04-24T08:49:14.275Z ============================================================
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [ptt] 2026-04-24T08:49:14.277Z Iniciando PTT serial: /dev/ttyACM0 (rts)
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [audio] 2026-04-24T08:49:14.329Z arecord -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --period-size=480 --buffer-size=1920
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [main] 2026-04-24T08:49:14.347Z Conectando a 127.0.0.1:2171 como "0R-IN70WN" en sala "CB"\Uffffffff
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [control] 2026-04-24T08:49:14.413Z Control HTTP escuchando en http://127.0.0.1:8009
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [audio] 2026-04-24T08:49:14.448Z [arecord] chunk#1: 22 muestras (44 bytes) \Uffffffff size inesperado
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [eqso] 2026-04-24T08:49:14.468Z TCP conectado a 127.0.0.1:2171
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [audio] 2026-04-24T08:49:14.476Z [arecord] chunk#2: 480 muestras (960 bytes) \Uffffffff period=480 OK
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [eqso] 2026-04-24T08:49:14.523Z Handshake recibido \Uffffffff conexion establecida
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [main] 2026-04-24T08:49:14.547Z Conectado \Uffffffff enviando JOIN\Uffffffff
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [eqso] 2026-04-24T08:49:14.577Z JOIN enviado: callsign="0R-IN70WN" sala="CB"
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [eqso] 2026-04-24T08:49:14.598Z Salas disponibles: GENERAL, CB, ASORAPA, PRUEBAS
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [main] 2026-04-24T08:49:14.598Z Salas: GENERAL, CB, ASORAPA, PRUEBAS
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [audio] 2026-04-24T08:49:14.612Z [arecord] chunk#3: 960 muestras (1920 bytes) \Uffffffff size inesperado
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [main] 2026-04-24T08:49:14.713Z Sala: 0R-ASORAPA se ha unido
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [main] 2026-04-24T08:49:14.716Z Sala: 30RCI184 se ha unido
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [main] 2026-04-24T08:49:14.716Z Sala: 0R-IN70WN se ha unido
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [audio] 2026-04-24T08:49:14.717Z [arecord] chunk#4: 960 muestras (1920 bytes) \Uffffffff size inesperado
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [ptt] 2026-04-24T08:49:14.751Z PTT serial listo (/dev/ttyACM0, rts)
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [audio] 2026-04-24T08:49:14.767Z [arecord] chunk#5: 480 muestras (960 bytes) \Uffffffff period=480 OK
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [audio] 2026-04-24T08:49:14.839Z [arecord] chunk#6: 480 muestras (960 bytes) \Uffffffff period=480 OK
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [audio] 2026-04-24T08:49:14.888Z [arecord] chunk#7: 480 muestras (960 bytes) \Uffffffff period=480 OK
+abr 24 08:49:14 ubuntus eqso-relay-CB[61221]: [audio] 2026-04-24T08:49:14.952Z [arecord] chunk#8: 480 muestras (960 bytes) \Uffffffff period=480 OK
