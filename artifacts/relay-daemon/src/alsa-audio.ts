@@ -209,60 +209,48 @@ export class AlsaAudio extends EventEmitter {
   // ── arecord ───────────────────────────────────────────────────────────────
 
   private startRecorder(): void {
-    // Captura via ffmpeg en lugar de arecord.
+    // Captura via arecord con period-size=160 y buffer-size=8000.
     //
-    // PROBLEMA CON arecord: usa snd_pcm_readi() BLOQUEANTE. Cuando el CM108 USB
-    // experimenta un xrun (cada ~1s por USB autosuspend del kernel), arecord queda
-    // bloqueado en snd_pcm_readi() durante 400-970ms hasta que el hardware recupera.
+    // HISTORIA: Se intentó reemplazar arecord por ffmpeg esperando que su modo
+    // poll() no-bloqueante eliminase los gaps de 400-970ms. El resultado fue que
+    // ffmpeg sin -ar negocia el período ALSA del CM108 a su valor nativo (~750ms),
+    // entregando audio solo el 25% del tiempo. Con period-size=160, arecord fuerza
+    // un período de 20ms que el CM108 acepta via plughw, dando audio continuo.
     //
-    // SOLUCION CON ffmpeg: usa poll() + snd_pcm_avail_update() NO BLOQUEANTE.
-    // Tras un xrun ffmpeg llama snd_pcm_prepare() y retoma en el siguiente poll()
-    // en <20ms sin bloquear el proceso. Esto reduce los gaps de 400-970ms a <50ms.
+    // CAUSA RAÍZ de los gaps anteriores con arecord:
+    //   - buffer-size=480 (60ms): el event loop de Node tardaba >60ms entre lecturas
+    //     → ALSA xrun → snd_pcm_readi() bloqueante por 400-970ms.
+    //   - Con buffer-size=8000 (1s de margen) los xruns no ocurren aunque Node
+    //     tarde hasta 1s entre lecturas del pipe.
+    //   - USB autosuspend (delay=-1000ms ya deshabilitado) no era la causa.
     //
-    // Formato de salida: S16LE 8kHz mono (identico a arecord).
-    // Tamaño de chunk: ~1024-4096 muestras (128-512ms) segun el periodo nativo
-    // del CM108. feedPcm() maneja tamaños arbitrarios acumulando en pcmAccum.
-    //
-    // FIX PERMANENTE: deshabilitar USB autosuspend del CM108 para eliminar los
-    // xruns completamente:
-    //   sudo tee /etc/udev/rules.d/90-cm108.rules << 'EOF'
-    //   ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="0d8c", ATTR{power/autosuspend}="-1"
-    //   EOF
-    //   sudo udevadm control --reload-rules && sudo udevadm trigger
+    // Con period-size=160 (20ms) y buffer-size=8000 (1s), arecord entrega 160
+    // muestras cada 20ms de forma continua sin gaps.
     const args = [
-      "-hide_banner", "-loglevel", "error",
-      // INPUT: abrir el dispositivo ALSA sin forzar parámetros de hw
-      // (el CM108 negocia su tasa nativa, típicamente 48000Hz estéreo)
-      "-f", "alsa",
-      "-i", this.cfg.captureDevice,
-      // FILTRO: resamplear a 8000Hz mono y forzar PTS monotónicos.
-      // El muxer s16le usa av_interleaved_write_frame que descarta frames con
-      // DTS no-monótonos. El CM108 USB entrega timestamps ligeramente irregulares
-      // desde la entrada ALSA, que el resampler propaga causando que el muxer
-      // descarte ~77% de los frames (solo llegaban 130 chunks/s en vez de 500).
-      // asetpts=N/SR/TB asigna PTS = frame_number/sample_rate/time_base, siempre
-      // creciente, eliminando los descartes del muxer.
-      "-af", "aresample=8000,aformat=sample_fmts=s16:channel_layouts=mono,asetpts=N/SR/TB",
-      // OUTPUT: S16LE 8kHz mono crudo al pipe (sin cabecera WAV)
-      "-f", "s16le",
-      "-",
+      "-D", this.cfg.captureDevice,
+      "-f", "S16_LE",
+      "-r", "8000",
+      "-c", "1",
+      "-q",
+      "--period-size=160",
+      "--buffer-size=8000",
     ];
 
-    log(`ffmpeg ${args.join(" ")}`);
-    this.recorder = spawn("ffmpeg", args, { stdio: ["ignore", "pipe", "pipe"] });
+    log(`arecord ${args.join(" ")}`);
+    this.recorder = spawn("arecord", args, { stdio: ["ignore", "pipe", "pipe"] });
 
     this.recorder.stderr.on("data", (d: Buffer) => {
       const msg = d.toString().trim();
-      if (msg) log(`[ffmpeg-cap] ${msg}`);
+      if (msg) log(`[arecord] ${msg}`);
     });
 
     this.recorder.on("error", (err) => {
-      log(`[ffmpeg-cap] Error: ${err.message}`);
+      log(`[arecord] Error: ${err.message}`);
       this.emit("error", err);
     });
 
     this.recorder.on("close", (code) => {
-      log(`[ffmpeg-cap] Terminado (code ${code})`);
+      log(`[arecord] Terminado (code ${code})`);
       this.recorder = null;
 
       if (this.playerStarting) {
@@ -298,7 +286,7 @@ export class AlsaAudio extends EventEmitter {
       // Solucion definitiva: deshabilitar USB autosuspend del CM108 (ver README).
       const gapMs = this.lastArecordChunkMs > 0 ? now - this.lastArecordChunkMs : 0;
       if (gapMs > 100)
-        log(`[ffmpeg-cap] GAP ${gapMs}ms (chunk#${this.arecordChunkCount}, ${sampleCount} muestras)`);
+        log(`[arecord] GAP ${gapMs}ms (chunk#${this.arecordChunkCount}, ${sampleCount} muestras)`);
       this.lastArecordChunkMs = now;
       const pcm = new Int16Array(sampleCount);
       let sumSq = 0;
