@@ -12,9 +12,9 @@ import { EventEmitter } from "events";
 
 export const GSM_FRAME_BYTES   = 33;
 export const GSM_FRAME_SAMPLES = 160;
-export const FRAMES_PER_PACKET = 6;
-export const GSM_PACKET_BYTES  = GSM_FRAME_BYTES * FRAMES_PER_PACKET;   // 198
-export const PCM_PACKET_BYTES  = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET * 2; // 1920
+export const FRAMES_PER_PACKET = 1;
+export const GSM_PACKET_BYTES  = GSM_FRAME_BYTES * FRAMES_PER_PACKET;   // 33
+export const PCM_PACKET_BYTES  = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET * 2; // 320
 
 // ─── Decoder: GSM bytes → Int16 PCM ─────────────────────────────────────────
 
