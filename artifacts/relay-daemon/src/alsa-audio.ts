@@ -63,11 +63,6 @@ export class AlsaAudio extends EventEmitter {
   // Diagnostico arecord: log tamaño de los primeros chunks (verifica period=160)
   private arecordChunkCount = 0;
   private lastArecordChunkMs = 0;
-  // Reinicio rapido ante xrun ALSA: cuando arecord bloquea >200ms en snd_pcm_readi()
-  // (el CM108 USB resetea su clock cada ~950ms tardando ~400ms en recuperar),
-  // matamos el proceso y lo relanzamos. El nuevo proceso arranca limpio en <100ms,
-  // reduciendo el silencio de 400-500ms a ~200ms.
-  private gapRestart = false;
 
   constructor(private cfg: AudioConfig) {
     super();
@@ -256,12 +251,8 @@ export class AlsaAudio extends EventEmitter {
     });
 
     this.recorder.on("close", (code) => {
-      const wasGapRestart = this.gapRestart;
-      this.gapRestart   = false;
-      this.recorder     = null;
-
-      if (!wasGapRestart)
-        log(`[arecord] Terminado (code ${code})`);
+      log(`[arecord] Terminado (code ${code})`);
+      this.recorder = null;
 
       if (this.playerStarting) {
         log("[audio] arecord cerrado — abriendo aplay");
@@ -271,16 +262,11 @@ export class AlsaAudio extends EventEmitter {
       }
 
       if (!this.recorderSuspended && !this.stopping) {
-        // Reinicio rapido (50ms) si fue provocado por un xrun ALSA detectado;
-        // reinicio normal (2000ms) si el proceso cayó por error inesperado.
-        const delay = wasGapRestart ? 50 : 2000;
-        if (wasGapRestart)
-          log(`[arecord] Reinicio rapido tras xrun (${delay}ms)`);
         setTimeout(() => {
           if (!this.recorderSuspended && !this.stopping && this.recorder === null) {
             this.startRecorder();
           }
-        }, delay);
+        }, 2000);
       }
     });
 
@@ -294,19 +280,13 @@ export class AlsaAudio extends EventEmitter {
       // Si ALSA redondea a 256, los chunks serán 256 muestras (512 bytes).
       if (this.arecordChunkCount <= 8)
         log(`[arecord] chunk#${this.arecordChunkCount}: ${sampleCount} muestras (${chunk.length} bytes) — ${sampleCount === 160 ? "period=160 OK" : sampleCount === 256 ? "ALSA redondeó a 256 (aceptable)" : sampleCount === 512 ? "ALSA redondeó a 512 (bursts de 3)" : `size=${sampleCount}`}`);
-      // Deteccion de xrun ALSA: si arecord no ha entregado datos en >200ms,
-      // el CM108 ha experimentado un xrun. Reiniciamos arecord inmediatamente
-      // (el proceso nuevo arranca sin estado de xrun) en lugar de esperar los
-      // ~400ms de recuperacion hardware de snd_pcm_recover().
+      // Log de gaps ALSA para diagnostico. El CM108 USB experimenta xruns cada
+      // ~950ms que bloquean snd_pcm_readi() durante ~400-500ms. No intentamos
+      // reiniciar arecord ante xruns porque el nuevo proceso tarda ~600ms en
+      // inicializar el dispositivo (peor que esperar la recuperacion natural).
+      // Solucion definitiva: deshabilitar USB autosuspend del CM108 (ver README).
       const gapMs = this.lastArecordChunkMs > 0 ? now - this.lastArecordChunkMs : 0;
-      if (gapMs > 200 && this.lastArecordChunkMs > 0 && !this.recorderSuspended && !this.stopping) {
-        log(`[arecord] GAP ${gapMs}ms (xrun ALSA) → reiniciando arecord`);
-        this.gapRestart = true;
-        this.lastArecordChunkMs = 0; // evita falso gap al arrancar el nuevo proceso
-        this.stopRecorder();
-        return; // descartar este chunk; el nuevo proceso capturara audio fresco
-      }
-      if (gapMs > 50)
+      if (gapMs > 100)
         log(`[arecord] GAP ${gapMs}ms (chunk#${this.arecordChunkCount}, ${sampleCount} muestras)`);
       this.lastArecordChunkMs = now;
       const pcm = new Int16Array(sampleCount);
