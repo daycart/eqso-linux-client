@@ -230,14 +230,14 @@ export class AlsaAudio extends EventEmitter {
     //   EOF
     //   sudo udevadm control --reload-rules && sudo udevadm trigger
     const args = [
-      "-hide_banner", "-loglevel", "quiet",
+      "-hide_banner", "-loglevel", "warning",
       "-f", "alsa",
       "-ar", "8000",
       "-ac", "1",
       "-i", this.cfg.captureDevice,
       "-f", "s16le",
       "-ar", "8000",
-      "pipe:1",
+      "-",
     ];
 
     log(`ffmpeg ${args.join(" ")}`);
