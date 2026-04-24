@@ -27,7 +27,7 @@ import {
   GSM_FRAME_SAMPLES, FRAMES_PER_PACKET, GSM_PACKET_BYTES,
 } from "./gsm-codec.js";
 
-const PCM_CHUNK_SAMPLES = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET; // 960 muestras = 1920 bytes
+const PCM_CHUNK_SAMPLES = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET; // 160 muestras = 320 bytes (1 frame GSM)
 
 // Jitter buffer para RX: acumula muestras antes de abrir aplay.
 // 1920 = 2 paquetes = 240ms. Permite absorber variaciones de timing al arrancar.
@@ -208,27 +208,27 @@ export class AlsaAudio extends EventEmitter {
   // ── arecord ───────────────────────────────────────────────────────────────
 
   private startRecorder(): void {
-    // --period-size=480: el acumulador en feedPcm necesita 960 muestras para
-    // emitir un paquete GSM (6 frames × 160). Con 480 muestras/period se necesitan
-    // exactamente 2 periods = 2 × 60ms = 120ms de reloj real por paquete.
-    // 960 muestras / 8000 Hz = 120ms de audio → reloj real == duración audio.
+    // --period-size=160: coincide con PCM_CHUNK_SAMPLES = GSM_FRAME_SAMPLES × 1 = 160.
+    // Con FRAMES_PER_PACKET=1, cada paquete GSM = 1 frame = 160 muestras = 20ms.
+    // period=160 garantiza que cada evento 'data' de arecord entrega exactamente
+    // 160 muestras → 1 llamada encode() → 1 paquete GSM de 33 bytes → entrega
+    // continua a 50 pkt/s sin rafagas ni acumulacion de frames en el buffer.
     //
-    // Sin esto, arecord entrega chunks de ~512 muestras cada 64ms. Para
-    // acumular 960 muestras hacen falta 2 chunks = 128ms de reloj real,
-    // pero el paquete contiene solo 120ms de audio. El browser programa
-    // 120ms de audio cada 128ms → se acumula un déficit de 8ms por paquete.
-    // Tras ~15 paquetes (~1.9s) el déficit llega a 120ms = 1 paquete completo,
-    // el scheduler hace reset y se produce un silencio audible equidistante.
+    // --buffer-size=480: 3 periodos (60ms de margen). Suficiente para absorber
+    // jitter de scheduling del kernel sin provocar overruns ALSA.
     //
-    // Con period=480: 2×480=960 muestras en exactamente 120ms → sin drift.
+    // Nota: si el hardware CM108 no admite period=160, ALSA puede redondear
+    // a 256. En ese caso feedPcm entregará 256 muestras → 1 frame (160) + 96
+    // de remanente. El remanente se acumula en pcmAccum y se emite en el
+    // siguiente chunk: comportamiento correcto, sin pérdida de audio.
     const args = [
       "-D", this.cfg.captureDevice,
       "-f", "S16_LE",
       "-r", "8000",
       "-c", "1",
       "-q",
-      "--period-size=480",
-      "--buffer-size=1920",
+      "--period-size=160",
+      "--buffer-size=480",
     ];
 
     log(`arecord ${args.join(" ")}`);
@@ -268,11 +268,11 @@ export class AlsaAudio extends EventEmitter {
       this.arecordChunkCount++;
       const gain = this.cfg.inputGain;
       const sampleCount = Math.floor(chunk.length / 2);
-      // Primeros 8 chunks: diagnostico para verificar que period=480 funciona.
-      // Con period=480 cada chunk debe ser exactamente 480 muestras (960 bytes).
-      // Si ALSA redondea a 512, los chunks seran 512 muestras (1024 bytes).
+      // Primeros 8 chunks: diagnostico para verificar que period=160 funciona.
+      // Con period=160 cada chunk debe ser exactamente 160 muestras (320 bytes).
+      // Si ALSA redondea a 256, los chunks serán 256 muestras (512 bytes).
       if (this.arecordChunkCount <= 8)
-        log(`[arecord] chunk#${this.arecordChunkCount}: ${sampleCount} muestras (${chunk.length} bytes) — ${sampleCount === 480 ? "period=480 OK" : sampleCount === 512 ? "ALSA redondeó a 512 (drift!)" : `size inesperado`}`);
+        log(`[arecord] chunk#${this.arecordChunkCount}: ${sampleCount} muestras (${chunk.length} bytes) — ${sampleCount === 160 ? "period=160 OK" : sampleCount === 256 ? "ALSA redondeó a 256 (aceptable)" : sampleCount === 512 ? "ALSA redondeó a 512 (bursts de 3)" : `size=${sampleCount}`}`);
       const pcm = new Int16Array(sampleCount);
       let sumSq = 0;
       for (let i = 0; i < sampleCount; i++) {
