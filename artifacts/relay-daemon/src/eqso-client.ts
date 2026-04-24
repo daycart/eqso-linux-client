@@ -8,14 +8,14 @@
  *  3. Empezamos silence frames [0x02] cada 150ms (heartbeat de idle)
  *  4. sendJoin() → empezamos a recibir USER_UPDATE y AUDIO
  *  5. KEEPALIVE [0x0c] lo contestamos con [0x0c]
- *  6. TX: startTx() pausa silence, sendAudio() envía [0x01][198 GSM], endTx() → [0x0d]
+ *  6. TX: startTx() pausa silence, sendAudio() envía [0x01][33 GSM], endTx() → [0x0d]
  */
 
 import net from "net";
 import { EventEmitter } from "events";
 
 const HANDSHAKE_CLIENT = Buffer.from([0x0a, 0x82, 0x00, 0x00, 0x00]);
-const AUDIO_PAYLOAD_SIZE = 198;
+const AUDIO_PAYLOAD_SIZE = 33;
 const SILENCE_INTERVAL_MS = 150;
 const SOCKET_TIMEOUT_MS = 90_000;
 
