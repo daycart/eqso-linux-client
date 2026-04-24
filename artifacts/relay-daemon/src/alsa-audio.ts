@@ -209,53 +209,56 @@ export class AlsaAudio extends EventEmitter {
   // ── arecord ───────────────────────────────────────────────────────────────
 
   private startRecorder(): void {
-    // --period-size=160: coincide con PCM_CHUNK_SAMPLES = GSM_FRAME_SAMPLES × 1 = 160.
-    // Con FRAMES_PER_PACKET=1, cada paquete GSM = 1 frame = 160 muestras = 20ms.
-    // period=160 garantiza que cada evento 'data' de arecord entrega exactamente
-    // 160 muestras → 1 llamada encode() → 1 paquete GSM de 33 bytes → entrega
-    // continua a 50 pkt/s sin rafagas ni acumulacion de frames en el buffer.
+    // Captura via ffmpeg en lugar de arecord.
     //
-    // --buffer-size=8000: 50 periodos (1 segundo de margen). Con buffer-size=480
-    // (60ms) el event loop de Node.js causaba xruns ALSA al tardar >60ms entre
-    // lecturas del pipe de arecord — arecord llamaba snd_pcm_recover() y dejaba
-    // de escribir al pipe durante ~700ms, causando los gaps de audio observados.
-    // Con buffer-size=8000 el hardware DMA no satura aunque Node.js tarde 1s
-    // en leer, eliminando los xruns sin afectar el tamaño de los chunks (siguen
-    // siendo 160 muestras por period).
+    // PROBLEMA CON arecord: usa snd_pcm_readi() BLOQUEANTE. Cuando el CM108 USB
+    // experimenta un xrun (cada ~1s por USB autosuspend del kernel), arecord queda
+    // bloqueado en snd_pcm_readi() durante 400-970ms hasta que el hardware recupera.
     //
-    // Nota: si el hardware CM108 no admite period=160, ALSA puede redondear
-    // a 256. En ese caso feedPcm entregará 256 muestras → 1 frame (160) + 96
-    // de remanente. El remanente se acumula en pcmAccum y se emite en el
-    // siguiente chunk: comportamiento correcto, sin pérdida de audio.
+    // SOLUCION CON ffmpeg: usa poll() + snd_pcm_avail_update() NO BLOQUEANTE.
+    // Tras un xrun ffmpeg llama snd_pcm_prepare() y retoma en el siguiente poll()
+    // en <20ms sin bloquear el proceso. Esto reduce los gaps de 400-970ms a <50ms.
+    //
+    // Formato de salida: S16LE 8kHz mono (identico a arecord).
+    // Tamaño de chunk: ~1024-4096 muestras (128-512ms) segun el periodo nativo
+    // del CM108. feedPcm() maneja tamaños arbitrarios acumulando en pcmAccum.
+    //
+    // FIX PERMANENTE: deshabilitar USB autosuspend del CM108 para eliminar los
+    // xruns completamente:
+    //   sudo tee /etc/udev/rules.d/90-cm108.rules << 'EOF'
+    //   ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="0d8c", ATTR{power/autosuspend}="-1"
+    //   EOF
+    //   sudo udevadm control --reload-rules && sudo udevadm trigger
     const args = [
-      "-D", this.cfg.captureDevice,
-      "-f", "S16_LE",
-      "-r", "8000",
-      "-c", "1",
-      "-q",
-      "--period-size=160",
-      "--buffer-size=8000",
+      "-hide_banner", "-loglevel", "quiet",
+      "-f", "alsa",
+      "-ar", "8000",
+      "-ac", "1",
+      "-i", this.cfg.captureDevice,
+      "-f", "s16le",
+      "-ar", "8000",
+      "pipe:1",
     ];
 
-    log(`arecord ${args.join(" ")}`);
-    this.recorder = spawn("arecord", args, { stdio: ["ignore", "pipe", "pipe"] });
+    log(`ffmpeg ${args.join(" ")}`);
+    this.recorder = spawn("ffmpeg", args, { stdio: ["ignore", "pipe", "pipe"] });
 
     this.recorder.stderr.on("data", (d: Buffer) => {
       const msg = d.toString().trim();
-      if (msg) log(`[arecord] ${msg}`);
+      if (msg) log(`[ffmpeg-cap] ${msg}`);
     });
 
     this.recorder.on("error", (err) => {
-      log(`[arecord] Error: ${err.message}`);
+      log(`[ffmpeg-cap] Error: ${err.message}`);
       this.emit("error", err);
     });
 
     this.recorder.on("close", (code) => {
-      log(`[arecord] Terminado (code ${code})`);
+      log(`[ffmpeg-cap] Terminado (code ${code})`);
       this.recorder = null;
 
       if (this.playerStarting) {
-        log("[audio] arecord cerrado — abriendo aplay");
+        log("[audio] captura cerrada — abriendo aplay");
         this.playerStarting = false;
         this.openPlayer();
         return;
@@ -279,7 +282,7 @@ export class AlsaAudio extends EventEmitter {
       // Con period=160 cada chunk debe ser exactamente 160 muestras (320 bytes).
       // Si ALSA redondea a 256, los chunks serán 256 muestras (512 bytes).
       if (this.arecordChunkCount <= 8)
-        log(`[arecord] chunk#${this.arecordChunkCount}: ${sampleCount} muestras (${chunk.length} bytes) — ${sampleCount === 160 ? "period=160 OK" : sampleCount === 256 ? "ALSA redondeó a 256 (aceptable)" : sampleCount === 512 ? "ALSA redondeó a 512 (bursts de 3)" : `size=${sampleCount}`}`);
+        log(`[ffmpeg-cap] chunk#${this.arecordChunkCount}: ${sampleCount} muestras (${chunk.length} bytes)`);
       // Log de gaps ALSA para diagnostico. El CM108 USB experimenta xruns cada
       // ~950ms que bloquean snd_pcm_readi() durante ~400-500ms. No intentamos
       // reiniciar arecord ante xruns porque el nuevo proceso tarda ~600ms en
@@ -287,7 +290,7 @@ export class AlsaAudio extends EventEmitter {
       // Solucion definitiva: deshabilitar USB autosuspend del CM108 (ver README).
       const gapMs = this.lastArecordChunkMs > 0 ? now - this.lastArecordChunkMs : 0;
       if (gapMs > 100)
-        log(`[arecord] GAP ${gapMs}ms (chunk#${this.arecordChunkCount}, ${sampleCount} muestras)`);
+        log(`[ffmpeg-cap] GAP ${gapMs}ms (chunk#${this.arecordChunkCount}, ${sampleCount} muestras)`);
       this.lastArecordChunkMs = now;
       const pcm = new Int16Array(sampleCount);
       let sumSq = 0;
