@@ -60,8 +60,9 @@ export class AlsaAudio extends EventEmitter {
   // Inyeccion de silencio: previene underruns de aplay cuando hay gaps de red
   private silenceTimer:      ReturnType<typeof setInterval> | null = null;
   private lastAudioWriteMs = 0;
-  // Diagnostico arecord: log tamaño de los primeros chunks (verifica period=480)
+  // Diagnostico arecord: log tamaño de los primeros chunks (verifica period=160)
   private arecordChunkCount = 0;
+  private lastArecordChunkMs = 0;
 
   constructor(private cfg: AudioConfig) {
     super();
@@ -214,8 +215,13 @@ export class AlsaAudio extends EventEmitter {
     // 160 muestras → 1 llamada encode() → 1 paquete GSM de 33 bytes → entrega
     // continua a 50 pkt/s sin rafagas ni acumulacion de frames en el buffer.
     //
-    // --buffer-size=480: 3 periodos (60ms de margen). Suficiente para absorber
-    // jitter de scheduling del kernel sin provocar overruns ALSA.
+    // --buffer-size=8000: 50 periodos (1 segundo de margen). Con buffer-size=480
+    // (60ms) el event loop de Node.js causaba xruns ALSA al tardar >60ms entre
+    // lecturas del pipe de arecord — arecord llamaba snd_pcm_recover() y dejaba
+    // de escribir al pipe durante ~700ms, causando los gaps de audio observados.
+    // Con buffer-size=8000 el hardware DMA no satura aunque Node.js tarde 1s
+    // en leer, eliminando los xruns sin afectar el tamaño de los chunks (siguen
+    // siendo 160 muestras por period).
     //
     // Nota: si el hardware CM108 no admite period=160, ALSA puede redondear
     // a 256. En ese caso feedPcm entregará 256 muestras → 1 frame (160) + 96
@@ -228,7 +234,7 @@ export class AlsaAudio extends EventEmitter {
       "-c", "1",
       "-q",
       "--period-size=160",
-      "--buffer-size=480",
+      "--buffer-size=8000",
     ];
 
     log(`arecord ${args.join(" ")}`);
@@ -266,6 +272,7 @@ export class AlsaAudio extends EventEmitter {
 
     this.recorder.stdout.on("data", (chunk: Buffer) => {
       this.arecordChunkCount++;
+      const now = Date.now();
       const gain = this.cfg.inputGain;
       const sampleCount = Math.floor(chunk.length / 2);
       // Primeros 8 chunks: diagnostico para verificar que period=160 funciona.
@@ -273,6 +280,12 @@ export class AlsaAudio extends EventEmitter {
       // Si ALSA redondea a 256, los chunks serán 256 muestras (512 bytes).
       if (this.arecordChunkCount <= 8)
         log(`[arecord] chunk#${this.arecordChunkCount}: ${sampleCount} muestras (${chunk.length} bytes) — ${sampleCount === 160 ? "period=160 OK" : sampleCount === 256 ? "ALSA redondeó a 256 (aceptable)" : sampleCount === 512 ? "ALSA redondeó a 512 (bursts de 3)" : `size=${sampleCount}`}`);
+      // Gap detectado: si el event loop tardó >150ms en leer del pipe de arecord,
+      // indica posible xrun ALSA o event loop saturado. Con buffer-size=8000 no
+      // habría pérdida de datos pero sí rafagas acumuladas en el pipe.
+      if (this.lastArecordChunkMs > 0 && now - this.lastArecordChunkMs > 150)
+        log(`[arecord] GAP ${now - this.lastArecordChunkMs}ms (chunk#${this.arecordChunkCount}, ${sampleCount} muestras acumuladas)`);
+      this.lastArecordChunkMs = now;
       const pcm = new Int16Array(sampleCount);
       let sumSq = 0;
       for (let i = 0; i < sampleCount; i++) {
