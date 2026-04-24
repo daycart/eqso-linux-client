@@ -233,7 +233,7 @@ export class AlsaAudio extends EventEmitter {
     //   El aplay sigue usando plughw: (necesita conversión 8kHz→48kHz para salida)
     const hwDevice = this.cfg.captureDevice.replace(/^plughw:/, "hw:");
     const CAPTURE_RATE = 48000;
-    const CAPTURE_CHANNELS = 2;    // estéreo (CM108 nativo)
+    const CAPTURE_CHANNELS = 1;    // mono (CM108 via hw: no soporta estéreo)
     const PERIOD_FRAMES = 480;     // 10ms a 48kHz
     const BUFFER_FRAMES = 9600;    // 200ms = 20 períodos
     const DECIMATE = 6;            // 48000 / 8000
@@ -288,10 +288,10 @@ export class AlsaAudio extends EventEmitter {
       // Acumular datos hasta tener frames completos alineados a DECIMATE×channels
       accumBuf = Buffer.concat([accumBuf, rawChunk]);
 
-      // Cada frame estéreo = 2 canales × 2 bytes = 4 bytes
-      // Cada grupo de DECIMATE frames = 4 × DECIMATE = 24 bytes → produce 1 muestra mono 8kHz
+      // Cada frame mono = 1 canal × 2 bytes = 2 bytes
+      // Cada grupo de DECIMATE frames = 2 × DECIMATE = 12 bytes → produce 1 muestra mono 8kHz
       const BYTES_PER_STEREO_FRAME = CAPTURE_CHANNELS * 2;
-      const BYTES_PER_DECIMATE_GROUP = BYTES_PER_STEREO_FRAME * DECIMATE; // 24 bytes
+      const BYTES_PER_DECIMATE_GROUP = BYTES_PER_STEREO_FRAME * DECIMATE; // 12 bytes (mono)
 
       const numOutputSamples = Math.floor(accumBuf.length / BYTES_PER_DECIMATE_GROUP);
       if (numOutputSamples === 0) return;
@@ -302,7 +302,7 @@ export class AlsaAudio extends EventEmitter {
       const now = Date.now();
       const gain = this.cfg.inputGain;
 
-      // Diagnóstico primeros 8 chunks: confirmar que period=480 da ~960 bytes (480 frames × 4 bytes)
+      // Diagnóstico primeros 8 chunks: confirmar que period=480 da ~960 bytes (480 frames × 2 bytes mono)
       if (this.arecordChunkCount <= 8)
         log(`[arecord] chunk#${this.arecordChunkCount}: ${rawChunk.length} bytes brutos → ${numOutputSamples} muestras 8kHz`);
 
@@ -317,10 +317,8 @@ export class AlsaAudio extends EventEmitter {
       const drive = 1.5;
       for (let i = 0; i < numOutputSamples; i++) {
         const base = i * BYTES_PER_DECIMATE_GROUP;
-        // Tomar el primer frame estéreo del grupo (decimación por punto)
-        const left  = accumBuf.readInt16LE(base);
-        const right = accumBuf.readInt16LE(base + 2);
-        const mono = (left + right) >> 1;  // mezcla L+R sin overflow
+        // Tomar el primer frame mono del grupo (decimación por punto)
+        const mono = accumBuf.readInt16LE(base);
         const norm = (mono * gain) / 32768;
         const limited = Math.tanh(norm * drive) / Math.tanh(drive);
         const s = Math.round(limited * 32767);
