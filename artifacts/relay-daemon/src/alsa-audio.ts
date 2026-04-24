@@ -230,13 +230,16 @@ export class AlsaAudio extends EventEmitter {
     //   EOF
     //   sudo udevadm control --reload-rules && sudo udevadm trigger
     const args = [
-      "-hide_banner", "-loglevel", "warning",
+      "-hide_banner", "-loglevel", "error",
+      // INPUT: abrir el dispositivo ALSA sin forzar parámetros de hw
+      // (el CM108 negocia su tasa nativa, típicamente 48000Hz estéreo)
       "-f", "alsa",
-      "-ac", "1",
       "-i", this.cfg.captureDevice,
+      // FILTRO: resamplear a 8000Hz mono con async=1 para tolerar
+      // los xruns de USB sin generar DTS no-monótonos que descartan frames
+      "-af", "aresample=8000,aformat=sample_fmts=s16:channel_layouts=mono",
+      // OUTPUT: S16LE 8kHz mono crudo al pipe (sin cabecera WAV)
       "-f", "s16le",
-      "-ar", "8000",
-      "-ac", "1",
       "-",
     ];
 
