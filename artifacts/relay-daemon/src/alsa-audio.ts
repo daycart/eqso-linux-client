@@ -228,15 +228,24 @@ export class AlsaAudio extends EventEmitter {
     //     Adecuado para voz (300-3400Hz) ya que no hay contenido de audio relevante
     //     por encima de 4kHz desde el micrófono de la radio CB.
     //
-    // DISPOSITIVO: hw: en vez de plughw:
-    //   cfg.captureDevice = "plughw:Device,0" → "hw:Device,0" para captura
-    //   El aplay sigue usando plughw: (necesita conversión 8kHz→48kHz para salida)
+    // DISPOSITIVO: hw: a 8kHz mono (endpoint de telefonía USB nativo del CM108)
+    //
+    // El CM108 expone dos endpoints USB de audio en su descriptor:
+    //   1. Telefonía: 8000 Hz, 16-bit PCM, 1 canal → hw:X,0 a 8kHz funciona nativamente
+    //   2. Audio: 44100/48000 Hz, 16-bit PCM, 1-2 canales → hw:X,0 a 48kHz
+    //
+    // Con hw: a 8kHz (nativo, sin conversión) el período ALSA es ~20ms = 160 muestras,
+    // eliminando tanto el batching de plughw: (750ms) como el problema de re-init de
+    // URBs a 48kHz (2300ms).
+    //
+    // Si el CM108 de esta VM no expone el endpoint de telefonía (error "cannot set
+    // sample format / rate"), el servicio reintentará cada 2s y se verá en los logs.
     const hwDevice = this.cfg.captureDevice.replace(/^plughw:/, "hw:");
-    const CAPTURE_RATE = 48000;
-    const CAPTURE_CHANNELS = 1;    // mono (CM108 via hw: no soporta estéreo)
-    const PERIOD_FRAMES = 480;     // 10ms a 48kHz
-    const BUFFER_FRAMES = 9600;    // 200ms = 20 períodos
-    const DECIMATE = 6;            // 48000 / 8000
+    const CAPTURE_RATE = 8000;
+    const CAPTURE_CHANNELS = 1;
+    const PERIOD_FRAMES = 160;     // 20ms a 8kHz
+    const BUFFER_FRAMES = 8000;    // 1s de margen para el event loop
+    const DECIMATE = 1;            // sin decimación (ya a 8kHz)
 
     const args = [
       "-D", hwDevice,
