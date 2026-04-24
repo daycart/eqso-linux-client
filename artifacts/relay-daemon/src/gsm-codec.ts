@@ -84,20 +84,26 @@ export class GsmEncoder extends EventEmitter {
   private accum = Buffer.alloc(0);
   private ready = false;
 
+  private lastGsmMs = 0;
+
   start(): void {
     if (this.proc) return;
-    // -avioflags direct: desactiva el buffer de escritura AVIOContext (por defecto 32KB).
-    // Sin esto ffmpeg acumula ~12-17 frames GSM (~240-340ms) antes de hacer write()
-    // al pipe, produciendo rafagas de audio con gaps de 800ms en lugar de flujo continuo.
-    // -fflags +flush_packets: complementa avioflags direct forzando avio_flush() por frame.
+    // -avioflags direct en el INPUT (antes de -i pipe:0): desactiva el buffer de
+    // lectura AVIOContext del input (32KB por defecto). Sin esto ffmpeg intenta
+    // rellenar su buffer interno leyendo muchos frames de PCM antes de codificar,
+    // produciendo rafagas de audio en lugar de codificacion frame a frame.
+    // Colocarlo en el INPUT (igual que el decoder) es la posicion correcta.
+    //
+    // -fflags +flush_packets en el OUTPUT: fuerza avio_flush() tras cada frame
+    // GSM codificado, vaciando el pipe de salida inmediatamente (33 bytes/frame).
     this.proc = spawn("ffmpeg", [
       "-hide_banner", "-loglevel", "quiet",
       "-probesize", "32", "-analyzeduration", "0",
+      "-avioflags", "direct",
       "-f", "s16le", "-ar", "8000", "-ac", "1",
       "-i", "pipe:0",
       "-f", "gsm", "-ar", "8000",
       "-fflags", "+flush_packets",
-      "-avioflags", "direct",
       "pipe:1",
     ], { stdio: ["pipe", "pipe", "pipe"] });
 
@@ -114,6 +120,11 @@ export class GsmEncoder extends EventEmitter {
       while (this.accum.length >= GSM_PACKET_BYTES) {
         const gsmBuf = Buffer.from(this.accum.slice(0, GSM_PACKET_BYTES));
         this.accum   = this.accum.slice(GSM_PACKET_BYTES);
+        const now = Date.now();
+        if (this.lastGsmMs > 0 && now - this.lastGsmMs > 150) {
+          console.log(`[gsm-enc] ${new Date().toISOString()} GAP ${now - this.lastGsmMs}ms entre frames GSM de salida`);
+        }
+        this.lastGsmMs = now;
         this.emit("gsm", gsmBuf);
       }
     });
