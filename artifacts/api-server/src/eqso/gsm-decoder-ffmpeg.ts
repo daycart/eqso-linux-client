@@ -15,9 +15,9 @@ import { EventEmitter } from "events";
 
 const GSM_FRAME_BYTES   = 33;
 const GSM_FRAME_SAMPLES = 160;
-const FRAMES_PER_PACKET = 6;
-export const GSM_PACKET_BYTES  = GSM_FRAME_BYTES   * FRAMES_PER_PACKET; // 198
-export const PCM_PACKET_BYTES  = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET * 2; // 1920
+const FRAMES_PER_PACKET = 1;
+export const GSM_PACKET_BYTES  = GSM_FRAME_BYTES   * FRAMES_PER_PACKET; // 33
+export const PCM_PACKET_BYTES  = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET * 2; // 320
 
 export class GsmFfmpegDecoder extends EventEmitter {
   private proc: ChildProcessWithoutNullStreams | null = null;
