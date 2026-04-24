@@ -55,10 +55,17 @@ const POST_TX_SUPPRESS_MS = 1500;
 // ─── Supresion post-RX (anti-feedback acustico tras reproduccion) ─────────────
 // Tras terminar de reproducir audio del servidor, la radio CB necesita tiempo
 // para volver a RX y que arecord se reinicie (~350ms).
-// Con cableado directo (CM108 line-out→CB mic, CB speaker→CM108 line-in) no
-// hay camino acustico; 400ms cubre el reinicio de arecord con margen.
+// El suppress se calcula en dos etapas:
+//   1. POST_RX_SUPPRESS_MS (800ms) desde que el rxInhibitTimer dispara.
+//      Cubre el tiempo de drain de aplay y reinicio de arecord (~750ms).
+//   2. POST_APLAY_VOX_SUPPRESS_MS (1500ms) desde que aplay REALMENTE cierra
+//      (evento "playback_ended"). Cubre la cola de squelch de la radio CB
+//      (~1-2s de ruido cuando vuelve a RX) que provoca falsos VOX.
+// Sin la segunda etapa: el suppress expiraba ~30ms despues de que arecord
+// reiniciaba, y la cola de squelch (1.5s) activaba un VOX falso → eco.
 let postRxVoxSuppressUntil = 0;
-const POST_RX_SUPPRESS_MS = 400;
+const POST_RX_SUPPRESS_MS          = 800;   // desde rxInhibitTimer (antes era 400ms)
+const POST_APLAY_VOX_SUPPRESS_MS   = 1500;  // desde cierre real de aplay
 
 // ─── Supresion VOX post-TX propio (anti-eco de squelch y canal CB) ────────────
 // Cuando el relay termina su propia TX (VOX ptt_end), la radio vuelve a RX y
@@ -107,6 +114,16 @@ let latestPcmRms = 0;
 audio.on("error", (err: Error) => {
   log(`[audio] ERROR ALSA: ${err.message} — relay sigue activo, el audio se recuperará`);
   // No lanzar: arecord se reiniciará solo con backoff (2s) en alsa-audio.ts
+});
+
+// Cuando aplay termina REALMENTE y arecord va a reiniciarse:
+// extender suppress VOX 1.5s desde ese momento exacto para cubrir la cola
+// de squelch de la radio CB (~1-2s de ruido al volver a RX).
+audio.on("playback_ended", () => {
+  const suppUntil = Date.now() + POST_APLAY_VOX_SUPPRESS_MS;
+  const prev = postRxVoxSuppressUntil;
+  postRxVoxSuppressUntil = Math.max(postRxVoxSuppressUntil, suppUntil);
+  log(`[rxInhibit] playback_ended: suppress extendido → ${new Date(postRxVoxSuppressUntil).toISOString()} (prev=${new Date(prev).toISOString()})`);
 });
 
 // El audio emite chunks PCM crudos para que el VOX los analice

@@ -463,6 +463,7 @@ export class AlsaAudio extends EventEmitter {
           if (this.recorderSuspended && !this.stopping && !this.player && !this.playerStarting) {
             this.recorderSuspended = false;
             log("[audio] Semi-duplex: reanudando arecord");
+            this.emit("playback_ended"); // suppress VOX desde cierre real de aplay
             this.startRecorder();
           }
         }
@@ -471,6 +472,7 @@ export class AlsaAudio extends EventEmitter {
     } else if (this.recorderSuspended && !this.stopping && !this.playerStarting && !this.drainPlayer) {
       this.recorderSuspended = false;
       log("[audio] Semi-duplex: reanudando arecord (player ya cerrado)");
+      this.emit("playback_ended");
       this.startRecorder();
     }
   }
