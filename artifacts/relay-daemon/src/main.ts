@@ -65,14 +65,14 @@ const POST_TX_SUPPRESS_MS = 1500;
 // suficiente (suppress expiraba antes de que el squelch de la CB cerrara).
 let postRxVoxSuppressUntil = 0;
 const POST_RX_SUPPRESS_MS          = 800;   // desde rxInhibitTimer
-const POST_APLAY_VOX_SUPPRESS_MS   = 3000;  // desde cierre real de aplay (antes 1500ms)
+const POST_APLAY_VOX_SUPPRESS_MS   = 5000;  // desde cierre real de aplay (antes 3000ms)
 
 // ─── Supresion VOX post-TX propio (anti-eco de squelch y canal CB) ────────────
 // Cuando el relay termina su propia TX (VOX ptt_end), la radio vuelve a RX y
 // puede capturar la cola de squelch CB (~2-3s de ruido/carrier residual).
-// Medido en logs: RMS=12439 a los 2s de soltar PTT → trigger falso con 1500ms.
-// 3000ms cubre la cola de squelch con margen.
-const POST_TX_VOX_SUPPRESS_MS = 3000;  // antes 1500ms
+// Medido en logs: RMS=11130 a los 3s de soltar PTT → trigger falso con 3000ms.
+// El squelch de la CB tarda >3s en cerrarse completamente; 5000ms lo cubre.
+const POST_TX_VOX_SUPPRESS_MS = 5000;  // antes 3000ms
 
 function setRxActive(): void {
   const wasActive = rxActive;
