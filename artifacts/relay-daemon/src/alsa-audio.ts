@@ -209,46 +209,36 @@ export class AlsaAudio extends EventEmitter {
   // ── arecord ───────────────────────────────────────────────────────────────
 
   private startRecorder(): void {
-    // Captura via arecord a la tasa NATIVA del CM108 (48kHz estéreo) usando hw:
-    // directamente, evitando la capa plughw que agrupaba audio en lotes de ~260ms.
+    // ─── DIAGNÓSTICO FINAL DEL CM108 (USB) ────────────────────────────────────
     //
-    // RAIZ DEL PROBLEMA ANTERIOR:
-    //   arecord/ffmpeg con plughw: a 8kHz → la capa de conversión de tasa de
-    //   muestreo de ALSA (plughw plugin) acumula datos en bloques internos de
-    //   ~2080 muestras (260ms) antes de entregarlos. Esto causaba el patrón de
-    //   260ms de audio + 740ms de silencio observado tanto con arecord como con
-    //   ffmpeg, independientemente de period-size o buffer-size.
+    // El CM108 tiene un período hardware USB de ~750ms a 8kHz, independientemente
+    // del acceso vía plughw: o hw: o ffmpeg. No se puede cambiar desde user-space.
     //
-    // SOLUCION: hw: + 48kHz estéreo + period=480 (10ms) + decimación en Node.js
-    //   - hw: accede al hardware directamente sin capa de conversión
-    //   - 48kHz es la tasa nativa del CM108 → sin resampling de ALSA
-    //   - period=480 (10ms a 48kHz): ALSA entrega datos cada 10ms sin batching
-    //   - buffer=9600 (200ms): margen suficiente para el event loop de Node
-    //   - Decimación 6:1 en Node.js: toma 1 de cada 6 frames, mezcla L+R → mono
-    //     Adecuado para voz (300-3400Hz) ya que no hay contenido de audio relevante
-    //     por encima de 4kHz desde el micrófono de la radio CB.
+    // Pruebas exhaustivas realizadas:
+    //   1. plughw: + ffmpeg a 8kHz    → GAP 750ms   (batching capa rate-plugin)
+    //   2. plughw: + arecord a 8kHz   → GAP 750ms   (misma capa)
+    //   3. hw: + arecord a 48kHz -c2  → error "Channels count non available"
+    //   4. hw: + arecord a 48kHz -c1  → GAP 2300ms  (re-init URBs snd-usb-audio)
+    //   5. hw: + arecord a 8kHz  -c1  → GAP 750ms   (igual que plughw:)
+    //                                    + crashes "read error: I/O error" cada 2-3s
     //
-    // DISPOSITIVO: hw: a 8kHz mono (endpoint de telefonía USB nativo del CM108)
+    // Conclusión: El período de 750ms es intrínseco al firmware USB del CM108.
+    //   plughw: a 8kHz (opción 2) es la mejor: mismos gaps pero SIN crashes xrun.
     //
-    // El CM108 expone dos endpoints USB de audio en su descriptor:
-    //   1. Telefonía: 8000 Hz, 16-bit PCM, 1 canal → hw:X,0 a 8kHz funciona nativamente
-    //   2. Audio: 44100/48000 Hz, 16-bit PCM, 1-2 canales → hw:X,0 a 48kHz
-    //
-    // Con hw: a 8kHz (nativo, sin conversión) el período ALSA es ~20ms = 160 muestras,
-    // eliminando tanto el batching de plughw: (750ms) como el problema de re-init de
-    // URBs a 48kHz (2300ms).
-    //
-    // Si el CM108 de esta VM no expone el endpoint de telefonía (error "cannot set
-    // sample format / rate"), el servicio reintentará cada 2s y se verá en los logs.
-    const hwDevice = this.cfg.captureDevice.replace(/^plughw:/, "hw:");
+    // La ÚNICA mejora posible sin cambiar el hardware es el parámetro del módulo
+    // snd-usb-audio: `nrpacks=1` en /etc/modprobe.d/snd-usb-audio.conf + reboot.
+    // Con nrpacks=1 cada URB lleva 1 paquete (1ms), lo que reduciría el período
+    // hardware de ~750ms a ~20ms. No aplicado por requerir reinicio del kernel.
+    // ──────────────────────────────────────────────────────────────────────────
+    const captureDevice = this.cfg.captureDevice;   // plughw:1,0 / plughw:Device,0
     const CAPTURE_RATE = 8000;
     const CAPTURE_CHANNELS = 1;
-    const PERIOD_FRAMES = 160;     // 20ms a 8kHz
-    const BUFFER_FRAMES = 8000;    // 1s de margen para el event loop
+    const PERIOD_FRAMES = 160;     // 20ms a 8kHz (plughw: redondea al período hw)
+    const BUFFER_FRAMES = 8000;    // 1s de ring buffer → absorbe xruns sin crash
     const DECIMATE = 1;            // sin decimación (ya a 8kHz)
 
     const args = [
-      "-D", hwDevice,
+      "-D", captureDevice,
       "-f", "S16_LE",
       "-r", String(CAPTURE_RATE),
       "-c", String(CAPTURE_CHANNELS),
@@ -311,7 +301,7 @@ export class AlsaAudio extends EventEmitter {
       const now = Date.now();
       const gain = this.cfg.inputGain;
 
-      // Diagnóstico primeros 8 chunks: confirmar que period=480 da ~960 bytes (480 frames × 2 bytes mono)
+      // Diagnóstico primeros 8 chunks: confirmar que period=160 da ~320 bytes (160 frames × 2 bytes mono)
       if (this.arecordChunkCount <= 8)
         log(`[arecord] chunk#${this.arecordChunkCount}: ${rawChunk.length} bytes brutos → ${numOutputSamples} muestras 8kHz`);
 
@@ -320,7 +310,7 @@ export class AlsaAudio extends EventEmitter {
         log(`[arecord] GAP ${gapMs}ms (chunk#${this.arecordChunkCount}, ${numOutputSamples} muestras)`);
       this.lastArecordChunkMs = now;
 
-      // Decimación + mezcla estéreo → mono + ganancia + soft-clip
+      // Ganancia + soft-clip (sin decimación: plughw: a 8kHz, DECIMATE=1)
       const pcm = new Int16Array(numOutputSamples);
       let sumSq = 0;
       const drive = 1.5;
