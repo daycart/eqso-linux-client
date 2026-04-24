@@ -6,7 +6,8 @@
  * in < 10 ms. Always call start() at connection time so the process is ready
  * by the time the first audio packet arrives.
  *
- * GSM 06.10 packet: 6 frames × 33 bytes = 198 bytes → 960 PCM Int16 samples (1920 bytes)
+ * GSM 06.10 packet: 1 frame × 33 bytes = 33 bytes → 160 PCM Int16 samples (320 bytes)
+ * Native eQSO frame rate: 50 packets/s = 20 ms per packet.
  */
 
 import { spawn, ChildProcessWithoutNullStreams } from "child_process";
@@ -15,9 +16,9 @@ import { logger } from "../lib/logger";
 
 export const GSM_FRAME_BYTES    = 33;
 export const GSM_FRAME_SAMPLES  = 160;
-export const FRAMES_PER_PACKET  = 6;
-export const GSM_PACKET_BYTES   = GSM_FRAME_BYTES * FRAMES_PER_PACKET;     // 198
-export const PCM_PACKET_BYTES   = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET * 2; // 1920
+export const FRAMES_PER_PACKET  = 1;
+export const GSM_PACKET_BYTES   = GSM_FRAME_BYTES * FRAMES_PER_PACKET;     // 33
+export const PCM_PACKET_BYTES   = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET * 2; // 320
 
 // ---------------------------------------------------------------------------
 // FfmpegGsmDecoder: GSM bytes → Int16 PCM samples
