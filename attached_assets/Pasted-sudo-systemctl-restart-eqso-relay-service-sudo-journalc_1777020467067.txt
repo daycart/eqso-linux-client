@@ -1,0 +1,135 @@
+sudo systemctl restart eqso-relay.service && sudo journalctl -u eqso-relay.service -f
+abr 24 08:47:03 ubuntus eqso-relay-[60991]:   Front Right: Playback 37 [100%] [0.00dB] [on]
+abr 24 08:47:03 ubuntus eqso-relay-[60983]:   Speaker   100%
+abr 24 08:47:03 ubuntus eqso-relay-[60994]: Simple mixer control 'Mic',0
+abr 24 08:47:03 ubuntus eqso-relay-[60994]:   Capabilities: pvolume pvolume-joined cvolume cvolume-joined pswitch pswitch-joined cswitch cswitch-joined
+abr 24 08:47:03 ubuntus eqso-relay-[60994]:   Playback channels: Mono
+abr 24 08:47:03 ubuntus eqso-relay-[60994]:   Capture channels: Mono
+abr 24 08:47:03 ubuntus eqso-relay-[60994]:   Limits: Playback 0 - 31 Capture 0 - 35
+abr 24 08:47:03 ubuntus eqso-relay-[60994]:   Mono: Playback 12 [39%] [-11.00dB] [on] Capture 14 [40%] [2.00dB] [on]
+abr 24 08:47:03 ubuntus eqso-relay-[60983]:   Mic        40%
+abr 24 08:47:03 ubuntus systemd[1]: Started eqso-relay.service - eQSO Radioenlace \Uffffffff sala .
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [config] Cargado: /etc/eqso-relay/CB.json
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [config] Configuracion activa: {
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:   "callsign": "0R-IN70WN",
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:   "room": "CB",
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:   "password": "",
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:   "message": "Radio Enlace",
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:   "server": "127.0.0.1",
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:   "port": 2171,
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:   "reconnectMinMs": 2000,
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:   "reconnectMaxMs": 60000,
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:   "audio": {
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:     "captureDevice": "plughw:1,0",
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:     "playbackDevice": "plughw:1,0",
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:     "vox": true,
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:     "voxThresholdRms": 3500,
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:     "voxHangMs": 2500,
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:     "txGateRms": 50,
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:     "voxDebounceChunks": 1,
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:     "inputGain": 0.4,
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:     "outputGain": 3
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:   },
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:   "control": {
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:     "enabled": true,
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:     "port": 8009,
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:     "host": "127.0.0.1"
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:   },
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:   "ptt": {
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:     "device": "/dev/ttyACM0",
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:     "method": "rts",
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:     "inverted": false
+abr 24 08:47:04 ubuntus eqso-relay-[60996]:   }
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: }
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:04.378Z ============================================================
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:04.379Z eQSO Relay Daemon arrancado
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:04.380Z   Callsign : 0R-IN70WN
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:04.380Z   Sala     : CB
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:04.381Z   Servidor : 127.0.0.1:2171
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:04.381Z   VOX      : ON (umbral=3500 hang=2500ms debounce=1chunks)
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:04.381Z   Captura  : plughw:1,0
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:04.382Z   Playback : plughw:1,0
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:04.382Z   PTT Ser. : /dev/ttyACM0 (rts)
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:04.383Z ============================================================
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [ptt] 2026-04-24T08:47:04.386Z Iniciando PTT serial: /dev/ttyACM0 (rts)
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [audio] 2026-04-24T08:47:04.451Z arecord -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --period-size=480 --buffer-size=1920
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:04.480Z Conectando a 127.0.0.1:2171 como "0R-IN70WN" en sala "CB"\Uffffffff
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [control] 2026-04-24T08:47:04.530Z Control HTTP escuchando en http://127.0.0.1:8009
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [audio] 2026-04-24T08:47:04.709Z [arecord] arecord: main:834: audio open error: Device or resource busy
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:04.735Z TCP conectado a 127.0.0.1:2171
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [audio] 2026-04-24T08:47:04.779Z [arecord] Terminado (code 1)
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:04.830Z Handshake recibido \Uffffffff conexion establecida
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:04.839Z Conectado \Uffffffff enviando JOIN\Uffffffff
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:04.854Z JOIN enviado: callsign="0R-IN70WN" sala="CB"
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:04.860Z Salas disponibles: GENERAL, CB, ASORAPA, PRUEBAS
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:04.861Z Salas: GENERAL, CB, ASORAPA, PRUEBAS
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:04.867Z Mensaje del servidor: Indicativo "0R-IN70WN" ya en uso
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:04.867Z Mensaje servidor: Indicativo "0R-IN70WN" ya en uso
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [ptt] 2026-04-24T08:47:04.872Z PTT serial listo (/dev/ttyACM0, rts)
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:04.885Z Desconectado del servidor eQSO
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:04.888Z Reintento #1 en 2s\Uffffffff
+abr 24 08:47:04 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:04.889Z TCP desconectado de 127.0.0.1:2171
+abr 24 08:47:06 ubuntus eqso-relay-[60996]: [audio] 2026-04-24T08:47:06.793Z arecord -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --period-size=480 --buffer-size=1920
+abr 24 08:47:06 ubuntus eqso-relay-[60996]: [audio] 2026-04-24T08:47:06.814Z [arecord] arecord: main:834:
+abr 24 08:47:06 ubuntus eqso-relay-[60996]: [audio] 2026-04-24T08:47:06.815Z [arecord] audio open error: Device or resource busy
+abr 24 08:47:06 ubuntus eqso-relay-[60996]: [audio] 2026-04-24T08:47:06.820Z [arecord] Terminado (code 1)
+abr 24 08:47:06 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:06.889Z Conectando a 127.0.0.1:2171 como "0R-IN70WN" en sala "CB"\Uffffffff
+abr 24 08:47:06 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:06.894Z TCP conectado a 127.0.0.1:2171
+abr 24 08:47:06 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:06.915Z Handshake recibido \Uffffffff conexion establecida
+abr 24 08:47:06 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:06.915Z Conectado \Uffffffff enviando JOIN\Uffffffff
+abr 24 08:47:06 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:06.919Z JOIN enviado: callsign="0R-IN70WN" sala="CB"
+abr 24 08:47:06 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:06.923Z Salas disponibles: GENERAL, CB, ASORAPA, PRUEBAS
+abr 24 08:47:06 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:06.924Z Salas: GENERAL, CB, ASORAPA, PRUEBAS
+abr 24 08:47:06 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:06.927Z Mensaje del servidor: Indicativo "0R-IN70WN" ya en uso
+abr 24 08:47:06 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:06.928Z Mensaje servidor: Indicativo "0R-IN70WN" ya en uso
+abr 24 08:47:06 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:06.933Z Desconectado del servidor eQSO
+abr 24 08:47:06 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:06.934Z Reintento #1 en 2s\Uffffffff
+abr 24 08:47:06 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:06.937Z TCP desconectado de 127.0.0.1:2171
+abr 24 08:47:08 ubuntus eqso-relay-[60996]: [audio] 2026-04-24T08:47:08.822Z arecord -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --period-size=480 --buffer-size=1920
+abr 24 08:47:08 ubuntus eqso-relay-[60996]: [audio] 2026-04-24T08:47:08.851Z [arecord] arecord: main:834:
+abr 24 08:47:08 ubuntus eqso-relay-[60996]: [audio] 2026-04-24T08:47:08.852Z [arecord] audio open error: Device or resource busy
+abr 24 08:47:08 ubuntus eqso-relay-[60996]: [audio] 2026-04-24T08:47:08.858Z [arecord] Terminado (code 1)
+abr 24 08:47:08 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:08.937Z Conectando a 127.0.0.1:2171 como "0R-IN70WN" en sala "CB"\Uffffffff
+abr 24 08:47:08 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:08.940Z TCP conectado a 127.0.0.1:2171
+abr 24 08:47:08 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:08.961Z Handshake recibido \Uffffffff conexion establecida
+abr 24 08:47:08 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:08.961Z Conectado \Uffffffff enviando JOIN\Uffffffff
+abr 24 08:47:08 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:08.963Z JOIN enviado: callsign="0R-IN70WN" sala="CB"
+abr 24 08:47:08 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:08.967Z Salas disponibles: GENERAL, CB, ASORAPA, PRUEBAS
+abr 24 08:47:08 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:08.968Z Salas: GENERAL, CB, ASORAPA, PRUEBAS
+abr 24 08:47:08 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:08.969Z Mensaje del servidor: Indicativo "0R-IN70WN" ya en uso
+abr 24 08:47:08 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:08.969Z Mensaje servidor: Indicativo "0R-IN70WN" ya en uso
+abr 24 08:47:08 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:08.976Z Desconectado del servidor eQSO
+abr 24 08:47:08 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:08.976Z Reintento #1 en 2s\Uffffffff
+abr 24 08:47:08 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:08.976Z TCP desconectado de 127.0.0.1:2171
+abr 24 08:47:10 ubuntus eqso-relay-[60996]: [audio] 2026-04-24T08:47:10.861Z arecord -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --period-size=480 --buffer-size=1920
+abr 24 08:47:10 ubuntus eqso-relay-[60996]: [audio] 2026-04-24T08:47:10.889Z [arecord] arecord: main:834:
+abr 24 08:47:10 ubuntus eqso-relay-[60996]: [audio] 2026-04-24T08:47:10.891Z [arecord] audio open error: Device or resource busy
+abr 24 08:47:10 ubuntus eqso-relay-[60996]: [audio] 2026-04-24T08:47:10.896Z [arecord] Terminado (code 1)
+abr 24 08:47:10 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:10.976Z Conectando a 127.0.0.1:2171 como "0R-IN70WN" en sala "CB"\Uffffffff
+abr 24 08:47:10 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:10.978Z TCP conectado a 127.0.0.1:2171
+abr 24 08:47:11 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:11.002Z Handshake recibido \Uffffffff conexion establecida
+abr 24 08:47:11 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:11.003Z Conectado \Uffffffff enviando JOIN\Uffffffff
+abr 24 08:47:11 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:11.006Z JOIN enviado: callsign="0R-IN70WN" sala="CB"
+abr 24 08:47:11 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:11.007Z Salas disponibles: GENERAL, CB, ASORAPA, PRUEBAS
+abr 24 08:47:11 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:11.007Z Salas: GENERAL, CB, ASORAPA, PRUEBAS
+abr 24 08:47:11 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:11.012Z Mensaje del servidor: Indicativo "0R-IN70WN" ya en uso
+abr 24 08:47:11 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:11.013Z Mensaje servidor: Indicativo "0R-IN70WN" ya en uso
+abr 24 08:47:11 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:11.015Z Desconectado del servidor eQSO
+abr 24 08:47:11 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:11.015Z Reintento #1 en 2s\Uffffffff
+abr 24 08:47:11 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:11.015Z TCP desconectado de 127.0.0.1:2171
+abr 24 08:47:12 ubuntus eqso-relay-[60996]: [audio] 2026-04-24T08:47:12.897Z arecord -D plughw:1,0 -f S16_LE -r 8000 -c 1 -q --period-size=480 --buffer-size=1920
+abr 24 08:47:12 ubuntus eqso-relay-[60996]: [audio] 2026-04-24T08:47:12.923Z [arecord] arecord: main:834:
+abr 24 08:47:12 ubuntus eqso-relay-[60996]: [audio] 2026-04-24T08:47:12.925Z [arecord] audio open error: Device or resource busy
+abr 24 08:47:12 ubuntus eqso-relay-[60996]: [audio] 2026-04-24T08:47:12.931Z [arecord] Terminado (code 1)
+abr 24 08:47:13 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:13.016Z Conectando a 127.0.0.1:2171 como "0R-IN70WN" en sala "CB"\Uffffffff
+abr 24 08:47:13 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:13.019Z TCP conectado a 127.0.0.1:2171
+abr 24 08:47:13 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:13.043Z Handshake recibido \Uffffffff conexion establecida
+abr 24 08:47:13 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:13.044Z Conectado \Uffffffff enviando JOIN\Uffffffff
+abr 24 08:47:13 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:13.044Z JOIN enviado: callsign="0R-IN70WN" sala="CB"
+abr 24 08:47:13 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:13.050Z Salas disponibles: GENERAL, CB, ASORAPA, PRUEBAS
+abr 24 08:47:13 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:13.050Z Salas: GENERAL, CB, ASORAPA, PRUEBAS
+abr 24 08:47:13 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:13.052Z Mensaje del servidor: Indicativo "0R-IN70WN" ya en uso
+abr 24 08:47:13 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:13.052Z Mensaje servidor: Indicativo "0R-IN70WN" ya en uso
+abr 24 08:47:13 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:13.057Z Desconectado del servidor eQSO
+abr 24 08:47:13 ubuntus eqso-relay-[60996]: [main] 2026-04-24T08:47:13.059Z Reintento #1 en 2s\Uffffffff
+abr 24 08:47:13 ubuntus eqso-relay-[60996]: [eqso] 2026-04-24T08:47:13.060Z TCP desconectado de 127.0.0.1:2171
