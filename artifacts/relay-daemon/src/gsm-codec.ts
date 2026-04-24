@@ -86,10 +86,10 @@ export class GsmEncoder extends EventEmitter {
 
   start(): void {
     if (this.proc) return;
-    // -fflags +flush_packets: fuerza avio_flush() tras cada frame GSM codificado.
-    // stdbuf -o0 NO sirve: ffmpeg usa write() (no fwrite/stdio), sin efecto.
-    // Sin esta flag, el AVIOContext (32KB) retiene hasta ~124 frames GSM (~2.5s)
-    // antes de hacer write() al pipe. Con flush_packets: 33 bytes/frame al instante.
+    // -avioflags direct: desactiva el buffer de escritura AVIOContext (por defecto 32KB).
+    // Sin esto ffmpeg acumula ~12-17 frames GSM (~240-340ms) antes de hacer write()
+    // al pipe, produciendo rafagas de audio con gaps de 800ms en lugar de flujo continuo.
+    // -fflags +flush_packets: complementa avioflags direct forzando avio_flush() por frame.
     this.proc = spawn("ffmpeg", [
       "-hide_banner", "-loglevel", "quiet",
       "-probesize", "32", "-analyzeduration", "0",
@@ -97,6 +97,7 @@ export class GsmEncoder extends EventEmitter {
       "-i", "pipe:0",
       "-f", "gsm", "-ar", "8000",
       "-fflags", "+flush_packets",
+      "-avioflags", "direct",
       "pipe:1",
     ], { stdio: ["pipe", "pipe", "pipe"] });
 
