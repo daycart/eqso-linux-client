@@ -235,9 +235,14 @@ export class AlsaAudio extends EventEmitter {
       // (el CM108 negocia su tasa nativa, típicamente 48000Hz estéreo)
       "-f", "alsa",
       "-i", this.cfg.captureDevice,
-      // FILTRO: resamplear a 8000Hz mono con async=1 para tolerar
-      // los xruns de USB sin generar DTS no-monótonos que descartan frames
-      "-af", "aresample=8000,aformat=sample_fmts=s16:channel_layouts=mono",
+      // FILTRO: resamplear a 8000Hz mono y forzar PTS monotónicos.
+      // El muxer s16le usa av_interleaved_write_frame que descarta frames con
+      // DTS no-monótonos. El CM108 USB entrega timestamps ligeramente irregulares
+      // desde la entrada ALSA, que el resampler propaga causando que el muxer
+      // descarte ~77% de los frames (solo llegaban 130 chunks/s en vez de 500).
+      // asetpts=N/SR/TB asigna PTS = frame_number/sample_rate/time_base, siempre
+      // creciente, eliminando los descartes del muxer.
+      "-af", "aresample=8000,aformat=sample_fmts=s16:channel_layouts=mono,asetpts=N/SR/TB",
       // OUTPUT: S16LE 8kHz mono crudo al pipe (sin cabecera WAV)
       "-f", "s16le",
       "-",
