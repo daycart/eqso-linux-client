@@ -234,6 +234,9 @@ export class EqsoProxy extends EventEmitter {
   private silenceTimer: ReturnType<typeof setInterval> | null = null;
   private transmitting = false;
   private pendingJoin: PendingJoin | null = null;
+  // Acumulador de tramas GSM para armar paquetes de 198 bytes (6 × 33) antes de enviar.
+  // El protocolo eQSO Windows espera exactamente 198 bytes por paquete de audio.
+  private gsmAccum = Buffer.alloc(0);
   // Estaciones que están actualmente en TX (para detectar fin de TX via action=0x00)
   private txingStations = new Set<string>();
 
@@ -330,23 +333,37 @@ export class EqsoProxy extends EventEmitter {
    * We only need to stop the silence heartbeat so the channel is free.
    */
   startTransmitting(): void {
+    this.gsmAccum = Buffer.alloc(0); // descartar tramas huérfanas de TX anterior
     this.transmitting = true;
     logger.info("eQSO proxy: TX started — silence heartbeat paused");
   }
 
   sendPttEnd(): void {
+    // Flush de tramas pendientes (1-5 frames): padded a 198 bytes para enviar el
+    // último paquete antes de liberar el canal. Evita audio cortado al final de TX.
+    if (this.gsmAccum.length > 0) {
+      const padded = Buffer.alloc(AUDIO_PAYLOAD_SIZE, 0);
+      this.gsmAccum.copy(padded);
+      this.socketWrite(Buffer.concat([Buffer.from([0x01]), padded]));
+      this.gsmAccum = Buffer.alloc(0);
+    }
     this.transmitting = false;
     this.socketWrite(Buffer.from([0x0d]));
   }
 
+  /**
+   * Acumula tramas GSM de 33 bytes hasta tener un paquete completo de 198 bytes
+   * (6 × 33 = 198, el estándar del protocolo eQSO Windows). Solo entonces envía
+   * [0x01][198 bytes] al servidor. Esto equivale a 1 paquete cada 120ms.
+   */
   sendAudio(data: Buffer): void {
-    if (data.length < AUDIO_PAYLOAD_SIZE) {
-      const padded = Buffer.alloc(AUDIO_PAYLOAD_SIZE);
-      data.copy(padded);
-      data = padded;
+    const GSM_FRAME = 33;
+    this.gsmAccum = Buffer.concat([this.gsmAccum, data.slice(0, GSM_FRAME)]);
+    if (this.gsmAccum.length >= AUDIO_PAYLOAD_SIZE) {
+      const pkt = Buffer.concat([Buffer.from([0x01]), this.gsmAccum.slice(0, AUDIO_PAYLOAD_SIZE)]);
+      this.socketWrite(pkt);
+      this.gsmAccum = this.gsmAccum.slice(AUDIO_PAYLOAD_SIZE);
     }
-    const pkt = Buffer.concat([Buffer.from([0x01]), data.slice(0, AUDIO_PAYLOAD_SIZE)]);
-    this.socketWrite(pkt);
   }
 
   private socketWrite(data: Buffer): void {
