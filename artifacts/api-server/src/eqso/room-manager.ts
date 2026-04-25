@@ -140,6 +140,11 @@ export class RoomManager extends EventEmitter {
     return this.roomLocks.get(room) === clientId;
   }
 
+  /** true si la sala está bloqueada por CUALQUIER cliente (hay TX activa). */
+  isRoomLocked(room: string): boolean {
+    return this.roomLocks.has(room);
+  }
+
   unlockRoom(room: string, clientId: string): void {
     if (this.roomLocks.get(room) === clientId) this.roomLocks.delete(room);
   }
