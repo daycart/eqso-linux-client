@@ -33,6 +33,8 @@ export function useAudio(): UseAudioReturn {
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const levelTimerRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
+  // accumLocalRef kept for hook-count stability (previously used for Uint8 local mode).
+  const accumLocalRef = useRef<Uint8Array>(new Uint8Array(0));
   const accumRemoteRef = useRef<Int16Array>(new Int16Array(0));
   const gainNodeRef = useRef<GainNode | null>(null);
   // Worklet de reproduccion (circular buffer, inmune a jitter)
