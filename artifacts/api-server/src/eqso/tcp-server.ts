@@ -111,9 +111,9 @@ function processSingleByte(state: TcpClientState, byte: number): void {
           // El watchdog interno de 0R-ASORAPA dura ~2.3s, por lo que hay que refrescar
           // pttStarted periódicamente (ver pttRefreshTimer abajo).
           roomManager.broadcastToRoom(client.room, buildPttStarted(client.name), state.id);
-          // Timer de refresco: reenvía pttStarted a clientes TCP cada 800ms durante la TX.
-          // El watchdog interno de 0R-ASORAPA expira en ~1s sin pttStarted: con 800ms
-          // el refresco llega ANTES de que expire, manteniendo al relay en modo receive.
+          // Timer de refresco: reenvía pttStarted a clientes TCP cada 250ms durante la TX.
+          // El watchdog de 0R-ASORAPA puede expirar en tan solo ~748ms (varía por sesión).
+          // Con 250ms el primer refresh llega bien antes del timeout más corto observado.
           // Solo va a TCP (broadcastToTcpClientsInRoom) para evitar eventos duplicados
           // en clientes WS y relay-listeners.
           if (state.pttRefreshTimer) clearInterval(state.pttRefreshTimer);
@@ -125,7 +125,7 @@ function processSingleByte(state: TcpClientState, byte: number): void {
               return;
             }
             roomManager.broadcastToTcpClientsInRoom(refreshRoom, buildPttStarted(refreshName), state.id);
-          }, 800);
+          }, 250);
         }
         inactivityManager.recordActivity(client.room);
       }
