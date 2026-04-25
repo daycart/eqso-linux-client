@@ -129,6 +129,11 @@ export class FfmpegGsmEncoder extends EventEmitter {
       // No audio filters — worklet already applies AGC, clip, and bandpass.
       // Filters add hundreds of ms of pipeline latency that delays voice vs PTT.
       "-f", "gsm", "-ar", "8000",
+      // Fuerza avio_flush() tras cada frame GSM: sin esto el muxer GSM acumula
+      // datos en el buffer interno (32 KB) y Node.js recibe frames en ráfagas
+      // con varios segundos de delay. Con flush_packets cada frame de 33 bytes
+      // llega inmediatamente al pipe tras ser codificado.
+      "-fflags", "+flush_packets",
       "pipe:1",
     ], { stdio: ["pipe", "pipe", "pipe"] });
 

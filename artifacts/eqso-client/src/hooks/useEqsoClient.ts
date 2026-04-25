@@ -390,10 +390,11 @@ export function useEqsoClient(
       return;
     }
 
-    const isRemote = selectedServerRef.current.mode === "remote";
-    // Remote: [0x05][Int16 PCM] — server will GSM-encode and relay
-    // Local:  [0x01][Uint8 PCM] — server relays as-is
-    const opcode = isRemote ? WS_PCM_TX : WS_AUDIO_LOCAL;
+    // Always send Int16 PCM with opcode 0x05 regardless of local/remote mode.
+    // Server GSM-encodes it and relays to TCP relay daemons (0R-CB, etc.).
+    // Using WS_AUDIO_LOCAL (0x01) with Uint8 PCM was causing poor 8-bit quality
+    // and audio levels outside RC IRIA's activation window (5-15 % FS peak).
+    const opcode = WS_PCM_TX;
     const payload = new Uint8Array(data);
     const pkt = new Uint8Array(1 + payload.length);
     pkt[0] = opcode;

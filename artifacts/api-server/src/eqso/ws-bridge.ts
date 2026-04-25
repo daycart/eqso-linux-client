@@ -170,39 +170,43 @@ function handleLocalMode(
     sendJson(ws, { type: "keepalive" });
   }, KEEPALIVE_MS);
 
-  // Accumulate Uint8 PCM samples from browser until we have 960 (one GSM packet)
-  let localPcmAccum = new Uint8Array(0);
+  // Accumulate raw Int16 bytes from browser (opcode 0x05) for GSM encoding.
+  // Each PCM_CHUNK_SAMPLES × 2 bytes = one GSM frame.
+  let localInt16Accum = new Uint8Array(0);
 
   return {
     onMessage: (msg, rawBin) => {
+      // 0x01: Uint8 PCM from another local browser — relay as-is to other WS clients.
+      // No GSM encoding; this path is for browser-to-browser local audio monitoring only.
       if (rawBin && rawBin.length > 0 && rawBin[0] === 0x01) {
         const client = roomManager.getClient(id);
         if (client?.room && !moderationManager.isMuted(client.name)) {
-          // 1. Send raw Uint8 PCM to other WS browser clients (they handle it natively)
           roomManager.broadcastBinToLocalWsClients(client.room, rawBin, id);
+        }
+        return;
+      }
 
-          // 2. Encode Uint8 PCM → GSM and deliver proper 199-byte packets to TCP clients
-          //    and relay listeners.  Without this, TCP clients receive wrong-size packets
-          //    and reset the connection (ECONNRESET).
-          const newSamples = rawBin.slice(1); // strip 0x01 opcode
-          const merged = new Uint8Array(localPcmAccum.length + newSamples.length);
-          merged.set(localPcmAccum);
-          merged.set(newSamples, localPcmAccum.length);
-          localPcmAccum = merged;
+      // 0x05: Int16 signed PCM from the browser TX microphone.
+      // Accumulate 320-byte (160 × Int16) chunks → feed to FFmpeg GSM encoder.
+      // Encoder emits 33-byte GSM frames; localEncoder "gsm" handler accumulates
+      // 6 frames (198 bytes) and broadcasts [0x01][198] to TCP relay daemons.
+      if (rawBin && rawBin.length > 0 && rawBin[0] === 0x05) {
+        const client = roomManager.getClient(id);
+        if (client?.room && !moderationManager.isMuted(client.name)) {
+          const newBytes = rawBin.slice(1); // strip 0x05 opcode
+          const merged = new Uint8Array(localInt16Accum.length + newBytes.length);
+          merged.set(localInt16Accum);
+          merged.set(newBytes, localInt16Accum.length);
+          localInt16Accum = merged;
 
-          while (localPcmAccum.length >= PCM_CHUNK_SAMPLES) {
-            const chunk = localPcmAccum.slice(0, PCM_CHUNK_SAMPLES);
-            localPcmAccum = localPcmAccum.slice(PCM_CHUNK_SAMPLES);
-
-            // Uint8 unsigned (0–255) → Int16 signed (-32768..32767)
-            const int16 = new Int16Array(PCM_CHUNK_SAMPLES);
-            for (let i = 0; i < PCM_CHUNK_SAMPLES; i++) {
-              int16[i] = (chunk[i] - 128) << 8;
-            }
-
-            // Feed to FFmpeg encoder; GSM packet is broadcast in localEncoder "gsm" event.
-            // Using FFmpeg instead of gsm610.ts (pure JS) which had LTP bugs that
-            // destroyed voice audio and made the CB radio receive only noise.
+          // PCM_CHUNK_SAMPLES × 2 bytes = 160 Int16 samples = one GSM frame input
+          const frameBytes = PCM_CHUNK_SAMPLES * 2;
+          while (localInt16Accum.length >= frameBytes) {
+            const chunk = localInt16Accum.slice(0, frameBytes);
+            localInt16Accum = localInt16Accum.slice(frameBytes);
+            const int16 = new Int16Array(
+              chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + frameBytes)
+            );
             localEncoder.encode(int16);
           }
         }
@@ -306,7 +310,8 @@ function handleLocalMode(
         }
 
         case "ptt_end": {
-          localGsmAccum = Buffer.alloc(0); // flush partial GSM accumulation to avoid frame leak
+          localInt16Accum = new Uint8Array(0); // discard partial PCM frame on PTT release
+          localGsmAccum = Buffer.alloc(0);     // discard partial GSM accumulation on PTT release
           const client = roomManager.getClient(id);
           if (client?.room && client.name) {
             roomManager.broadcastToRoom(client.room, buildPttReleased(client.name), id);
@@ -324,7 +329,7 @@ function handleLocalMode(
 
     onClose: () => {
       clearInterval(pingTimer);
-      localPcmAccum = new Uint8Array(0);
+      localInt16Accum = new Uint8Array(0);
       localGsmAccum = Buffer.alloc(0);
       localDecoder.stop();
       localEncoder.stop();

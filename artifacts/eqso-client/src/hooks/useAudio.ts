@@ -12,12 +12,10 @@ export interface UseAudioReturn {
   muteRx: (muted: boolean) => void;
 }
 
-// Remote mode: Int16 signed PCM, 960 samples (6 GSM frames × 160) per chunk = 1920 bytes.
-// eQSO protocol: [0x01][198 bytes = 6 GSM frames] per packet — ASORAPA requires exactly 198 bytes.
+// Both local and remote: Int16 signed PCM, 960 samples (6 GSM frames × 160) per chunk = 1920 bytes.
+// eQSO protocol: [0x05][1920 bytes Int16] → server GSM-encodes and sends [0x01][198 bytes GSM] to TCP.
 // Sending individual 33-byte frames corrupts ASORAPA's protocol state → ECONNRESET.
 const REMOTE_CHUNK_SAMPLES = 960;
-// Local mode: Uint8 unsigned PCM, 160 bytes per chunk
-const LOCAL_CHUNK_BYTES = 160;
 // Target sample rate for GSM encoding
 const GSM_RATE = 8000;
 
@@ -35,7 +33,6 @@ export function useAudio(): UseAudioReturn {
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const levelTimerRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
-  const accumLocalRef = useRef<Uint8Array>(new Uint8Array(0));
   const accumRemoteRef = useRef<Int16Array>(new Int16Array(0));
   const gainNodeRef = useRef<GainNode | null>(null);
   // Worklet de reproduccion (circular buffer, inmune a jitter)
@@ -254,29 +251,15 @@ export function useAudio(): UseAudioReturn {
           const onChunk = onChunkRef.current;
           if (!onChunk) return;
 
-          if (modeRef.current === "local") {
-            const pcm8 = new Uint8Array(float32.length);
-            for (let i = 0; i < float32.length; i++) {
-              const s = Math.max(-1, Math.min(1, float32[i]));
-              pcm8[i] = Math.round((s + 1) * 127.5);
-            }
-            const merged = new Uint8Array(accumLocalRef.current.length + pcm8.length);
-            merged.set(accumLocalRef.current);
-            merged.set(pcm8, accumLocalRef.current.length);
-            accumLocalRef.current = merged;
-            while (accumLocalRef.current.length >= LOCAL_CHUNK_BYTES) {
-              onChunk(accumLocalRef.current.slice(0, LOCAL_CHUNK_BYTES).buffer);
-              accumLocalRef.current = accumLocalRef.current.slice(LOCAL_CHUNK_BYTES);
-            }
-          } else {
-            const pcm16 = new Int16Array(float32.length);
-            for (let i = 0; i < float32.length; i++) {
-              const s = Math.max(-1, Math.min(1, float32[i]));
-              pcm16[i] = s < 0 ? Math.round(s * 32768) : Math.round(s * 32767);
-            }
-            console.debug("[ptt] audio chunk:", pcm16.byteLength, "bytes");
-            onChunk(pcm16.buffer);
+          // Both local and remote: Int16 PCM (16-bit, ~96 dB SNR).
+          // Local mode previously used Uint8 (8-bit, ~30 dB SNR) which caused
+          // poor quality and levels that fell outside RC IRIA's activation window.
+          const pcm16 = new Int16Array(float32.length);
+          for (let i = 0; i < float32.length; i++) {
+            const s = Math.max(-1, Math.min(1, float32[i]));
+            pcm16[i] = s < 0 ? Math.round(s * 32768) : Math.round(s * 32767);
           }
+          onChunk(pcm16.buffer);
         };
 
         // The worklet must be connected to something for Chrome to keep the
@@ -337,7 +320,6 @@ export function useAudio(): UseAudioReturn {
     onChunkRef.current = onChunk;
     modeRef.current = mode;
     pttActiveRef.current = true;
-    accumLocalRef.current = new Uint8Array(0);
     accumRemoteRef.current = new Int16Array(0);
 
     // If the mic was already open but the track ended (e.g. user plugged in
@@ -378,7 +360,6 @@ export function useAudio(): UseAudioReturn {
       processorRef.current.port.postMessage({ type: "emit", emitting: false });
     }
     onChunkRef.current = null;
-    accumLocalRef.current = new Uint8Array(0);
     accumRemoteRef.current = new Int16Array(0);
     setIsRecording(false);
     setInputLevel(0);
@@ -407,7 +388,6 @@ export function useAudio(): UseAudioReturn {
     micInitPromiseRef.current = null;
     pttActiveRef.current = false;
     onChunkRef.current = null;
-    accumLocalRef.current = new Uint8Array(0);
     accumRemoteRef.current = new Int16Array(0);
     setIsRecording(false);
     setInputLevel(0);
