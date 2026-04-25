@@ -178,10 +178,12 @@ class RelayManager {
           // Send raw GSM packet to TCP eQSO clients and other relay listeners
           roomManager.broadcastToTcpAndRelays(config.localRoom, audioPkt, listenerId);
           // Decode GSM → Float32 vía FFmpeg (async).
+          // El payload es 198 bytes = 6 × 33-byte frames. Iteramos frame a frame.
           // El evento "pcm" del decoder (configurado en startRelay) envía a clientes WS.
           if (audioPkt.length >= 1 + AUDIO_PAYLOAD_SIZE) {
-            const gsmPayload = Buffer.from(audioPkt.buffer, audioPkt.byteOffset + 1, AUDIO_PAYLOAD_SIZE);
-            state.decoder.decode(gsmPayload);
+            for (let off = 1; off + 33 <= audioPkt.length; off += 33) {
+              state.decoder.decode(Buffer.from(audioPkt.buffer, audioPkt.byteOffset + off, 33));
+            }
           }
           state.rxPackets++;
           break;
