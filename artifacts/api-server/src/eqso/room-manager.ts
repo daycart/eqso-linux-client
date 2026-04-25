@@ -193,6 +193,27 @@ export class RoomManager extends EventEmitter {
     }
   }
 
+  /** Send PTT control packets (pttStarted/pttReleased) to local WS browser clients
+   *  and room listeners (relay-manager), but NOT to TCP clients (Windows relays like
+   *  0R-ASORAPA that disconnect when they receive action=0x02/0x03 user-update packets). */
+  broadcastToWsClientsAndListeners(room: string, data: Buffer, excludeId?: string): void {
+    const members = this.rooms.get(room);
+    if (members) {
+      for (const id of members) {
+        if (id === excludeId) continue;
+        const c = this.clients.get(id);
+        if (c?.protocol === "ws") {
+          try { c.send(data); } catch { /* ignore */ }
+        }
+      }
+    }
+    for (const listener of this.roomListeners.values()) {
+      if (listener.rooms.has(room)) {
+        try { listener.onData(room, data, excludeId ?? ""); } catch { /* ignore */ }
+      }
+    }
+  }
+
   /** Send data only to TCP clients in a room (skips WebSocket browser clients). */
   broadcastToTcpClientsInRoom(room: string, data: Buffer, excludeId?: string): void {
     const members = this.rooms.get(room);
