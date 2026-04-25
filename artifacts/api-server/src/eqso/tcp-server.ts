@@ -133,7 +133,11 @@ function processSingleByte(state: TcpClientState, byte: number): void {
 
     case EQSO_COMMANDS.RELEASE_PTT:
       if (client?.room) {
-        const rel = buildPttReleased(client.name);
+        // Usamos action=0x00 (user_joined/idle) en lugar de action=0x03 (ptt_released).
+        // El protocolo eQSO original de Windows usa action=0x00 para señalar "estación
+        // volvió a idle". Los relays Windows como 0R-ASORAPA no entienden action=0x03
+        // y se desconectan al recibirlo. action=0x00 es seguro para todos los clientes.
+        const rel = buildUserJoined(client.name, client.message ?? "");
         roomManager.broadcastToRoom(client.room, rel, state.id);
         // Solo [0x08] (canal liberado OK). El [0x06, 0x00] que enviábamos antes
         // hacía que los relays Windows eQSO se desconectaran 17ms después de
