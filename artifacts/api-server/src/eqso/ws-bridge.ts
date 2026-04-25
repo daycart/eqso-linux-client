@@ -85,16 +85,24 @@ function handleLocalMode(
   const localEncoder = new FfmpegGsmEncoder();
   localEncoder.start();
 
-  // When the encoder produces a GSM packet, broadcast it to TCP relay-daemon
-  // clients (and relay listeners). The room is looked up at emit time so we
-  // always use the current room even if the client switched rooms.
+  // GSM accumulator: collect 6×33=198 bytes before sending [0x01][198] to TCP clients.
+  // eQSO protocol mandates AUDIO_PAYLOAD_SIZE (198) bytes per audio packet.
+  // Without this, 0R-CB receives 34-byte packets which corrupt its stream parser.
+  let localGsmAccum = Buffer.alloc(0);
+
+  // When the encoder produces a GSM packet, accumulate until we have a full
+  // 198-byte payload, then broadcast to TCP relay-daemon clients.
   localEncoder.on("gsm", (gsm: Buffer) => {
     const client = roomManager.getClient(id);
     if (!client?.room) return;
-    const gsmPkt = Buffer.allocUnsafe(1 + gsm.length);
-    gsmPkt[0] = 0x01;
-    gsm.copy(gsmPkt, 1);
-    roomManager.broadcastToTcpAndRelays(client.room, gsmPkt, id);
+    localGsmAccum = Buffer.concat([localGsmAccum, gsm.slice(0, 33)]);
+    if (localGsmAccum.length >= AUDIO_PAYLOAD_SIZE) {
+      const pkt = Buffer.allocUnsafe(1 + AUDIO_PAYLOAD_SIZE);
+      pkt[0] = 0x01;
+      localGsmAccum.copy(pkt, 1, 0, AUDIO_PAYLOAD_SIZE);
+      roomManager.broadcastToTcpAndRelays(client.room, pkt, id);
+      localGsmAccum = localGsmAccum.slice(AUDIO_PAYLOAD_SIZE);
+    }
   });
 
   localDecoder.on("pcm", (pcm: Int16Array) => {
@@ -298,6 +306,7 @@ function handleLocalMode(
         }
 
         case "ptt_end": {
+          localGsmAccum = Buffer.alloc(0); // flush partial GSM accumulation to avoid frame leak
           const client = roomManager.getClient(id);
           if (client?.room && client.name) {
             roomManager.broadcastToRoom(client.room, buildPttReleased(client.name), id);
@@ -316,6 +325,7 @@ function handleLocalMode(
     onClose: () => {
       clearInterval(pingTimer);
       localPcmAccum = new Uint8Array(0);
+      localGsmAccum = Buffer.alloc(0);
       localDecoder.stop();
       localEncoder.stop();
       const client = roomManager.getClient(id);
