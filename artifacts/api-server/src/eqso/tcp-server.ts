@@ -284,8 +284,15 @@ function processMultiByte(state: TcpClientState, byte: number): void {
           roomManager.broadcastToTcpAndRelays(client.room, gsmPkt, state.id);
 
           // Decode GSM → Float32 vía FFmpeg (asíncrono).
+          // El payload es 198 bytes = 6 × 33-byte frames. El decoder GSM procesa
+          // un frame de 33 bytes por llamada, así que iteramos frame a frame.
           // El handler del evento "pcm" (registrado al conectar) envía a clientes WS.
-          tcpDecoders.get(state.id)?.decode(gsmPayload);
+          const dec = tcpDecoders.get(state.id);
+          if (dec) {
+            for (let off = 0; off + 33 <= gsmPayload.length; off += 33) {
+              dec.decode(gsmPayload.slice(off, off + 33));
+            }
+          }
         }
         state.buf = state.buf.slice(AUDIO_PAYLOAD_SIZE);
         if (state.buf.length === 0) {
