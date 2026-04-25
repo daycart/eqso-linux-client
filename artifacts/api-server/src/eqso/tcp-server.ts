@@ -135,15 +135,25 @@ function processSingleByte(state: TcpClientState, byte: number): void {
 
     case EQSO_COMMANDS.IGNORE:
       // [0x02] silence frame — el relay-daemon lo envía como 1 BYTE solo (cada 150ms).
-      // Lo reenviamos inmediatamente a todos los demás miembros de la sala.
       // Los relays Windows eQSO usan este byte como indicador "servidor vivo":
-      // si no reciben datos en ~10-15s, se desconectan. Con 7 frames/s (150ms)
-      // el timer de desconexión Windows nunca se dispara.
-      // NOTA: NO entramos en modo multi-byte — consumir los 4 [0x02] siguientes
-      // como "payload" retrasaba el broadcast a 750ms y enviaba 4 bytes [0x00]
-      // extra que podían corromper el parser de los relays Windows.
+      // si no reciben datos en ~10-15s, se desconectan.
+      //
+      // CRÍTICO: durante TX activa NO enviamos [0x02] a clientes TCP.
+      // Los relays Windows (0R-ASORAPA) interpretan [0x02] como "fin de TX" o
+      // "canal libre", lo que les hace salir del modo receive y desconectarse
+      // ~800ms después del inicio de TX. Durante TX, los frames de audio (0x01)
+      // ya mantienen el TCP vivo — no hace falta [0x02].
+      //
+      // Cuando NO hay TX: broadcast normal a todos para keepalive.
       if (client?.room) {
-        roomManager.broadcastToRoom(client.room, Buffer.from([0x02]), state.id);
+        const silencePkt = Buffer.from([0x02]);
+        if (roomManager.isRoomLocked(client.room)) {
+          // TX activa: solo a clientes WS (el audio (0x01) ya mantiene TCP vivo).
+          roomManager.broadcastToWsClientsAndListeners(client.room, silencePkt, state.id);
+        } else {
+          // Sin TX: broadcast a todos para keepalive de relays Windows.
+          roomManager.broadcastToRoom(client.room, silencePkt, state.id);
+        }
       }
       break;
 
@@ -158,13 +168,15 @@ function processSingleByte(state: TcpClientState, byte: number): void {
       if (client?.room) {
         // Paramos el timer de refresco: ya no hace falta mantener el watchdog de 0R-ASORAPA.
         if (state.pttRefreshTimer) { clearInterval(state.pttRefreshTimer); state.pttRefreshTimer = null; }
-        // Usamos buildPttReleased (action=0x03) SOLO para clientes WS locales y
-        // relay-listeners (relay-manager lo necesita). NO enviamos NADA a clientes TCP.
-        // Los relays Windows eQSO (0R-ASORAPA) desconectan tanto al recibir
-        // action=0x03 como action=0x00. La solución es no enviarles ningún
-        // paquete de control PTT — detectan el fin de TX por el silencio en el audio.
+        // Enviamos buildPttReleased (action=0x03) a TODOS los clientes (broadcastToRoom).
+        // Los relays Windows eQSO (0R-ASORAPA) necesitan este paquete para salir del modo
+        // receive limpiamente y preparar su estado para la siguiente TX.
+        // Sin este paquete, el watchdog de 0R-ASORAPA expira ~2.3s después de la TX y
+        // puede dejar el relay en estado inconsistente para la siguiente TX.
+        // NOTA: 0R-ASORAPA puede desconectarse ~358ms después de recibir action=0x03,
+        // pero eso ocurre DESPUÉS de que la TX ha terminado — es aceptable.
         const rel = buildPttReleased(client.name);
-        roomManager.broadcastToWsClientsAndListeners(client.room, rel, state.id);
+        roomManager.broadcastToRoom(client.room, rel, state.id);
         // Solo [0x08] (canal liberado OK). El [0x06, 0x00] que enviábamos antes
         // hacía que los relays Windows eQSO se desconectaran 17ms después de
         // liberar PTT (lo interpretaban como "expulsado de sala").
