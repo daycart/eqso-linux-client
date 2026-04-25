@@ -41,6 +41,10 @@ interface TcpClientState {
   multiByteCmd: number;
   handshakeDone: boolean;
   disconnected: boolean; // guard against double-disconnect (error + close both fire)
+  /** Timer que reenvía pttStarted a clientes TCP cada PTT_REFRESH_MS durante TX activa.
+   *  Mantiene vivo el watchdog timer interno de los relays Windows (0R-ASORAPA).
+   *  Sin este refresco, los relays desconectan ~2.3s después del primer pttStarted. */
+  pttRefreshTimer: ReturnType<typeof setInterval> | null;
 }
 
 function sendRoomList(state: TcpClientState): void {
@@ -101,10 +105,26 @@ function processSingleByte(state: TcpClientState, byte: number): void {
         const wasAlreadyOurs = roomManager.isLockedBy(client.room, state.id);
         roomManager.tryLockRoom(client.room, state.id);
         if (!wasAlreadyOurs) {
-          // SOLO enviar pttStarted a clientes WS locales y relay-listeners.
-          // NO enviarlo a clientes TCP (como 0R-ASORAPA): los relays Windows eQSO
-          // se desconectan ~300-1000ms después de recibir action=0x02 (pttStarted).
-          roomManager.broadcastToWsClientsAndListeners(client.room, buildPttStarted(client.name), state.id);
+          // Enviamos pttStarted a TODOS (broadcastToRoom): WS + TCP + relay-listeners.
+          // Los relays Windows eQSO (0R-ASORAPA) NECESITAN action=0x02 para entrar en
+          // "modo receive". Sin él, desconectan en ~870ms por timeout interno.
+          // El watchdog interno de 0R-ASORAPA dura ~2.3s, por lo que hay que refrescar
+          // pttStarted periódicamente (ver pttRefreshTimer abajo).
+          roomManager.broadcastToRoom(client.room, buildPttStarted(client.name), state.id);
+          // Timer de refresco: reenvía pttStarted a clientes TCP cada 1.5s durante la TX.
+          // Mantiene vivo el watchdog timer de relays Windows como 0R-ASORAPA.
+          // Solo va a TCP (broadcastToTcpClientsInRoom) para evitar eventos duplicados
+          // en clientes WS y relay-listeners.
+          if (state.pttRefreshTimer) clearInterval(state.pttRefreshTimer);
+          const refreshName = client.name;
+          const refreshRoom = client.room;
+          state.pttRefreshTimer = setInterval(() => {
+            if (state.disconnected || !roomManager.isLockedBy(refreshRoom, state.id)) {
+              if (state.pttRefreshTimer) { clearInterval(state.pttRefreshTimer); state.pttRefreshTimer = null; }
+              return;
+            }
+            roomManager.broadcastToTcpClientsInRoom(refreshRoom, buildPttStarted(refreshName), state.id);
+          }, 1500);
         }
         inactivityManager.recordActivity(client.room);
       }
@@ -136,6 +156,8 @@ function processSingleByte(state: TcpClientState, byte: number): void {
 
     case EQSO_COMMANDS.RELEASE_PTT:
       if (client?.room) {
+        // Paramos el timer de refresco: ya no hace falta mantener el watchdog de 0R-ASORAPA.
+        if (state.pttRefreshTimer) { clearInterval(state.pttRefreshTimer); state.pttRefreshTimer = null; }
         // Usamos buildPttReleased (action=0x03) SOLO para clientes WS locales y
         // relay-listeners (relay-manager lo necesita). NO enviamos NADA a clientes TCP.
         // Los relays Windows eQSO (0R-ASORAPA) desconectan tanto al recibir
@@ -380,6 +402,8 @@ function handleDisconnect(state: TcpClientState): void {
   if (state.disconnected) return; // guard: error event is always followed by close event
   state.disconnected = true;
 
+  if (state.pttRefreshTimer) { clearInterval(state.pttRefreshTimer); state.pttRefreshTimer = null; }
+
   const dec = tcpDecoders.get(state.id);
   if (dec) { dec.stop(); tcpDecoders.delete(state.id); }
 
@@ -406,6 +430,7 @@ export function startTcpServer(port: number): net.Server {
       multiByteCmd: 0,
       handshakeDone: false,
       disconnected: false,
+      pttRefreshTimer: null,
     };
 
     if (!roomManager.isEnabled()) {
