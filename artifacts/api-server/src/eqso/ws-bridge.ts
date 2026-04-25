@@ -121,9 +121,11 @@ function handleLocalMode(
 
       // GSM audio packet from inactivity manager or TCP relay: [0x01][198 bytes GSM]
       // Feed into the per-connection FFmpeg decoder (same reference impl as remote mode).
+      // El payload de 198 bytes = 6 × 33-byte frames: el decoder procesa 1 frame por llamada.
       if (data[0] === 0x01 && data.length === 1 + AUDIO_PAYLOAD_SIZE) {
-        const gsmBuf = Buffer.from(data.buffer, data.byteOffset + 1, AUDIO_PAYLOAD_SIZE);
-        localDecoder.decode(gsmBuf);
+        for (let off = 1; off + 33 <= data.length; off += 33) {
+          localDecoder.decode(Buffer.from(data.buffer, data.byteOffset + off, 33));
+        }
         return;
       }
 
@@ -498,19 +500,17 @@ function handleRemoteMode(
         break;
       }
       case "audio": {
-        // Incoming GSM packet from remote eQSO server: [0x01][33 bytes GSM]
+        // Incoming GSM packet from remote eQSO server: [0x01][198 bytes GSM]
         const pkt = ev.data as Buffer;
         if (pkt.length < 1 + AUDIO_PAYLOAD_SIZE) break;
         roomManager.updateRemoteConn(id, {
           rxBytes: (roomManager.getRemoteConn(id)?.rxBytes ?? 0) + pkt.length,
         });
-        // Feed 33-byte GSM frame into the streaming decoder
-        const gsmBuf = Buffer.from(
-          pkt.buffer,
-          pkt.byteOffset + 1,
-          Math.min(AUDIO_PAYLOAD_SIZE, GSM_PACKET_BYTES)
-        );
-        decoder.decode(gsmBuf);
+        // Decodificar 6 × 33-byte GSM frames del paquete de 198 bytes.
+        // El decoder procesa 1 frame por llamada.
+        for (let off = 1; off + 33 <= pkt.length; off += 33) {
+          decoder.decode(Buffer.from(pkt.buffer, pkt.byteOffset + off, 33));
+        }
         break;
       }
       case "keepalive":
