@@ -145,6 +145,11 @@ export class RoomManager extends EventEmitter {
     return this.roomLocks.has(room);
   }
 
+  /** Devuelve el clientId que tiene el lock de la sala, o undefined si no hay TX activa. */
+  getRoomLockHolder(room: string): string | undefined {
+    return this.roomLocks.get(room);
+  }
+
   unlockRoom(room: string, clientId: string): void {
     if (this.roomLocks.get(room) === clientId) this.roomLocks.delete(room);
   }
