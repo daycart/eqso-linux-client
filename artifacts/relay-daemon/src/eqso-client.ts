@@ -147,6 +147,7 @@ export class EqsoClient extends EventEmitter {
   private silenceTimer: ReturnType<typeof setInterval> | null = null;
   private transmitting = false;
   public connected = false;
+  private txingStations = new Set<string>();
 
   constructor(
     private readonly host: string,
@@ -336,12 +337,27 @@ export class EqsoClient extends EventEmitter {
         case 0x00: {
           const msgLen = off < pkt.length ? pkt[off++] : 0;
           const msg = pkt.slice(off, off + msgLen).toString("ascii");
-          this.emit("event", { type: "user_joined", data: { name, message: msg } } satisfies EqsoEvent);
+          // action=0x00 tras TX = PTT release (protocolo eQSO original usa idle/join para señalar fin de TX)
+          if (this.txingStations.has(name)) {
+            this.txingStations.delete(name);
+            this.emit("event", { type: "ptt_released", data: { name } } satisfies EqsoEvent);
+          } else {
+            this.emit("event", { type: "user_joined", data: { name, message: msg } } satisfies EqsoEvent);
+          }
           break;
         }
-        case 0x01: this.emit("event", { type: "user_left",    data: { name } } satisfies EqsoEvent); break;
-        case 0x02: this.emit("event", { type: "ptt_started",  data: { name } } satisfies EqsoEvent); break;
-        case 0x03: this.emit("event", { type: "ptt_released", data: { name } } satisfies EqsoEvent); break;
+        case 0x01:
+          this.txingStations.delete(name);
+          this.emit("event", { type: "user_left",    data: { name } } satisfies EqsoEvent);
+          break;
+        case 0x02:
+          this.txingStations.add(name);
+          this.emit("event", { type: "ptt_started",  data: { name } } satisfies EqsoEvent);
+          break;
+        case 0x03:
+          this.txingStations.delete(name);
+          this.emit("event", { type: "ptt_released", data: { name } } satisfies EqsoEvent);
+          break;
       }
       return;
     }
@@ -360,12 +376,26 @@ export class EqsoClient extends EventEmitter {
           const msg = pkt.slice(off, off + msgLen).toString("ascii");
           off += msgLen;
           if (off < pkt.length) off++;
-          this.emit("event", { type: "user_joined", data: { name, message: msg } } satisfies EqsoEvent);
+          if (this.txingStations.has(name)) {
+            this.txingStations.delete(name);
+            this.emit("event", { type: "ptt_released", data: { name } } satisfies EqsoEvent);
+          } else {
+            this.emit("event", { type: "user_joined", data: { name, message: msg } } satisfies EqsoEvent);
+          }
           break;
         }
-        case 0x01: this.emit("event", { type: "user_left",    data: { name } } satisfies EqsoEvent); break;
-        case 0x02: this.emit("event", { type: "ptt_started",  data: { name } } satisfies EqsoEvent); break;
-        case 0x03: this.emit("event", { type: "ptt_released", data: { name } } satisfies EqsoEvent); break;
+        case 0x01:
+          this.txingStations.delete(name);
+          this.emit("event", { type: "user_left",    data: { name } } satisfies EqsoEvent);
+          break;
+        case 0x02:
+          this.txingStations.add(name);
+          this.emit("event", { type: "ptt_started",  data: { name } } satisfies EqsoEvent);
+          break;
+        case 0x03:
+          this.txingStations.delete(name);
+          this.emit("event", { type: "ptt_released", data: { name } } satisfies EqsoEvent);
+          break;
       }
     }
   }
