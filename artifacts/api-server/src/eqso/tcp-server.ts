@@ -111,8 +111,9 @@ function processSingleByte(state: TcpClientState, byte: number): void {
           // El watchdog interno de 0R-ASORAPA dura ~2.3s, por lo que hay que refrescar
           // pttStarted periódicamente (ver pttRefreshTimer abajo).
           roomManager.broadcastToRoom(client.room, buildPttStarted(client.name), state.id);
-          // Timer de refresco: reenvía pttStarted a clientes TCP cada 1.5s durante la TX.
-          // Mantiene vivo el watchdog timer de relays Windows como 0R-ASORAPA.
+          // Timer de refresco: reenvía pttStarted a clientes TCP cada 800ms durante la TX.
+          // El watchdog interno de 0R-ASORAPA expira en ~1s sin pttStarted: con 800ms
+          // el refresco llega ANTES de que expire, manteniendo al relay en modo receive.
           // Solo va a TCP (broadcastToTcpClientsInRoom) para evitar eventos duplicados
           // en clientes WS y relay-listeners.
           if (state.pttRefreshTimer) clearInterval(state.pttRefreshTimer);
@@ -124,7 +125,7 @@ function processSingleByte(state: TcpClientState, byte: number): void {
               return;
             }
             roomManager.broadcastToTcpClientsInRoom(refreshRoom, buildPttStarted(refreshName), state.id);
-          }, 1500);
+          }, 800);
         }
         inactivityManager.recordActivity(client.room);
       }
@@ -393,6 +394,20 @@ async function handleJoin(
     if (m.id !== state.id) {
       logger.info({ to: m.name, joining: name }, "eQSO TCP notifying existing member of new join");
       m.send(joinedPkt);
+    }
+  }
+
+  // Si hay TX activa en la sala al unirse, enviar pttStarted al nuevo cliente
+  // para que entre en modo receive inmediatamente. Sin esto, el cliente se une
+  // mientras hay audio fluyendo pero sin saber que el canal está ocupado,
+  // lo que causa que 0R-ASORAPA interprete los frames de audio como protocolo
+  // desconocido y desconecte en <300ms.
+  const lockedById = roomManager.getRoomLockHolder(room);
+  if (lockedById) {
+    const txClient = roomManager.getClient(lockedById);
+    if (txClient) {
+      logger.info({ id: state.id, name, room, txBy: txClient.name }, "TCP JOIN during active TX — sending pttStarted to new client");
+      safeWrite(state, buildPttStarted(txClient.name));
     }
   }
 
