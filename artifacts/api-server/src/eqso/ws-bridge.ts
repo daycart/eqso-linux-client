@@ -373,7 +373,40 @@ function handleRemoteMode(
   // the last voice frames make it through before the channel closes.
   const PTT_TAIL_MS = 300;
 
+  // GSM frame rate limiter: eQSO protocol expects 1 frame every 20ms (50 fps).
+  // ffmpeg batches 960 PCM samples → 6 GSM frames all at once (one burst per
+  // browser AudioWorklet chunk = 120ms). Sending 6×33 bytes in a burst causes
+  // Windows eQSO relay clients (e.g. 0R-ASORAPA) to disconnect.
+  // Fix: queue frames and drain via setInterval at 20ms so each frame is
+  // delivered at the correct protocol rate.
+  const GSM_FRAME_INTERVAL_MS = 20;
+  const gsmFrameQueue: Buffer[] = [];
+  let gsmFrameTimer: ReturnType<typeof setInterval> | null = null;
+
+  function startGsmFrameTimer(): void {
+    if (gsmFrameTimer) return;
+    gsmFrameTimer = setInterval(() => {
+      const frame = gsmFrameQueue.shift();
+      if (frame) {
+        proxy.sendAudio(frame);
+        roomManager.updateRemoteConn(id, {
+          txBytes: (roomManager.getRemoteConn(id)?.txBytes ?? 0) + frame.length,
+        });
+        logger.info({ bytes: frame.length }, "Remote TX: sent GSM packet");
+      } else {
+        clearInterval(gsmFrameTimer!);
+        gsmFrameTimer = null;
+      }
+    }, GSM_FRAME_INTERVAL_MS);
+  }
+
+  function stopGsmFrameTimer(): void {
+    if (gsmFrameTimer) { clearInterval(gsmFrameTimer); gsmFrameTimer = null; }
+    gsmFrameQueue.length = 0;
+  }
+
   function releasePtt(): void {
+    stopGsmFrameTimer();
     pttGranted = false;
     pcmAccum = new Int16Array(0);
     proxy.sendPttEnd();
@@ -395,14 +428,13 @@ function handleRemoteMode(
     sendBin(ws, Buffer.concat([header, payload]));
   });
 
-  // When encoder produces a GSM packet, forward it to the eQSO server
+  // When encoder produces a GSM packet, queue it for rate-limited delivery.
+  // Do NOT call proxy.sendAudio() directly — that would burst 6 frames at once
+  // and disconnect Windows eQSO relay clients (see rate limiter comment above).
   encoder.on("gsm", (gsm: Buffer) => {
     if (!pttGranted) return; // discard if PTT released mid-frame
-    proxy.sendAudio(gsm);
-    roomManager.updateRemoteConn(id, {
-      txBytes: (roomManager.getRemoteConn(id)?.txBytes ?? 0) + gsm.length,
-    });
-    logger.info({ bytes: gsm.length }, "Remote TX: sent GSM packet");
+    gsmFrameQueue.push(Buffer.from(gsm));
+    startGsmFrameTimer();
   });
 
   proxy.on("event", (ev: ProxyEvent) => {
@@ -603,6 +635,7 @@ function handleRemoteMode(
 
     onClose: () => {
       if (pttTailTimer) { clearTimeout(pttTailTimer); pttTailTimer = null; }
+      stopGsmFrameTimer();
       if (pttGranted) proxy.sendPttEnd(); // release channel before disconnecting
       pttGranted = false;
       pcmAccum = new Int16Array(0);
