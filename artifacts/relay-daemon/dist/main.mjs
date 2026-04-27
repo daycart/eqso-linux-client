@@ -225,6 +225,18 @@ var EqsoClient = class extends EventEmitter {
       sock.write(HANDSHAKE_CLIENT);
     });
     sock.on("data", (data) => {
+      let ob = -1;
+      for (let i = 0; i < data.length; i++) {
+        if (data[i] === 11) {
+          ob = i;
+          break;
+        }
+      }
+      if (ob >= 0) {
+        const ctx = data.slice(Math.max(0, ob - 8), Math.min(data.length, ob + 12));
+        console.log(`[raw] 0x0b encontrado @byte${ob} de chunk(len=${data.length}): ...${ctx.toString("hex")}...`);
+        console.log(`[raw] chunk completo(len=${data.length}): ${data.slice(0, 60).toString("hex")}${data.length > 60 ? "\u2026" : ""}`);
+      }
       this.parser.feed(data);
       this.drainPackets();
     });
