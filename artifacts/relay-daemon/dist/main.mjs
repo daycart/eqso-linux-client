@@ -174,8 +174,8 @@ var EqsoPacketParser = class {
       this.acc = this.acc.slice(off2);
       return p2;
     }
-    if (this.acc.length < 2) return null;
-    let off = 2;
+    if (this.acc.length < 5) return null;
+    let off = 5;
     for (let i = 0; i < count; i++) {
       if (this.acc.length < off + 2) return null;
       const action = this.acc[off++];
@@ -407,7 +407,7 @@ var EqsoClient = class extends EventEmitter {
       }
       return;
     }
-    let off = 2;
+    let off = 5;
     for (let i = 0; i < count; i++) {
       if (off + 2 > pkt.length) break;
       const action = pkt[off++];
