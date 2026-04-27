@@ -106,7 +106,6 @@ var EqsoPacketParser = class {
       if (cmd === 11) {
         if (this.acc.length < 2) return null;
         const tlen = this.acc[1];
-        console.log(`[parser] [RAW 0x0b tlen=${tlen}] ${this.acc.slice(0, Math.min(tlen + 8, this.acc.length)).toString("hex")}`);
         const total = 2 + tlen + 1;
         if (this.acc.length < total) return null;
         const p = this.acc.slice(0, total);
@@ -134,10 +133,6 @@ var EqsoPacketParser = class {
         return p;
       }
       if (cmd === 22) {
-        const cnt = this.acc.length > 1 ? this.acc[1] : -1;
-        if (cnt > 1) {
-          console.log(`[parser] [RAW 0x16 count=${cnt}] ${this.acc.slice(0, Math.min(60, this.acc.length)).toString("hex")}`);
-        }
         const r = this.parseUserUpdate();
         if (r === null) return null;
         if (r === false) continue;
@@ -179,19 +174,24 @@ var EqsoPacketParser = class {
       this.acc = this.acc.slice(off2);
       return p2;
     }
+    if (count > 50) {
+      this.acc = this.acc.slice(1);
+      return false;
+    }
     if (this.acc.length < 5) return null;
     let off = 5;
     for (let i = 0; i < count; i++) {
-      if (this.acc.length < off + 2) return null;
-      const action = this.acc[off++];
+      if (this.acc.length < off + 5) return null;
+      const action = this.acc[off];
+      off += 4;
       const nameLen = this.acc[off++];
       if (this.acc.length < off + nameLen) return null;
       off += nameLen;
       if (action === 0) {
         if (this.acc.length < off + 1) return null;
         const msgLen = this.acc[off++];
-        if (this.acc.length < off + msgLen) return null;
-        off += msgLen;
+        if (this.acc.length < off + msgLen + 1) return null;
+        off += msgLen + 1;
       }
     }
     const p = this.acc.slice(0, off);
@@ -414,8 +414,9 @@ var EqsoClient = class extends EventEmitter {
     }
     let off = 5;
     for (let i = 0; i < count; i++) {
-      if (off + 2 > pkt.length) break;
-      const action = pkt[off++];
+      if (off + 5 > pkt.length) break;
+      const action = pkt[off];
+      off += 4;
       const nameLen = pkt[off++];
       if (off + nameLen > pkt.length) break;
       const name = sanitize(pkt.slice(off, off + nameLen).toString("ascii"));
@@ -425,6 +426,7 @@ var EqsoClient = class extends EventEmitter {
           const msgLen = off < pkt.length ? pkt[off++] : 0;
           const msg = sanitize(pkt.slice(off, off + msgLen).toString("ascii"));
           off += msgLen;
+          if (off < pkt.length) off++;
           if (this.txingStations.has(name)) {
             this.txingStations.delete(name);
             this.emit("event", { type: "ptt_released", data: { name } });
