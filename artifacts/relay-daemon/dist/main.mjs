@@ -174,20 +174,19 @@ var EqsoPacketParser = class {
       this.acc = this.acc.slice(off2);
       return p2;
     }
-    if (this.acc.length < 5) return null;
-    let off = 5;
+    if (this.acc.length < 2) return null;
+    let off = 2;
     for (let i = 0; i < count; i++) {
-      if (this.acc.length < off + 5) return null;
-      const action = this.acc[off];
-      off += 4;
+      if (this.acc.length < off + 2) return null;
+      const action = this.acc[off++];
       const nameLen = this.acc[off++];
       if (this.acc.length < off + nameLen) return null;
       off += nameLen;
       if (action === 0) {
         if (this.acc.length < off + 1) return null;
         const msgLen = this.acc[off++];
-        if (this.acc.length < off + msgLen + 1) return null;
-        off += msgLen + 1;
+        if (this.acc.length < off + msgLen) return null;
+        off += msgLen;
       }
     }
     const p = this.acc.slice(0, off);
@@ -360,10 +359,6 @@ var EqsoClient = class extends EventEmitter {
         break;
       }
       case 22:
-        if (pkt[1] > 1) {
-          const hex = pkt.slice(0, Math.min(80, pkt.length)).toString("hex");
-          log(`[DEBUG 0x16 count=${pkt[1]} len=${pkt.length}] ${hex}`);
-        }
         this.handleUserUpdate(pkt);
         break;
       case 1:
@@ -412,11 +407,10 @@ var EqsoClient = class extends EventEmitter {
       }
       return;
     }
-    let off = 5;
+    let off = 2;
     for (let i = 0; i < count; i++) {
-      if (off + 5 > pkt.length) break;
-      const action = pkt[off];
-      off += 4;
+      if (off + 2 > pkt.length) break;
+      const action = pkt[off++];
       const nameLen = pkt[off++];
       if (off + nameLen > pkt.length) break;
       const name = sanitize(pkt.slice(off, off + nameLen).toString("ascii"));
@@ -426,7 +420,6 @@ var EqsoClient = class extends EventEmitter {
           const msgLen = off < pkt.length ? pkt[off++] : 0;
           const msg = sanitize(pkt.slice(off, off + msgLen).toString("ascii"));
           off += msgLen;
-          if (off < pkt.length) off++;
           if (this.txingStations.has(name)) {
             this.txingStations.delete(name);
             this.emit("event", { type: "ptt_released", data: { name } });
