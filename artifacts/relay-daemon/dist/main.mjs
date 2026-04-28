@@ -108,6 +108,11 @@ var EqsoPacketParser = class {
         const tlen = this.acc[1];
         const total = 2 + tlen + 1;
         if (this.acc.length < total) return null;
+        const isAscii = this.acc.slice(2, 2 + tlen).every((b) => b >= 32 && b <= 126);
+        if (!isAscii) {
+          this.acc = this.acc.slice(1);
+          continue;
+        }
         const p = this.acc.slice(0, total);
         this.acc = this.acc.slice(total);
         return p;
