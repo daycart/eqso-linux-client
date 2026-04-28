@@ -407,8 +407,10 @@ var EqsoClient = class extends EventEmitter {
           this.emit("event", { type: "user_left", data: { name } });
           break;
         case 2:
-          this.txingStations.add(name);
-          this.emit("event", { type: "ptt_started", data: { name } });
+          if (!this.txingStations.has(name)) {
+            this.txingStations.add(name);
+            this.emit("event", { type: "ptt_started", data: { name } });
+          }
           break;
         case 3:
           this.txingStations.delete(name);
@@ -445,8 +447,10 @@ var EqsoClient = class extends EventEmitter {
           this.emit("event", { type: "user_left", data: { name } });
           break;
         case 2:
-          this.txingStations.add(name);
-          this.emit("event", { type: "ptt_started", data: { name } });
+          if (!this.txingStations.has(name)) {
+            this.txingStations.add(name);
+            this.emit("event", { type: "ptt_started", data: { name } });
+          }
           break;
         case 3:
           this.txingStations.delete(name);
