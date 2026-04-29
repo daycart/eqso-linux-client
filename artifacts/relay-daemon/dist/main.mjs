@@ -125,12 +125,32 @@ var EqsoPacketParser = class {
       if (cmd === 20) {
         if (this.acc.length < 5) return null;
         const count = this.acc[1];
+        if (count > 32) {
+          this.acc = this.acc.slice(1);
+          continue;
+        }
         let off = 5;
+        let garbled = false;
         for (let i = 0; i < count; i++) {
           if (off >= this.acc.length) return null;
           const nlen = this.acc[off++];
+          if (nlen > 50) {
+            garbled = true;
+            break;
+          }
           if (off + nlen > this.acc.length) return null;
+          for (let j = 0; j < nlen; j++) {
+            if (this.acc[off + j] < 32 || this.acc[off + j] > 126) {
+              garbled = true;
+              break;
+            }
+          }
+          if (garbled) break;
           off += nlen;
+        }
+        if (garbled) {
+          this.acc = this.acc.slice(1);
+          continue;
         }
         const p = this.acc.slice(0, off);
         this.acc = this.acc.slice(off);
