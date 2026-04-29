@@ -1540,8 +1540,7 @@ audio.on("playback_ended", () => {
   log5(`[rxInhibit] playback_ended: suppress extendido \u2192 ${new Date(postRxVoxSuppressUntil).toISOString()} (prev=${new Date(prev).toISOString()})`);
 });
 audio.on("recorder_restarted", () => {
-  startupSuppressUntil = Date.now() + cfg.audio.startupVoxSuppressMs;
-  log5(`[vox] arecord reiniciado \u2014 startup suppress reseteado hasta ${new Date(startupSuppressUntil).toISOString()}`);
+  log5(`[vox] arecord reiniciado (semi-duplex) \u2014 postRxVoxSuppressUntil hasta ${new Date(postRxVoxSuppressUntil).toISOString()}`);
 });
 audio.on("pcm_chunk", (pcm) => {
   let sum = 0;
