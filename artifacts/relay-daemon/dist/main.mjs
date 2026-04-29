@@ -279,9 +279,11 @@ var EqsoClient = class extends EventEmitter {
     this.write(pkt);
     log(`JOIN enviado: callsign="${name}" sala="${room}"`);
   }
-  /** Pausa el silence heartbeat para que podamos transmitir. */
+  /** Anuncia PTT al servidor [0x09] y pausa el silence heartbeat. */
   startTx() {
     this.transmitting = true;
+    this.write(Buffer.from([9]));
+    log("PTT anunciado [0x09]");
   }
   /** Envía un paquete GSM de 198 bytes al servidor. */
   sendAudio(gsm) {
