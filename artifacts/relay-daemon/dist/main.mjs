@@ -1475,7 +1475,6 @@ var RX_HANG_MS = 400;
 var postTxSuppressUntil = 0;
 var POST_TX_SUPPRESS_MS = 1500;
 var postRxVoxSuppressUntil = 0;
-var POST_RX_SUPPRESS_MS = 800;
 var POST_APLAY_VOX_SUPPRESS_MS = 2500;
 var POST_TX_VOX_SUPPRESS_MS = 2500;
 var startupSuppressUntil = Date.now() + cfg.audio.startupVoxSuppressMs;
@@ -1489,7 +1488,7 @@ function setRxActive() {
     rxInhibitTimer = null;
     serialPtt.set(false);
     audio.endRx();
-    const rxSuppressUntil = Date.now() + POST_RX_SUPPRESS_MS;
+    const rxSuppressUntil = Date.now() + POST_APLAY_VOX_SUPPRESS_MS;
     const prev = postRxVoxSuppressUntil;
     postRxVoxSuppressUntil = Math.max(postRxVoxSuppressUntil, rxSuppressUntil);
     log5(`[rxInhibit] suppress: prev=${new Date(prev).toISOString()} new=${new Date(postRxVoxSuppressUntil).toISOString()}`);
