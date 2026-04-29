@@ -77,7 +77,6 @@ import net from "net";
 import { EventEmitter } from "events";
 var HANDSHAKE_CLIENT = Buffer.from([10, 130, 0, 0, 0]);
 var AUDIO_PAYLOAD_SIZE = 33;
-var SILENCE_INTERVAL_MS = 150;
 var SOCKET_TIMEOUT_MS = 9e4;
 var EqsoPacketParser = class {
   acc = Buffer.alloc(0);
@@ -213,7 +212,6 @@ var EqsoClient = class extends EventEmitter {
   socket = null;
   parser = new EqsoPacketParser();
   handshakeDone = false;
-  silenceTimer = null;
   transmitting = false;
   connected = false;
   txingStations = /* @__PURE__ */ new Set();
@@ -304,17 +302,10 @@ var EqsoClient = class extends EventEmitter {
     log("PTT liberado [0x0d]");
   }
   // ── Privado ────────────────────────────────────────────────────────────────
+  // No enviamos [0x02] — ver nota en el encabezado del modulo.
   startSilence() {
-    if (this.silenceTimer) return;
-    this.silenceTimer = setInterval(() => {
-      if (!this.transmitting) this.write(Buffer.from([2]));
-    }, SILENCE_INTERVAL_MS);
   }
   stopSilence() {
-    if (this.silenceTimer) {
-      clearInterval(this.silenceTimer);
-      this.silenceTimer = null;
-    }
   }
   write(data) {
     if (this.socket && !this.socket.destroyed && this.connected) {
@@ -1472,6 +1463,23 @@ var rxPackets = 0;
 var txPackets = 0;
 var usersInRoom = [];
 var lastPttIgnoredLogMs = 0;
+var IDLE_RECONNECT_MS = 28e3;
+var idleReconnectTimer = null;
+function resetIdleTimer() {
+  if (idleReconnectTimer) clearTimeout(idleReconnectTimer);
+  idleReconnectTimer = setTimeout(() => {
+    idleReconnectTimer = null;
+    if (pttActive) return;
+    log5("Reconectando por inactividad prolongada (prevenir timeout servidor)\u2026");
+    eqsoClient?.disconnect();
+  }, IDLE_RECONNECT_MS);
+}
+function cancelIdleTimer() {
+  if (idleReconnectTimer) {
+    clearTimeout(idleReconnectTimer);
+    idleReconnectTimer = null;
+  }
+}
 var rxActive = false;
 var rxInhibitTimer = null;
 var RX_HANG_MS = 400;
@@ -1541,6 +1549,7 @@ vox.on("ptt_start", () => {
     return;
   }
   pttActive = true;
+  cancelIdleTimer();
   audio.setTxEnabled(true);
   eqsoClient.startTx();
   log5(`VOX: PTT activado \u2014 inicio transmision (suppress was ${new Date(postRxVoxSuppressUntil).toISOString()})`);
@@ -1552,6 +1561,7 @@ vox.on("ptt_end", () => {
   eqsoClient.endTx();
   postTxSuppressUntil = Date.now() + POST_TX_SUPPRESS_MS;
   postRxVoxSuppressUntil = Math.max(postRxVoxSuppressUntil, Date.now() + POST_TX_VOX_SUPPRESS_MS);
+  resetIdleTimer();
   log5(`VOX: PTT liberado \u2014 fin transmision (suppress hasta ${new Date(postRxVoxSuppressUntil).toISOString()})`);
 });
 audio.on("gsm_tx", (gsm) => {
@@ -1576,6 +1586,7 @@ function connect() {
         reconnectAttempts = 0;
         log5("Conectado \u2014 enviando JOIN\u2026");
         client.sendJoin(cfg.callsign, cfg.room, cfg.message, cfg.password);
+        resetIdleTimer();
         break;
       case "room_list":
         log5(`Salas: ${ev.data.join(", ")}`);
@@ -1632,8 +1643,11 @@ function connect() {
         log5(`Mensaje servidor: ${ev.data}`);
         break;
       case "keepalive":
+        log5("Keepalive recibido del servidor [0x0c]");
+        resetIdleTimer();
         break;
       case "disconnected":
+        cancelIdleTimer();
         log5("Desconectado del servidor eQSO");
         if (pttActive) {
           pttActive = false;
