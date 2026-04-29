@@ -279,8 +279,9 @@ var EqsoClient = class extends EventEmitter {
     this.write(pkt);
     log(`JOIN enviado: callsign="${name}" sala="${room}"`);
   }
-  /** Anuncia PTT al servidor [0x09] y pausa el silence heartbeat. */
+  /** Anuncia PTT al servidor [0x09] y detiene el silence heartbeat síncronamente. */
   startTx() {
+    this.stopSilence();
     this.transmitting = true;
     this.write(Buffer.from([9]));
     log("PTT anunciado [0x09]");
@@ -299,6 +300,7 @@ var EqsoClient = class extends EventEmitter {
   endTx() {
     this.transmitting = false;
     this.write(Buffer.from([13]));
+    this.startSilence();
     log("PTT liberado [0x0d]");
   }
   // ── Privado ────────────────────────────────────────────────────────────────
@@ -1469,6 +1471,7 @@ var reconnectTimer = null;
 var rxPackets = 0;
 var txPackets = 0;
 var usersInRoom = [];
+var lastPttIgnoredLogMs = 0;
 var rxActive = false;
 var rxInhibitTimer = null;
 var RX_HANG_MS = 400;
@@ -1522,8 +1525,12 @@ audio.on("pcm_chunk", (pcm) => {
 });
 vox.on("ptt_start", () => {
   if (!eqsoClient?.connected) {
-    log5("VOX: ptt_start ignorado \u2014 sin conexion, reseteando estado VOX");
     vox.resetState();
+    const nowMs = Date.now();
+    if (nowMs - lastPttIgnoredLogMs > 1e3) {
+      lastPttIgnoredLogMs = nowMs;
+      log5("VOX: ptt_start ignorado \u2014 sin conexion, reseteando estado VOX");
+    }
     return;
   }
   if (pttActive || rxActive) return;
