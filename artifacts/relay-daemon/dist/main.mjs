@@ -77,6 +77,7 @@ import net from "net";
 import { EventEmitter } from "events";
 var HANDSHAKE_CLIENT = Buffer.from([10, 130, 0, 0, 0]);
 var AUDIO_PAYLOAD_SIZE = 33;
+var SILENCE_INTERVAL_MS = 150;
 var SOCKET_TIMEOUT_MS = 9e4;
 var EqsoPacketParser = class {
   acc = Buffer.alloc(0);
@@ -302,6 +303,10 @@ var EqsoClient = class extends EventEmitter {
   }
   // ── Privado ────────────────────────────────────────────────────────────────
   startSilence() {
+    if (this.silenceTimer) return;
+    this.silenceTimer = setInterval(() => {
+      if (!this.transmitting) this.write(Buffer.from([2]));
+    }, SILENCE_INTERVAL_MS);
   }
   stopSilence() {
     if (this.silenceTimer) {
