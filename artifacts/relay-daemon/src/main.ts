@@ -17,6 +17,21 @@ import { SerialPtt } from "./serial-ptt.js";
 import { startControlServer, RelayStatus } from "./control-server.js";
 import { GSM_PACKET_BYTES } from "./gsm-codec.js";
 
+// ─── Handlers globales de errores no capturados ───────────────────────────────
+// Captura el stack trace completo antes de que systemd reinicie el daemon.
+// Sin estos handlers, Node crashea sin log (solo "Unhandled 'error' event").
+// Con ellos, el journal mostrará exactamente qué socket/stream causó el crash.
+process.on("uncaughtException", (err, origin) => {
+  console.error(`[FATAL] ${new Date().toISOString()} UncaughtException (${origin}):`);
+  console.error(err);
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error(`[FATAL] ${new Date().toISOString()} UnhandledRejection:`);
+  console.error(reason);
+  process.exit(1);
+});
+
 const cfg = loadConfig();
 const startTime = Date.now();
 
