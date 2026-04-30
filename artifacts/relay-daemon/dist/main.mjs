@@ -1547,6 +1547,10 @@ var lastPttIgnoredLogMs = 0;
 var TOT_MAX_MS = 55e3;
 var TOT_BREAK_MS = 4e3;
 var txTotTimer = null;
+var TX_FAIL_MAX_SUPPRESS_MS = 6e4;
+var TX_SUCCESS_MIN_MS = 1e4;
+var txDisconnectStreak = 0;
+var txStartedAt = 0;
 var IDLE_RECONNECT_MS = 28e3;
 var idleReconnectTimer = null;
 function resetIdleTimer() {
@@ -1618,6 +1622,11 @@ function totExpired() {
   txTotTimer = null;
   if (!pttActive || !eqsoClient?.connected) return;
   log5(`[TOT] ${TOT_MAX_MS / 1e3}s de TX m\xE1ximo alcanzado \u2014 pausa forzada de ${TOT_BREAK_MS / 1e3}s`);
+  if (txDisconnectStreak > 0) {
+    log5(`[TOT] TX exitosa (55s) \u2014 resetear streak (era ${txDisconnectStreak})`);
+    txDisconnectStreak = 0;
+  }
+  txStartedAt = 0;
   pttActive = false;
   audio.setTxEnabled(false);
   eqsoClient.endTx();
@@ -1658,12 +1667,13 @@ vox.on("ptt_start", () => {
     return;
   }
   pttActive = true;
+  txStartedAt = Date.now();
   cancelIdleTimer();
   audio.setTxEnabled(true);
   eqsoClient.startTx();
   if (txTotTimer) clearTimeout(txTotTimer);
   txTotTimer = setTimeout(totExpired, TOT_MAX_MS);
-  log5(`VOX: PTT activado \u2014 inicio transmision (suppress was ${new Date(postRxVoxSuppressUntil).toISOString()})`);
+  log5(`VOX: PTT activado \u2014 inicio transmision (suppress was ${new Date(postRxVoxSuppressUntil).toISOString()}, streak=${txDisconnectStreak})`);
 });
 vox.on("ptt_end", () => {
   if (!eqsoClient?.connected || !pttActive) return;
@@ -1674,6 +1684,11 @@ vox.on("ptt_end", () => {
   pttActive = false;
   audio.setTxEnabled(false);
   eqsoClient.endTx();
+  if (txStartedAt > 0 && Date.now() - txStartedAt >= TX_SUCCESS_MIN_MS) {
+    if (txDisconnectStreak > 0) log5(`[TOT] TX exitosa (${Math.round((Date.now() - txStartedAt) / 1e3)}s) \u2014 resetear streak (era ${txDisconnectStreak})`);
+    txDisconnectStreak = 0;
+  }
+  txStartedAt = 0;
   postTxSuppressUntil = Date.now() + POST_TX_SUPPRESS_MS;
   postRxVoxSuppressUntil = Math.max(postRxVoxSuppressUntil, Date.now() + POST_TX_VOX_SUPPRESS_MS);
   resetIdleTimer();
@@ -1786,15 +1801,27 @@ function connect() {
         }
         log5("Desconectado del servidor eQSO");
         if (pttActive) {
+          const txDurationMs = txStartedAt > 0 ? Date.now() - txStartedAt : 0;
+          const isFastDisconnect = txDurationMs < TX_SUCCESS_MIN_MS;
+          if (isFastDisconnect) {
+            txDisconnectStreak++;
+          } else {
+            txDisconnectStreak = 0;
+          }
+          txStartedAt = 0;
           pttActive = false;
           audio.setTxEnabled(false);
           vox.resetState();
+          const suppressMs = Math.min(
+            TOT_BREAK_MS * Math.pow(2, Math.max(0, txDisconnectStreak - 1)),
+            TX_FAIL_MAX_SUPPRESS_MS
+          );
           postRxVoxSuppressUntil = Math.max(
             postRxVoxSuppressUntil,
-            Date.now() + TOT_BREAK_MS
+            Date.now() + suppressMs
           );
           log5(
-            `[vox] PTT reseteado por desconexion \u2014 suppress VOX ${TOT_BREAK_MS / 1e3}s hasta ${new Date(postRxVoxSuppressUntil).toISOString()}`
+            `[vox] PTT reseteado por desconexion (TX dur\xF3 ${Math.round(txDurationMs / 1e3)}s, streak=${txDisconnectStreak}) \u2014 suppress ${Math.round(suppressMs / 1e3)}s hasta ${new Date(postRxVoxSuppressUntil).toISOString()}`
           );
         }
         scheduleReconnect();
