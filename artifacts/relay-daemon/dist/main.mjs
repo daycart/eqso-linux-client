@@ -1167,6 +1167,10 @@ var AlsaAudio = class extends EventEmitter3 {
     log2(`aplay ${args.join(" ")}`);
     this.player = spawn2("aplay", args, { stdio: ["pipe", "ignore", "pipe"] });
     const p = this.player;
+    p.stdin.on("error", (err) => {
+      if (err.code === "EPIPE" || err.code === "ERR_STREAM_DESTROYED") return;
+      log2(`[aplay] stdin error: ${err.message}`);
+    });
     p.stderr.on("data", (d) => {
       const msg = d.toString().trim();
       if (msg) log2(`[aplay] ${msg}`);
