@@ -49,6 +49,7 @@ const TX_FAIL_MAX_SUPPRESS_MS = 60_000;  // máximo 60s de pausa tras fallos
 const TX_SUCCESS_MIN_MS       = 10_000;  // TX >10s = "exitosa", resetear contador
 let txDisconnectStreak = 0;   // fallos TX consecutivos (servidor corta en <10s)
 let txStartedAt       = 0;   // timestamp de inicio de TX actual
+let renewingSession   = false; // true mientras esperamos confirmacion de re-JOIN mid-TX
 
 // ─── Reconexion por idle (prevenir timeout de sesion del servidor) ────────────
 // Sin [0x02] heartbeat, el servidor externo cierra la conexion tras ~30-35s
@@ -229,6 +230,32 @@ function totExpired(): void {
   txSilenceFrames = 0;
 }
 
+// ─── Ceder canal (semi-duplex): otro usuario tiene el PTT ─────────────────────
+// Llamado cuando el servidor señala canal ocupado (0x08) o manda audio durante TX.
+// NO incrementa txDisconnectStreak (es una cesión voluntaria, no un fallo).
+function yieldTx(): void {
+  if (!pttActive) return;
+  if (txTotTimer) { clearTimeout(txTotTimer); txTotTimer = null; }
+  const txDurationMs = txStartedAt > 0 ? Date.now() - txStartedAt : 0;
+  txStartedAt = 0;
+  pttActive = false;
+  renewingSession = false;
+  audio.setTxEnabled(false);
+  eqsoClient?.endTx();
+  // Suppress corto: el canal lo ocupa otro usuario durante su TX.
+  // El VOX retomará TX cuando el otro suelte (setRxActive inhibe mientras hay audio).
+  postTxSuppressUntil = Date.now() + POST_TX_SUPPRESS_MS;
+  resetIdleTimer();
+  vox.resetState();
+  log(`[semi-duplex] TX cedida (duró ${Math.round(txDurationMs / 1000)}s) — esperando canal libre`);
+  const total = txRealFrames + txSilenceFrames;
+  const silencePct = total > 0 ? Math.round((txSilenceFrames / total) * 100) : 0;
+  if (total > 0)
+    log(`[semi-duplex] frames: ${txRealFrames} real + ${txSilenceFrames} silencio = ${silencePct}% silencio`);
+  txRealFrames = 0;
+  txSilenceFrames = 0;
+}
+
 // Cuando el VOX o control HTTP activan PTT
 vox.on("ptt_start", () => {
   if (!eqsoClient?.connected) {
@@ -361,6 +388,27 @@ function connect(): void {
 
       case "room_list":
         log(`Salas: ${(ev.data as string[]).join(", ")}`);
+        if (pttActive && client.connected) {
+          if (!renewingSession) {
+            // El servidor manda room_list durante TX = renovacion de sesion:
+            // espera que el cliente reenvíe JOIN (0x1a) para validar el indicativo.
+            // Si el cliente sigue mandando solo frames GSM (0x01), el servidor
+            // buscará un byte 0x1a dentro del audio y parseará el resto como
+            // callsign inválido → "Indicativo invalido" → FIN.
+            // Solución: re-enviar JOIN inmediatamente (< 1.2s de ventana).
+            renewingSession = true;
+            log("[session] Room list recibido durante TX — re-enviando JOIN para renovar sesion");
+            client.sendJoin(cfg.callsign, cfg.room, cfg.message, cfg.password);
+          } else {
+            // Segunda room_list = servidor confirmó el re-JOIN.
+            // Re-enviar PTT (0x09) para retomar el turno de TX.
+            renewingSession = false;
+            log("[session] Re-JOIN confirmado — re-enviando PTT [0x09]");
+            client.startTx();
+          }
+        } else {
+          renewingSession = false;
+        }
         break;
 
       case "user_joined": {
@@ -393,6 +441,16 @@ function connect(): void {
         break;
       }
 
+      case "channel_busy": {
+        // 0x08 del servidor = "canal ocupado, otro usuario tiene el PTT"
+        // Ceder el canal inmediatamente para no colisionar.
+        if (pttActive) {
+          log("[semi-duplex] Canal ocupado [0x08] — cediendo TX al otro usuario");
+          yieldTx();
+        }
+        break;
+      }
+
       case "audio": {
         resetIdleTimer(); // paquete de audio = servidor activo — reiniciar countdown
         const pkt = ev.data as Buffer;
@@ -401,15 +459,15 @@ function connect(): void {
           break;
         }
         rxPackets++;
-        // Descartar si estamos en TX local (el servidor no nos manda nuestro
-        // propio audio — excluye al emisor en broadcastToTcpAndRelays —, así
-        // que el único audio que llega es de otros usuarios).
-        // postTxSuppressUntil: guarda de 800ms tras endTx() por si el server
-        // tiene paquetes de otros en tránsito que lleguen en ese momento.
+        // Si estamos TX y el servidor nos manda audio de otro usuario → colisión.
+        // Ceder el canal: el otro usuario tiene prioridad (ya estaba TX antes).
+        // El VOX retomará TX cuando el otro termine y no haya audio entrante.
         if (pttActive) {
-          if (rxPackets <= 3 || rxPackets % 20 === 0)
-            log(`[audio] pkt#${rxPackets} DESCARTADO — pttActive=true (TX local activo)`);
-          break;
+          if (rxPackets === 1)
+            log(`[semi-duplex] Audio entrante durante TX — colision de canal, cediendo`);
+          yieldTx();
+          // No break: seguir al bloque de reproducción para silenciar el speaker
+          // correctamente. yieldTx() pone pttActive=false, así el código abajo lo maneja.
         }
         const suppRestMs = postTxSuppressUntil - Date.now();
         if (suppRestMs > 0) {
@@ -443,6 +501,7 @@ function connect(): void {
       case "disconnected":
         cancelIdleTimer();
         if (txTotTimer) { clearTimeout(txTotTimer); txTotTimer = null; }
+        renewingSession = false;
         log("Desconectado del servidor eQSO");
         if (pttActive) {
           // El relay estaba transmitiendo cuando se perdió la conexión.
