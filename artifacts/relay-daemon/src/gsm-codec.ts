@@ -39,6 +39,10 @@ export class GsmDecoder extends EventEmitter {
     ], { stdio: ["pipe", "pipe", "pipe"] });
 
     this.proc.stderr.on("data", () => {});
+    // Suppress async EPIPE/ERR_STREAM_DESTROYED when Node writes to the
+    // ffmpeg stdin pipe after ffmpeg exits (e.g. during graceful shutdown).
+    // Without this handler Node throws an unhandled 'error' event and crashes.
+    this.proc.stdin.on("error", () => {});
     this.proc.on("error", (err) => {
       console.error(`[gsm-dec] ffmpeg error: ${err.message}`);
     });
@@ -108,6 +112,8 @@ export class GsmEncoder extends EventEmitter {
     ], { stdio: ["pipe", "pipe", "pipe"] });
 
     this.proc.stderr.on("data", () => {});
+    // Suppress async EPIPE/ERR_STREAM_DESTROYED on ffmpeg stdin during shutdown.
+    this.proc.stdin.on("error", () => {});
     this.proc.on("error", (err) => {
       console.error(`[gsm-enc] ffmpeg error: ${err.message}`);
     });
