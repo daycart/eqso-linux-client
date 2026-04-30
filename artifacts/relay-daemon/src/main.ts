@@ -11,7 +11,7 @@
 
 import { loadConfig } from "./config.js";
 import { EqsoClient } from "./eqso-client.js";
-import { AlsaAudio } from "./alsa-audio.js";
+import { AlsaAudio, GSM_SILENCE_FRAME } from "./alsa-audio.js";
 import { Vox } from "./vox.js";
 import { SerialPtt } from "./serial-ptt.js";
 import { startControlServer, RelayStatus } from "./control-server.js";
@@ -29,6 +29,27 @@ let rxPackets = 0;
 let txPackets = 0;
 let usersInRoom: string[] = [];
 let forceReconnectRequested = false;
+let lastPttIgnoredLogMs = 0;   // Throttle del log "ptt_start ignorado" (max 1/s)
+
+// ─── Reconexion por idle (prevenir timeout de sesion del servidor) ────────────
+// Sin [0x02] heartbeat, el servidor externo cierra la conexion tras ~30-35s
+// de inactividad post-TX. Reconectamos proactivamente antes de ese umbral.
+const IDLE_RECONNECT_MS = 28_000; // 28s < timeout servidor observado (~34s)
+let idleReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+function resetIdleTimer(): void {
+  if (idleReconnectTimer) clearTimeout(idleReconnectTimer);
+  idleReconnectTimer = setTimeout(() => {
+    idleReconnectTimer = null;
+    if (pttActive) return; // no reconectar durante TX activo
+    log("Reconectando por inactividad prolongada (prevenir timeout servidor)…");
+    eqsoClient?.disconnect();
+  }, IDLE_RECONNECT_MS);
+}
+
+function cancelIdleTimer(): void {
+  if (idleReconnectTimer) { clearTimeout(idleReconnectTimer); idleReconnectTimer = null; }
+}
 
 // ─── Inhibicion RX (anti-feedback acustico) ───────────────────────────────────
 // Cuando la radio reproduce audio del servidor, inhibimos el VOX durante ese
@@ -41,6 +62,11 @@ let rxInhibitTimer: ReturnType<typeof setTimeout> | null = null;
 // Retardo total después de que el browser suelta PTT:
 //   400ms hang + 500ms (kill aplay + reinicio arecord) = ~900ms hasta captura
 const RX_HANG_MS = 400;
+// IMPORTANTE: el suppress que aplica el rxInhibitTimer debe ser al menos
+// igual a POST_APLAY_VOX_SUPPRESS_MS para cubrir ráfagas cortas (< 1s) en
+// las que playback_ended llega DESPUÉS de que este suppress expira.
+// Sin esto el VOX disparaba 24ms después de una ventana de solo 800ms.
+// POST_APLAY_VOX_SUPPRESS_MS se define más abajo; se declara aquí la referencia.
 
 // ─── Supresion post-TX (descartar audio del servidor tras soltar VOX) ─────────
 // El relay NO recibe su propio eco (broadcastToTcpAndRelays excluye al emisor).
@@ -55,17 +81,18 @@ const POST_TX_SUPPRESS_MS = 1500;
 // ─── Supresion post-RX (anti-feedback acustico tras reproduccion) ─────────────
 // Tras terminar de reproducir audio del servidor, la radio CB necesita tiempo
 // para volver a RX y que arecord se reinicie (~350ms).
-// El suppress se calcula en dos etapas:
-//   1. POST_RX_SUPPRESS_MS (800ms) desde que el rxInhibitTimer dispara.
-//      Cubre el tiempo de drain de aplay y reinicio de arecord (~750ms).
-//   2. POST_APLAY_VOX_SUPPRESS_MS (3000ms) desde que aplay REALMENTE cierra
-//      (evento "playback_ended"). Cubre la cola de squelch de la radio CB
-//      (~2-3s de ruido cuando vuelve a RX) que provoca falsos VOX.
-// Medido en logs: RMS=13883 durante 2-3s tras fin de aplay con 1500ms no era
-// suficiente (suppress expiraba antes de que el squelch de la CB cerrara).
+// El suppress se aplica en DOS momentos, ambos con POST_APLAY_VOX_SUPPRESS_MS:
+//   1. Cuando el rxInhibitTimer dispara (400ms tras el último paquete RX):
+//      se aplican 2500ms de suppress inmediatamente. Esto cubre ráfagas cortas
+//      (< 1s) donde "playback_ended" llega tarde — sin esto el VOX disparaba
+//      24ms después de expirar un suppress de solo 800ms (observado en logs).
+//   2. Cuando aplay REALMENTE cierra ("playback_ended"): se extienden otros
+//      2500ms desde ese momento. Para ráfagas largas donde aplay tarda más,
+//      esto garantiza la supresión del squelch de la radio CB (~2-3s de ruido).
+// Resultado: suppress mínimo garantizado = 400ms (hang) + 2500ms = 2.9s desde
+// el último paquete RX, independientemente de cuándo expire aplay.
 let postRxVoxSuppressUntil = 0;
-const POST_RX_SUPPRESS_MS          = 800;   // desde rxInhibitTimer
-const POST_APLAY_VOX_SUPPRESS_MS   = 2500;  // desde cierre real de aplay (squelch HW bien ajustado)
+const POST_APLAY_VOX_SUPPRESS_MS = 2500;  // usado en ambos momentos
 
 // ─── Supresion VOX post-TX propio (anti-eco de squelch y canal CB) ────────────
 // Cuando el relay termina su propia TX (VOX ptt_end), la radio vuelve a RX y
@@ -73,6 +100,13 @@ const POST_APLAY_VOX_SUPPRESS_MS   = 2500;  // desde cierre real de aplay (squel
 // Medido en logs: RMS=11130 a los 3s de soltar PTT → trigger falso con 3000ms.
 // Con squelch HW bien ajustado (RMS=2 en silencio), 2500ms es suficiente.
 const POST_TX_VOX_SUPPRESS_MS = 2500;  // antes 5000ms (squelch HW ajustado)
+
+// ─── Supresion VOX al arranque (burst de ruido de inicio ALSA) ───────────────
+// Al inicializar arecord, ALSA emite un burst de ruido de fondo (~1-2s con
+// chunks grandes de 1964/7680 bytes) que dispara el VOX falsamente.
+// Ignoramos todo el audio VOX durante los primeros startupVoxSuppressMs ms.
+// Se resetea en cada reinicio de arecord (xrun recovery) para cubrir el nuevo burst.
+let startupSuppressUntil = Date.now() + cfg.audio.startupVoxSuppressMs;
 
 function setRxActive(): void {
   const wasActive = rxActive;
@@ -84,10 +118,14 @@ function setRxActive(): void {
     rxInhibitTimer = null;
     serialPtt.set(false); // liberar PTT de la radio al finalizar el RX
     audio.endRx();        // parar aplay para evitar underruns entre transmisiones
-    // Extender inhibicion VOX: el altavoz deja eco residual en la sala que
-    // arecord capturaría al reiniciarse (400ms) → VOX dispara ruido de fondo.
-    // DIAGNÓSTICO: usar Math.max para NO reducir el suppress si post-TX lo fijó más largo.
-    const rxSuppressUntil = Date.now() + POST_RX_SUPPRESS_MS;
+    // Extender inhibicion VOX: usar POST_APLAY_VOX_SUPPRESS_MS (2500ms) y NO
+    // POST_RX_SUPPRESS_MS (800ms). Motivo: para ráfagas cortas (< 1s) el evento
+    // "playback_ended" puede llegar DESPUÉS de que los 800ms expiren, dejando
+    // una ventana en la que el VOX dispara falsamente (observado: VOX a 24ms de
+    // la expiración del suppress con ráfaga de 0.55s de 0R-DAVID_EA).
+    // Al usar 2500ms aquí, "playback_ended" solo puede EXTENDER el suppress
+    // si aplay tarda más; nunca lo recorta.
+    const rxSuppressUntil = Date.now() + POST_APLAY_VOX_SUPPRESS_MS;
     const prev = postRxVoxSuppressUntil;
     postRxVoxSuppressUntil = Math.max(postRxVoxSuppressUntil, rxSuppressUntil);
     log(`[rxInhibit] suppress: prev=${new Date(prev).toISOString()} new=${new Date(postRxVoxSuppressUntil).toISOString()}`);
@@ -126,6 +164,15 @@ audio.on("playback_ended", () => {
   log(`[rxInhibit] playback_ended: suppress extendido → ${new Date(postRxVoxSuppressUntil).toISOString()} (prev=${new Date(prev).toISOString()})`);
 });
 
+// Cuando arecord se reinicia (semi-duplex tras RX), NO reseteamos startupSuppressUntil.
+// Motivo: postRxVoxSuppressUntil (2500ms) ya cubre el burst de inicio de ALSA
+// (RMS≈1303, dura <1s). Resetear startupSuppressUntil (4000ms) aquí hace que
+// expire 1.5s MÁS TARDE que postRxVoxSuppressUntil, eliminando la ventana de TX
+// de la radio CB y haciendo imposible que el VOX dispare entre transmisiones eQSO.
+audio.on("recorder_restarted", () => {
+  log(`[vox] arecord reiniciado (semi-duplex) — postRxVoxSuppressUntil hasta ${new Date(postRxVoxSuppressUntil).toISOString()}`);
+});
+
 // El audio emite chunks PCM crudos para que el VOX los analice
 audio.on("pcm_chunk", (pcm: Int16Array) => {
   // Calcular RMS para el gate de transmision
@@ -133,14 +180,40 @@ audio.on("pcm_chunk", (pcm: Int16Array) => {
   for (let i = 0; i < pcm.length; i++) sum += pcm[i] * pcm[i];
   latestPcmRms = Math.sqrt(sum / pcm.length);
 
-  if (cfg.audio.vox && !rxActive && Date.now() > postRxVoxSuppressUntil) {
+  if (cfg.audio.vox && !rxActive && Date.now() > postRxVoxSuppressUntil && Date.now() > startupSuppressUntil) {
     vox.processPcm(pcm);
   }
 });
 
 // Cuando el VOX o control HTTP activan PTT
 vox.on("ptt_start", () => {
-  if (!eqsoClient?.connected || pttActive || rxActive) return;
+  if (!eqsoClient?.connected) {
+    // Sin conexion: resetear VOX para evitar deadlock.
+    // Si no se llama resetState(), vox.active queda en true y nunca vuelve
+    // a emitir ptt_start (aunque el RMS siga sobre umbral) porque el VOX
+    // cree que ya esta en TX. El resetState() permite que el debounce
+    // vuelva a acumularse cuando la conexion se restablezca.
+    vox.resetState();
+    const nowMs = Date.now();
+    if (nowMs - lastPttIgnoredLogMs > 1000) {
+      lastPttIgnoredLogMs = nowMs;
+      log("VOX: ptt_start ignorado — sin conexion, reseteando estado VOX");
+    }
+    return;
+  }
+  if (!eqsoClient.isReady()) {
+    // TCP conectado pero JOIN aún no aceptado (handshake o room_list pendiente).
+    // Enviar [0x09] ahora causaría "Indicativo invalido" + desconexión.
+    // Resetear VOX para que vuelva a disparar cuando el servidor acepte el JOIN.
+    vox.resetState();
+    const nowMs = Date.now();
+    if (nowMs - lastPttIgnoredLogMs > 1000) {
+      lastPttIgnoredLogMs = nowMs;
+      log("VOX: ptt_start ignorado — JOIN pendiente, reseteando estado VOX");
+    }
+    return;
+  }
+  if (pttActive || rxActive) return;
 
   // Defensa en profundidad: doble verificacion del suppress.
   // El pcm_chunk verifica Date.now() > postRxVoxSuppressUntil antes de llamar
@@ -160,6 +233,8 @@ vox.on("ptt_start", () => {
   }
 
   pttActive = true;
+  cancelIdleTimer(); // No reconectar mientras transmitimos
+  audio.setTxEnabled(true);
   eqsoClient.startTx();
   log(`VOX: PTT activado — inicio transmision (suppress was ${new Date(postRxVoxSuppressUntil).toISOString()})`);
 });
@@ -173,8 +248,17 @@ vox.on("ptt_end", () => {
   postTxSuppressUntil = Date.now() + POST_TX_SUPPRESS_MS;
   // Suprimir VOX 5s tras TX propio (squelch + eco CB + eco sala).
   postRxVoxSuppressUntil = Math.max(postRxVoxSuppressUntil, Date.now() + POST_TX_VOX_SUPPRESS_MS);
-  log(`VOX: PTT liberado — fin transmision (suppress hasta ${new Date(postRxVoxSuppressUntil).toISOString()})`);
+  resetIdleTimer(); // Iniciar countdown de 28s post-TX para reconexion preventiva
+  const total = txRealFrames + txSilenceFrames;
+  const silencePct = total > 0 ? Math.round((txSilenceFrames / total) * 100) : 0;
+  log(`VOX: PTT liberado — fin transmision (suppress hasta ${new Date(postRxVoxSuppressUntil).toISOString()}) | frames: ${txRealFrames} real + ${txSilenceFrames} silencio = ${silencePct}% silencio`);
+  txRealFrames = 0;
+  txSilenceFrames = 0;
 });
+
+// Contadores de diagnostico: real vs silence frames enviados durante TX
+let txRealFrames    = 0;
+let txSilenceFrames = 0;
 
 // El audio emite paquetes GSM listos para enviar al servidor
 audio.on("gsm_tx", (gsm: Buffer) => {
@@ -182,6 +266,16 @@ audio.on("gsm_tx", (gsm: Buffer) => {
   // Gate de transmision: no enviar ruido de fondo durante el colgado del VOX.
   // Impide acumulacion de silencio en el buffer del navegador.
   if (latestPcmRms < TX_GATE_RMS) return;
+
+  // Detectar si el frame es silencio (comparar con el frame precomputado)
+  const isSilence = gsm.length === GSM_SILENCE_FRAME.length &&
+    gsm.equals(GSM_SILENCE_FRAME as Buffer);
+  if (isSilence) {
+    txSilenceFrames++;
+  } else {
+    txRealFrames++;
+  }
+
   eqsoClient.sendAudio(gsm);
   txPackets++;
 });
@@ -205,6 +299,7 @@ function connect(): void {
         reconnectAttempts = 0;
         log("Conectado — enviando JOIN…");
         client.sendJoin(cfg.callsign, cfg.room, cfg.message, cfg.password);
+        resetIdleTimer(); // Iniciar countdown; se reinicia tras cada TX
         break;
 
       case "room_list":
@@ -215,6 +310,7 @@ function connect(): void {
         const u = ev.data as { name: string; message: string };
         if (!usersInRoom.includes(u.name)) usersInRoom.push(u.name);
         log(`Sala: ${u.name} se ha unido`);
+        resetIdleTimer(); // servidor activo — reiniciar countdown
         break;
       }
 
@@ -222,22 +318,26 @@ function connect(): void {
         const u = ev.data as { name: string };
         usersInRoom = usersInRoom.filter(n => n !== u.name);
         log(`Sala: ${u.name} ha salido`);
+        resetIdleTimer(); // servidor activo — reiniciar countdown
         break;
       }
 
       case "ptt_started": {
         const u = ev.data as { name: string };
         log(`TX: ${u.name} transmitiendo`);
+        resetIdleTimer(); // servidor activo — reiniciar countdown
         break;
       }
 
       case "ptt_released": {
         const u = ev.data as { name: string };
         log(`TX: ${u.name} libero canal`);
+        resetIdleTimer(); // servidor activo — reiniciar countdown
         break;
       }
 
       case "audio": {
+        resetIdleTimer(); // paquete de audio = servidor activo — reiniciar countdown
         const pkt = ev.data as Buffer;
         if (pkt.length < 1 + GSM_PACKET_BYTES) {
           log(`[audio] pkt demasiado corto: ${pkt.length} bytes (esperado ${1 + GSM_PACKET_BYTES})`);
@@ -279,11 +379,22 @@ function connect(): void {
         break;
 
       case "keepalive":
-        // silencioso
+        log("Keepalive recibido del servidor [0x0c]");
+        resetIdleTimer(); // El servidor esta vivo — reiniciar countdown
         break;
 
       case "disconnected":
+        cancelIdleTimer();
         log("Desconectado del servidor eQSO");
+        if (pttActive) {
+          // El relay estaba transmitiendo cuando se perdió la conexión.
+          // Resetear el estado del VOX para que no quede en TX indefinidamente
+          // mientras el daemon espera el reconnect.
+          pttActive = false;
+          audio.setTxEnabled(false);
+          vox.resetState();
+          log("[vox] Estado PTT reseteado por desconexion durante TX");
+        }
         scheduleReconnect();
         break;
 
@@ -357,6 +468,7 @@ log(`  VOX      : ${cfg.audio.vox ? `ON (umbral=${cfg.audio.voxThresholdRms} han
 log(`  Captura  : ${cfg.audio.captureDevice}`);
 log(`  Playback : ${cfg.audio.playbackDevice}`);
 log(`  PTT Ser. : ${cfg.ptt.device ? `${cfg.ptt.device} (${cfg.ptt.method}${cfg.ptt.inverted ? ", invertido" : ""})` : "deshabilitado"}`);
+log(`  VOX Sup. : startup suppress ${cfg.audio.startupVoxSuppressMs}ms activo hasta ${new Date(startupSuppressUntil).toISOString()}`);
 log("=".repeat(60));
 
 if (cfg.ptt.device) serialPtt.start();
