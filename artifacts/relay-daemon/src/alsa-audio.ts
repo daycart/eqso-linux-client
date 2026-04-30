@@ -50,7 +50,7 @@ function computeGsmSilenceFrame(): Buffer {
   // Fallback de emergencia: frame vacio (no deberia ocurrir)
   return Buffer.alloc(GSM_PACKET_BYTES, 0);
 }
-const GSM_SILENCE_FRAME = computeGsmSilenceFrame();
+export const GSM_SILENCE_FRAME = computeGsmSilenceFrame();
 
 const PCM_CHUNK_SAMPLES = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET; // 160 muestras = 320 bytes (1 frame GSM)
 
