@@ -9,7 +9,7 @@ var DEFAULTS = {
   message: "Radio Enlace",
   server: "193.152.83.229",
   port: 2172,
-  reconnectMinMs: 2e3,
+  reconnectMinMs: 500,
   reconnectMaxMs: 6e4,
   audio: {
     captureDevice: "plughw:1,0",
@@ -1657,22 +1657,26 @@ function totExpired() {
 }
 function startSessionRenewalTimer() {
   if (sessionRenewalTimer) {
-    clearInterval(sessionRenewalTimer);
+    clearTimeout(sessionRenewalTimer);
     sessionRenewalTimer = null;
   }
-  sessionRenewalTimer = setInterval(() => {
-    if (!pttActive || !eqsoClient?.connected) {
-      stopSessionRenewalTimer();
-      return;
-    }
+  sessionRenewalTimer = setTimeout(() => {
+    sessionRenewalTimer = null;
+    if (!pttActive || !eqsoClient?.connected) return;
     renewingSession = true;
     log5(`[session] Renovacion proactiva mid-TX (${SESSION_RENEWAL_MS}ms) \u2014 enviando JOIN`);
     eqsoClient.sendJoin(cfg.callsign, cfg.room, cfg.message, cfg.password);
+    setTimeout(() => {
+      if (renewingSession) {
+        renewingSession = false;
+        log5("[session] room_list no lleg\xF3 en 1s \u2014 cancelando renovacion (semi-duplex normal)");
+      }
+    }, 1e3);
   }, SESSION_RENEWAL_MS);
 }
 function stopSessionRenewalTimer() {
   if (sessionRenewalTimer) {
-    clearInterval(sessionRenewalTimer);
+    clearTimeout(sessionRenewalTimer);
     sessionRenewalTimer = null;
   }
   renewingSession = false;
