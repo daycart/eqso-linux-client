@@ -234,12 +234,21 @@ var EqsoClient = class extends EventEmitter {
   handshakeDone = false;
   transmitting = false;
   connected = false;
+  // joinAccepted=true when the server confirms JOIN (room_list received).
+  // PTT [0x09] must NOT be sent before JOIN is accepted — the server will reject
+  // with "Indicativo invalido" and close the connection.
+  joinAccepted = false;
   txingStations = /* @__PURE__ */ new Set();
+  /** Returns true only when the connection is fully ready for TX (handshake done + JOIN accepted). */
+  isReady() {
+    return this.connected && this.handshakeDone && this.joinAccepted;
+  }
   connect() {
     const sock = new net.Socket();
     this.socket = sock;
     this.parser = new EqsoPacketParser();
     this.handshakeDone = false;
+    this.joinAccepted = false;
     this.transmitting = false;
     let hadError = false;
     sock.connect(this.port, this.host, () => {
@@ -253,6 +262,8 @@ var EqsoClient = class extends EventEmitter {
     });
     sock.on("close", (hadHalfOpen) => {
       this.connected = false;
+      this.handshakeDone = false;
+      this.joinAccepted = false;
       this.stopSilence();
       const reason = hadError ? "tras error TCP" : "cierre limpio del servidor (FIN)";
       log(`TCP desconectado de ${this.host}:${this.port} \u2014 ${reason}`);
@@ -261,6 +272,8 @@ var EqsoClient = class extends EventEmitter {
     sock.on("error", (err) => {
       hadError = true;
       this.connected = false;
+      this.handshakeDone = false;
+      this.joinAccepted = false;
       this.stopSilence();
       log(`TCP error: ${err.message} (${err.name})`);
       this.emit("event", { type: "error", data: err.message });
@@ -299,6 +312,10 @@ var EqsoClient = class extends EventEmitter {
   }
   /** Anuncia PTT al servidor [0x09] y detiene el silence heartbeat síncronamente. */
   startTx() {
+    if (!this.isReady()) {
+      log("startTx() ignorado \u2014 joinAccepted=false (handshake o JOIN pendiente)");
+      return;
+    }
     this.stopSilence();
     this.transmitting = true;
     this.write(Buffer.from([9]));
@@ -380,6 +397,7 @@ var EqsoClient = class extends EventEmitter {
         }
         const preview = rooms.slice(0, 5).join(", ") + (rooms.length > 5 ? ` \u2026 (+${rooms.length - 5} mas)` : "");
         log(`Salas disponibles: ${rooms.length} salas [${preview}]`);
+        this.joinAccepted = true;
         this.emit("event", { type: "room_list", data: rooms });
         break;
       }
@@ -1560,6 +1578,15 @@ vox.on("ptt_start", () => {
     }
     return;
   }
+  if (!eqsoClient.isReady()) {
+    vox.resetState();
+    const nowMs = Date.now();
+    if (nowMs - lastPttIgnoredLogMs > 1e3) {
+      lastPttIgnoredLogMs = nowMs;
+      log5("VOX: ptt_start ignorado \u2014 JOIN pendiente, reseteando estado VOX");
+    }
+    return;
+  }
   if (pttActive || rxActive) return;
   const now = Date.now();
   if (now < postRxVoxSuppressUntil) {
@@ -1614,25 +1641,30 @@ function connect() {
         const u = ev.data;
         if (!usersInRoom.includes(u.name)) usersInRoom.push(u.name);
         log5(`Sala: ${u.name} se ha unido`);
+        resetIdleTimer();
         break;
       }
       case "user_left": {
         const u = ev.data;
         usersInRoom = usersInRoom.filter((n) => n !== u.name);
         log5(`Sala: ${u.name} ha salido`);
+        resetIdleTimer();
         break;
       }
       case "ptt_started": {
         const u = ev.data;
         log5(`TX: ${u.name} transmitiendo`);
+        resetIdleTimer();
         break;
       }
       case "ptt_released": {
         const u = ev.data;
         log5(`TX: ${u.name} libero canal`);
+        resetIdleTimer();
         break;
       }
       case "audio": {
+        resetIdleTimer();
         const pkt = ev.data;
         if (pkt.length < 1 + GSM_PACKET_BYTES) {
           log5(`[audio] pkt demasiado corto: ${pkt.length} bytes (esperado ${1 + GSM_PACKET_BYTES})`);
