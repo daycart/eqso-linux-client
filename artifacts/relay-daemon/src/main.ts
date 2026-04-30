@@ -46,14 +46,20 @@ let txTotTimer: ReturnType<typeof setTimeout> | null = null;
 // Base: TOT_BREAK_MS, duplicando con cada fallo hasta TX_FAIL_MAX_SUPPRESS_MS.
 // Se resetea cuando una TX dura >TX_SUCCESS_MIN_MS sin desconexion del servidor.
 const TX_FAIL_MAX_SUPPRESS_MS = 60_000;  // máximo 60s de pausa tras fallos
-const TX_SUCCESS_MIN_MS       = 10_000;  // TX >10s = "exitosa", resetear contador
-let txDisconnectStreak = 0;   // fallos TX consecutivos (servidor corta en <10s)
+// TX >3.5s = "exitosa": el timer del servidor corta a los 4-9s, esas TXes NO deben
+// incrementar el streak (de lo contrario el backoff bloquea el VOX por 4-16s).
+const TX_SUCCESS_MIN_MS       = 3_500;
+let txDisconnectStreak = 0;   // fallos TX consecutivos (servidor corta en <3.5s)
 let txStartedAt       = 0;   // timestamp de inicio de TX actual
 // El servidor 193.152.83.229 tiene un timer de sesion (~4-9s durante TX).
 // Cuando expira, busca 0x1a en el stream GSM → "Indicativo/Nombre invalido".
-// Solución: renovar sesion proactivamente cada SESSION_RENEWAL_MS ms.
+// Solución: renovar sesion proactivamente con JOIN cada SESSION_RENEWAL_MS ms,
+// y re-anunciar PTT cuando el servidor confirme con room_list.
 const SESSION_RENEWAL_MS = 2500;
 let sessionRenewalTimer: ReturnType<typeof setInterval> | null = null;
+// true entre el envio de JOIN de renovacion y la confirmacion del servidor (room_list).
+// Durante este estado, 0x08 y audio entrante NO llaman yieldTx() (son transitorios).
+let renewingSession = false;
 
 // ─── Reconexion por idle (prevenir timeout de sesion del servidor) ────────────
 // Sin [0x02] heartbeat, el servidor externo cierra la conexion tras ~30-35s
@@ -236,6 +242,11 @@ function totExpired(): void {
 }
 
 // ─── Renovacion proactiva de sesion TX ────────────────────────────────────────
+// Flujo de renovacion:
+//   1. Timer (cada 2.5s): sendJoin() + renewingSession=true
+//   2. 0x08 / audio durante renewingSession: ignorar (son transitorios del handshake)
+//   3. room_list: servidor confirmo JOIN → re-anunciar PTT (0x09) → renewingSession=false
+// Si la renovacion tarda > SESSION_RENEWAL_MS, el siguiente tick la reintenta.
 function startSessionRenewalTimer(): void {
   if (sessionRenewalTimer) { clearInterval(sessionRenewalTimer); sessionRenewalTimer = null; }
   sessionRenewalTimer = setInterval(() => {
@@ -243,13 +254,16 @@ function startSessionRenewalTimer(): void {
       stopSessionRenewalTimer();
       return;
     }
-    log(`[session] Renovacion proactiva mid-TX (${SESSION_RENEWAL_MS}ms)`);
-    eqsoClient.renewTxSession(cfg.callsign, cfg.room, cfg.message, cfg.password);
+    renewingSession = true;
+    log(`[session] Renovacion proactiva mid-TX (${SESSION_RENEWAL_MS}ms) — enviando JOIN`);
+    eqsoClient.sendJoin(cfg.callsign, cfg.room, cfg.message, cfg.password);
+    // PTT se re-anuncia cuando el servidor confirme con room_list (ver handler abajo).
   }, SESSION_RENEWAL_MS);
 }
 
 function stopSessionRenewalTimer(): void {
   if (sessionRenewalTimer) { clearInterval(sessionRenewalTimer); sessionRenewalTimer = null; }
+  renewingSession = false;
 }
 
 // ─── Ceder canal (semi-duplex): otro usuario tiene el PTT ─────────────────────
@@ -413,11 +427,15 @@ function connect(): void {
         break;
 
       case "room_list":
-        // La renovacion de sesion mid-TX es proactiva (startSessionRenewalTimer).
-        // El room_list durante TX es la respuesta del servidor al JOIN renovado.
-        // No hace falta responder aqui: el timer ya envio JOIN+PTT antes de que
-        // el servidor mandara este room_list.
         log(`Salas: ${(ev.data as string[]).join(", ")}`);
+        if (renewingSession && pttActive && client.connected) {
+          // El servidor confirmó el JOIN de renovacion → re-anunciar PTT.
+          // startTx() verifica joinAccepted (que el parser ya puso en true al
+          // parsear este room_list) y envía 0x09. Audio continúa sin interrupción.
+          renewingSession = false;
+          log("[session] Room list confirmó renovacion — re-anunciando PTT [0x09]");
+          client.startTx();
+        }
         break;
 
       case "user_joined": {
@@ -452,7 +470,12 @@ function connect(): void {
 
       case "channel_busy": {
         // 0x08 del servidor = "canal ocupado, otro usuario tiene el PTT"
-        // Ceder el canal inmediatamente para no colisionar.
+        if (renewingSession) {
+          // Durante renovacion de sesion, 0x08 es esperado: el servidor está
+          // reseteando el estado de TX. Ignorar — se re-anunciará PTT en room_list.
+          log("[session] 0x08 durante renovacion de sesion — ignorado (esperando room_list)");
+          break;
+        }
         if (pttActive) {
           log("[semi-duplex] Canal ocupado [0x08] — cediendo TX al otro usuario");
           yieldTx();
@@ -470,8 +493,9 @@ function connect(): void {
         rxPackets++;
         // Si estamos TX y el servidor nos manda audio de otro usuario → colisión.
         // Ceder el canal: el otro usuario tiene prioridad (ya estaba TX antes).
-        // El VOX retomará TX cuando el otro termine y no haya audio entrante.
-        if (pttActive) {
+        // EXCEPCIÓN: durante renovacion de sesion, el servidor puede mandar audio
+        // brevemente antes de confirmar el JOIN (room_list). No ceder el canal.
+        if (pttActive && !renewingSession) {
           if (rxPackets === 1)
             log(`[semi-duplex] Audio entrante durante TX — colision de canal, cediendo`);
           yieldTx();
