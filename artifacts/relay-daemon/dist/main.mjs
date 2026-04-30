@@ -91,7 +91,12 @@ var EqsoPacketParser = class {
         this.acc = this.acc.slice(1);
         return p;
       }
-      if (cmd === 8 || cmd === 9) {
+      if (cmd === 8) {
+        const p = this.acc.slice(0, 1);
+        this.acc = this.acc.slice(1);
+        return p;
+      }
+      if (cmd === 9) {
         this.acc = this.acc.slice(1);
         continue;
       }
@@ -385,6 +390,11 @@ var EqsoClient = class extends EventEmitter {
       case 12: {
         this.write(Buffer.from([12]));
         this.emit("event", { type: "keepalive" });
+        break;
+      }
+      case 8: {
+        log("[0x08] Canal ocupado \u2014 ceder TX al otro usuario");
+        this.emit("event", { type: "channel_busy" });
         break;
       }
       case 11: {
@@ -1551,6 +1561,7 @@ var TX_FAIL_MAX_SUPPRESS_MS = 6e4;
 var TX_SUCCESS_MIN_MS = 1e4;
 var txDisconnectStreak = 0;
 var txStartedAt = 0;
+var renewingSession = false;
 var IDLE_RECONNECT_MS = 28e3;
 var idleReconnectTimer = null;
 function resetIdleTimer() {
@@ -1637,6 +1648,29 @@ function totExpired() {
   const total = txRealFrames + txSilenceFrames;
   const silencePct = total > 0 ? Math.round(txSilenceFrames / total * 100) : 0;
   log5(`[TOT] frames: ${txRealFrames} real + ${txSilenceFrames} silencio = ${silencePct}% silencio`);
+  txRealFrames = 0;
+  txSilenceFrames = 0;
+}
+function yieldTx() {
+  if (!pttActive) return;
+  if (txTotTimer) {
+    clearTimeout(txTotTimer);
+    txTotTimer = null;
+  }
+  const txDurationMs = txStartedAt > 0 ? Date.now() - txStartedAt : 0;
+  txStartedAt = 0;
+  pttActive = false;
+  renewingSession = false;
+  audio.setTxEnabled(false);
+  eqsoClient?.endTx();
+  postTxSuppressUntil = Date.now() + POST_TX_SUPPRESS_MS;
+  resetIdleTimer();
+  vox.resetState();
+  log5(`[semi-duplex] TX cedida (dur\xF3 ${Math.round(txDurationMs / 1e3)}s) \u2014 esperando canal libre`);
+  const total = txRealFrames + txSilenceFrames;
+  const silencePct = total > 0 ? Math.round(txSilenceFrames / total * 100) : 0;
+  if (total > 0)
+    log5(`[semi-duplex] frames: ${txRealFrames} real + ${txSilenceFrames} silencio = ${silencePct}% silencio`);
   txRealFrames = 0;
   txSilenceFrames = 0;
 }
@@ -1732,6 +1766,19 @@ function connect() {
         break;
       case "room_list":
         log5(`Salas: ${ev.data.join(", ")}`);
+        if (pttActive && client.connected) {
+          if (!renewingSession) {
+            renewingSession = true;
+            log5("[session] Room list recibido durante TX \u2014 re-enviando JOIN para renovar sesion");
+            client.sendJoin(cfg.callsign, cfg.room, cfg.message, cfg.password);
+          } else {
+            renewingSession = false;
+            log5("[session] Re-JOIN confirmado \u2014 re-enviando PTT [0x09]");
+            client.startTx();
+          }
+        } else {
+          renewingSession = false;
+        }
         break;
       case "user_joined": {
         const u = ev.data;
@@ -1759,6 +1806,13 @@ function connect() {
         resetIdleTimer();
         break;
       }
+      case "channel_busy": {
+        if (pttActive) {
+          log5("[semi-duplex] Canal ocupado [0x08] \u2014 cediendo TX al otro usuario");
+          yieldTx();
+        }
+        break;
+      }
       case "audio": {
         resetIdleTimer();
         const pkt = ev.data;
@@ -1768,9 +1822,9 @@ function connect() {
         }
         rxPackets++;
         if (pttActive) {
-          if (rxPackets <= 3 || rxPackets % 20 === 0)
-            log5(`[audio] pkt#${rxPackets} DESCARTADO \u2014 pttActive=true (TX local activo)`);
-          break;
+          if (rxPackets === 1)
+            log5(`[semi-duplex] Audio entrante durante TX \u2014 colision de canal, cediendo`);
+          yieldTx();
         }
         const suppRestMs = postTxSuppressUntil - Date.now();
         if (suppRestMs > 0) {
@@ -1799,6 +1853,7 @@ function connect() {
           clearTimeout(txTotTimer);
           txTotTimer = null;
         }
+        renewingSession = false;
         log5("Desconectado del servidor eQSO");
         if (pttActive) {
           const txDurationMs = txStartedAt > 0 ? Date.now() - txStartedAt : 0;
