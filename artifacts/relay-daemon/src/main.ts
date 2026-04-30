@@ -49,7 +49,11 @@ const TX_FAIL_MAX_SUPPRESS_MS = 60_000;  // máximo 60s de pausa tras fallos
 const TX_SUCCESS_MIN_MS       = 10_000;  // TX >10s = "exitosa", resetear contador
 let txDisconnectStreak = 0;   // fallos TX consecutivos (servidor corta en <10s)
 let txStartedAt       = 0;   // timestamp de inicio de TX actual
-let renewingSession   = false; // true mientras esperamos confirmacion de re-JOIN mid-TX
+// El servidor 193.152.83.229 tiene un timer de sesion (~4-9s durante TX).
+// Cuando expira, busca 0x1a en el stream GSM → "Indicativo/Nombre invalido".
+// Solución: renovar sesion proactivamente cada SESSION_RENEWAL_MS ms.
+const SESSION_RENEWAL_MS = 2500;
+let sessionRenewalTimer: ReturnType<typeof setInterval> | null = null;
 
 // ─── Reconexion por idle (prevenir timeout de sesion del servidor) ────────────
 // Sin [0x02] heartbeat, el servidor externo cierra la conexion tras ~30-35s
@@ -208,6 +212,7 @@ audio.on("pcm_chunk", (pcm: Int16Array) => {
 // ─── TOT expirado: liberar PTT antes de que el servidor desconecte ───────────
 function totExpired(): void {
   txTotTimer = null;
+  stopSessionRenewalTimer();
   if (!pttActive || !eqsoClient?.connected) return;
   log(`[TOT] ${TOT_MAX_MS / 1000}s de TX máximo alcanzado — pausa forzada de ${TOT_BREAK_MS / 1000}s`);
   // 55s de TX = éxito: resetear el streak de fallos consecutivos
@@ -230,21 +235,38 @@ function totExpired(): void {
   txSilenceFrames = 0;
 }
 
+// ─── Renovacion proactiva de sesion TX ────────────────────────────────────────
+function startSessionRenewalTimer(): void {
+  if (sessionRenewalTimer) { clearInterval(sessionRenewalTimer); sessionRenewalTimer = null; }
+  sessionRenewalTimer = setInterval(() => {
+    if (!pttActive || !eqsoClient?.connected) {
+      stopSessionRenewalTimer();
+      return;
+    }
+    log(`[session] Renovacion proactiva mid-TX (${SESSION_RENEWAL_MS}ms)`);
+    eqsoClient.renewTxSession(cfg.callsign, cfg.room, cfg.message, cfg.password);
+  }, SESSION_RENEWAL_MS);
+}
+
+function stopSessionRenewalTimer(): void {
+  if (sessionRenewalTimer) { clearInterval(sessionRenewalTimer); sessionRenewalTimer = null; }
+}
+
 // ─── Ceder canal (semi-duplex): otro usuario tiene el PTT ─────────────────────
 // Llamado cuando el servidor señala canal ocupado (0x08) o manda audio durante TX.
 // NO incrementa txDisconnectStreak (es una cesión voluntaria, no un fallo).
 function yieldTx(): void {
   if (!pttActive) return;
+  stopSessionRenewalTimer();
   if (txTotTimer) { clearTimeout(txTotTimer); txTotTimer = null; }
   const txDurationMs = txStartedAt > 0 ? Date.now() - txStartedAt : 0;
   txStartedAt = 0;
   pttActive = false;
-  renewingSession = false;
   audio.setTxEnabled(false);
   eqsoClient?.endTx();
-  // Suppress corto: el canal lo ocupa otro usuario durante su TX.
-  // El VOX retomará TX cuando el otro suelte (setRxActive inhibe mientras hay audio).
-  postTxSuppressUntil = Date.now() + POST_TX_SUPPRESS_MS;
+  // No bloquear postTxSuppressUntil: el audio del otro usuario debe reproducirse
+  // inmediatamente. setRxActive() se encargará de inhibir el VOX mientras hablan.
+  postTxSuppressUntil = 0;
   resetIdleTimer();
   vox.resetState();
   log(`[semi-duplex] TX cedida (duró ${Math.round(txDurationMs / 1000)}s) — esperando canal libre`);
@@ -312,12 +334,16 @@ vox.on("ptt_start", () => {
   // eQSO no nos desconecte por TX excesivo (~70s de timeout en 193.152.83.229).
   if (txTotTimer) clearTimeout(txTotTimer);
   txTotTimer = setTimeout(totExpired, TOT_MAX_MS);
+  // Iniciar renovacion proactiva de sesion: el servidor tiene un timer ~4-9s
+  // que expira durante TX y busca 0x1a en el stream GSM si no se renueva.
+  startSessionRenewalTimer();
   log(`VOX: PTT activado — inicio transmision (suppress was ${new Date(postRxVoxSuppressUntil).toISOString()}, streak=${txDisconnectStreak})`);
 });
 
 vox.on("ptt_end", () => {
   if (!eqsoClient?.connected || !pttActive) return;
   if (txTotTimer) { clearTimeout(txTotTimer); txTotTimer = null; }
+  stopSessionRenewalTimer();
   pttActive = false;
   audio.setTxEnabled(false);
   eqsoClient.endTx();
@@ -387,28 +413,11 @@ function connect(): void {
         break;
 
       case "room_list":
+        // La renovacion de sesion mid-TX es proactiva (startSessionRenewalTimer).
+        // El room_list durante TX es la respuesta del servidor al JOIN renovado.
+        // No hace falta responder aqui: el timer ya envio JOIN+PTT antes de que
+        // el servidor mandara este room_list.
         log(`Salas: ${(ev.data as string[]).join(", ")}`);
-        if (pttActive && client.connected) {
-          if (!renewingSession) {
-            // El servidor manda room_list durante TX = renovacion de sesion:
-            // espera que el cliente reenvíe JOIN (0x1a) para validar el indicativo.
-            // Si el cliente sigue mandando solo frames GSM (0x01), el servidor
-            // buscará un byte 0x1a dentro del audio y parseará el resto como
-            // callsign inválido → "Indicativo invalido" → FIN.
-            // Solución: re-enviar JOIN inmediatamente (< 1.2s de ventana).
-            renewingSession = true;
-            log("[session] Room list recibido durante TX — re-enviando JOIN para renovar sesion");
-            client.sendJoin(cfg.callsign, cfg.room, cfg.message, cfg.password);
-          } else {
-            // Segunda room_list = servidor confirmó el re-JOIN.
-            // Re-enviar PTT (0x09) para retomar el turno de TX.
-            renewingSession = false;
-            log("[session] Re-JOIN confirmado — re-enviando PTT [0x09]");
-            client.startTx();
-          }
-        } else {
-          renewingSession = false;
-        }
         break;
 
       case "user_joined": {
@@ -501,7 +510,7 @@ function connect(): void {
       case "disconnected":
         cancelIdleTimer();
         if (txTotTimer) { clearTimeout(txTotTimer); txTotTimer = null; }
-        renewingSession = false;
+        stopSessionRenewalTimer();
         log("Desconectado del servidor eQSO");
         if (pttActive) {
           // El relay estaba transmitiendo cuando se perdió la conexión.
