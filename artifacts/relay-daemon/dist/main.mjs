@@ -568,6 +568,10 @@ var GsmDecoder = class extends EventEmitter2 {
     });
     this.proc.stdin.on("error", () => {
     });
+    this.proc.stdout.on("error", () => {
+    });
+    this.proc.stderr.on("error", () => {
+    });
     this.proc.on("error", (err) => {
       console.error(`[gsm-dec] ffmpeg error: ${err.message}`);
     });
@@ -645,6 +649,10 @@ var GsmEncoder = class extends EventEmitter2 {
     this.proc.stderr.on("data", () => {
     });
     this.proc.stdin.on("error", () => {
+    });
+    this.proc.stdout.on("error", () => {
+    });
+    this.proc.stderr.on("error", () => {
     });
     this.proc.on("error", (err) => {
       console.error(`[gsm-enc] ffmpeg error: ${err.message}`);
@@ -1067,6 +1075,10 @@ var AlsaAudio = class extends EventEmitter3 {
       const msg = d.toString().trim();
       if (msg) log2(`[arecord] ${msg}`);
     });
+    this.recorder.stdout.on("error", () => {
+    });
+    this.recorder.stderr.on("error", () => {
+    });
     this.recorder.on("error", (err) => {
       log2(`[arecord] Error: ${err.message}`);
       this.emit("error", err);
@@ -1218,6 +1230,8 @@ var AlsaAudio = class extends EventEmitter3 {
     p.stderr.on("data", (d) => {
       const msg = d.toString().trim();
       if (msg) log2(`[aplay] ${msg}`);
+    });
+    p.stderr.on("error", () => {
     });
     p.on("error", (err) => {
       log2(`[aplay] Error: ${err.message}`);
@@ -1543,6 +1557,16 @@ function log4(msg) {
 }
 
 // src/main.ts
+process.on("uncaughtException", (err, origin) => {
+  console.error(`[FATAL] ${(/* @__PURE__ */ new Date()).toISOString()} UncaughtException (${origin}):`);
+  console.error(err);
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error(`[FATAL] ${(/* @__PURE__ */ new Date()).toISOString()} UnhandledRejection:`);
+  console.error(reason);
+  process.exit(1);
+});
 var cfg = loadConfig();
 var startTime = Date.now();
 var eqsoClient = null;
