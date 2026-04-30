@@ -308,6 +308,20 @@ export class EqsoClient extends EventEmitter {
     log("PTT liberado [0x0d]");
   }
 
+  /** Renueva la sesion durante TX: JOIN + PTT sin interrumpir el pipeline de audio.
+   *  El servidor 193.152.83.229 tiene un timer de sesion que expira cada ~4-9s.
+   *  Cuando expira, el servidor busca 0x1a en el stream de audio GSM y parsea
+   *  los bytes siguientes como callsign/sala → "Indicativo/Nombre invalido" → FIN.
+   *  Solución: re-enviar JOIN (0x1a) + PTT (0x09) de forma proactiva cada 2.5s.
+   *  No llama startTx() para no resetear txDbgCount ni emitir logs redundantes.
+   */
+  renewTxSession(name: string, room: string, message: string, password: string): void {
+    if (!this.connected || !this.transmitting) return;
+    this.sendJoin(name, room, message, password);
+    this.write(Buffer.from([0x09]));
+    log("[session] Sesion TX renovada [0x1a JOIN + 0x09 PTT]");
+  }
+
   // ── Privado ────────────────────────────────────────────────────────────────
 
   // No enviamos [0x02] — ver nota en el encabezado del modulo.
