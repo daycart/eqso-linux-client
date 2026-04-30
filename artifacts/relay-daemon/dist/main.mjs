@@ -752,14 +752,21 @@ var AlsaAudio = class extends EventEmitter3 {
   // este buffer el encoder recibe rafagas y produce GSM bursty no transmisible.
   captureRingBuf = new Int16Array(0);
   captureTimer = null;
-  // TX keepalive: rellena los gaps del CM108 con GSM_SILENCE_FRAME sin pasar
-  // por ffmpeg (ffmpeg hace batching interno → frames de silencio llegan en
-  // rafaga en lugar de cada 20ms → servidor desconecta con "Indicativo invalido").
-  // El timer chequea cada 5ms si han pasado >20ms sin frame GSM emitido; si es
-  // asi, emite directamente el frame de silencio precomputado.
+  // GSM TX rate limiter: sustituye el antiguo keepalive timer.
+  // Problema resuelto: FFmpeg GSM encoder hace batch de 2 frames cada ~40ms
+  // (incluso con -avioflags direct). El keepalive anterior (threshold 20ms)
+  // insertaba 1 frame de silencio entre cada par → patron S,R,R,S,R,R → 33%
+  // silencio → audio cortado e "inaudible" en la sala eQSO.
+  //
+  // Solucion: cola FIFO + timer de 20ms. El encoder llena la cola con frames
+  // reales; el timer saca 1 frame por tick. Si la cola lleva >50ms vacia (gap
+  // real de audio, p.ej. pausa entre palabras o CM108 sin datos), se rellena
+  // con 1 frame de silencio para mantener la cadencia del protocolo eQSO.
+  // Resultado: 0% silencio durante speech, silencios solo en pausas reales.
   txActive = false;
-  txKeepaliveTimer = null;
-  lastGsmEmitMs = 0;
+  gsmRateLimitQueue = [];
+  gsmRateLimitTimer = null;
+  gsmQueueEmptyMs = 0;
   start() {
     this.startDecoder();
     this.startEncoder();
@@ -779,7 +786,8 @@ var AlsaAudio = class extends EventEmitter3 {
       clearInterval(this.levelTimer);
       this.levelTimer = null;
     }
-    this.stopTxKeepalive();
+    this.stopGsmRateLimiter();
+    this.gsmRateLimitQueue = [];
     this.stopSilenceInjection();
     if (this.recorder) {
       const rec = this.recorder;
@@ -842,41 +850,52 @@ var AlsaAudio = class extends EventEmitter3 {
   setTxEnabled(enabled) {
     this.txActive = enabled;
     if (enabled) {
-      this.lastGsmEmitMs = Date.now();
-      this.startTxKeepalive();
+      this.gsmRateLimitQueue = [];
+      this.gsmQueueEmptyMs = Date.now();
+      this.startGsmRateLimiter();
     } else {
-      this.stopTxKeepalive();
+      this.stopGsmRateLimiter();
+      this.gsmRateLimitQueue = [];
       this.pcmAccum = new Int16Array(0);
       this.captureRingBuf = new Int16Array(0);
     }
   }
-  // TX keepalive: emite GSM_SILENCE_FRAME directamente (sin pasar por ffmpeg)
-  // para rellenar los gaps del CM108. ffmpeg hace batching interno y NO hace
-  // flush frame a frame aunque se usen -avioflags direct/-fflags +flush_packets,
-  // por lo que el approach de inyectar silencio via encoder no funciona.
-  startTxKeepalive() {
-    if (this.txKeepaliveTimer) return;
-    this.txKeepaliveTimer = setInterval(() => {
+  // GSM TX rate limiter: consume 1 frame de la cola cada 20ms.
+  // Si la cola lleva >50ms vacia (pausa real de voz o gap de CM108), inyecta
+  // 1 frame de silencio para mantener la cadencia eQSO. Esto elimina los
+  // silencios "espurios" del antiguo keepalive (threshold 20ms) que se colaban
+  // entre cada par de frames reales que FFmpeg emite en batch (cada ~40ms),
+  // causando el patron S,R,R que degradaba el audio en la sala.
+  startGsmRateLimiter() {
+    if (this.gsmRateLimitTimer) return;
+    this.gsmRateLimitTimer = setInterval(() => {
       if (!this.txActive) return;
-      const now = Date.now();
-      if (now - this.lastGsmEmitMs >= 20) {
-        this.lastGsmEmitMs = now;
-        this.emit("gsm_tx", GSM_SILENCE_FRAME);
+      const frame = this.gsmRateLimitQueue.shift();
+      if (frame) {
+        this.gsmQueueEmptyMs = 0;
+        this.emit("gsm_tx", frame);
+      } else {
+        if (this.gsmQueueEmptyMs === 0) this.gsmQueueEmptyMs = Date.now();
+        if (Date.now() - this.gsmQueueEmptyMs >= 50) {
+          this.gsmQueueEmptyMs = Date.now();
+          this.emit("gsm_tx", GSM_SILENCE_FRAME);
+        }
       }
-    }, 5);
+    }, 20);
   }
-  stopTxKeepalive() {
-    if (this.txKeepaliveTimer) {
-      clearInterval(this.txKeepaliveTimer);
-      this.txKeepaliveTimer = null;
+  stopGsmRateLimiter() {
+    if (this.gsmRateLimitTimer) {
+      clearInterval(this.gsmRateLimitTimer);
+      this.gsmRateLimitTimer = null;
     }
   }
   // ── Encoder (micro → GSM) ─────────────────────────────────────────────────
   startEncoder() {
     this.encoder.start();
     this.encoder.on("gsm", (gsm) => {
-      this.lastGsmEmitMs = Date.now();
-      this.emit("gsm_tx", gsm);
+      if (this.txActive) {
+        this.gsmRateLimitQueue.push(Buffer.from(gsm));
+      }
     });
   }
   feedPcm(pcm) {
