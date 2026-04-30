@@ -1697,7 +1697,8 @@ function yieldTx() {
   postRxVoxSuppressUntil = Math.max(postRxVoxSuppressUntil, Date.now() + CHANNEL_YIELD_SUPPRESS_MS);
   resetIdleTimer();
   vox.resetState();
-  log5(`[semi-duplex] TX cedida (dur\xF3 ${Math.round(txDurationMs / 1e3)}s) \u2014 esperando canal libre`);
+  txDisconnectStreak = 0;
+  log5(`[semi-duplex] TX cedida (dur\xF3 ${Math.round(txDurationMs / 1e3)}s) \u2014 streak reset, esperando canal libre`);
   const total = txRealFrames + txSilenceFrames;
   const silencePct = total > 0 ? Math.round(txSilenceFrames / total * 100) : 0;
   if (total > 0)
