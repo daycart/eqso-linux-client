@@ -1789,7 +1789,13 @@ function connect() {
           pttActive = false;
           audio.setTxEnabled(false);
           vox.resetState();
-          log5("[vox] Estado PTT reseteado por desconexion durante TX");
+          postRxVoxSuppressUntil = Math.max(
+            postRxVoxSuppressUntil,
+            Date.now() + TOT_BREAK_MS
+          );
+          log5(
+            `[vox] PTT reseteado por desconexion \u2014 suppress VOX ${TOT_BREAK_MS / 1e3}s hasta ${new Date(postRxVoxSuppressUntil).toISOString()}`
+          );
         }
         scheduleReconnect();
         break;
