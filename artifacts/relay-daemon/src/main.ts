@@ -32,6 +32,14 @@ let forceReconnectRequested = false;
 let shutdownStarted = false;
 let lastPttIgnoredLogMs = 0;   // Throttle del log "ptt_start ignorado" (max 1/s)
 
+// ─── Time-Out Timer de TX (TOT) ──────────────────────────────────────────────
+// El servidor eQSO 193.152.83.229 desconecta al relay tras ~70s de TX continuo.
+// Para evitarlo, el relay libera el PTT a los 55s y aplica una pausa de 4s
+// (postRxVoxSuppressUntil) antes de permitir nuevo TX.
+const TOT_MAX_MS   = 55_000;  // 55s de TX máximo (margen ante ~70s del servidor)
+const TOT_BREAK_MS =  4_000;  // Pausa mínima entre TXs (servidor exige descanso)
+let txTotTimer: ReturnType<typeof setTimeout> | null = null;
+
 // ─── Reconexion por idle (prevenir timeout de sesion del servidor) ────────────
 // Sin [0x02] heartbeat, el servidor externo cierra la conexion tras ~30-35s
 // de inactividad post-TX. Reconectamos proactivamente antes de ese umbral.
@@ -186,6 +194,25 @@ audio.on("pcm_chunk", (pcm: Int16Array) => {
   }
 });
 
+// ─── TOT expirado: liberar PTT antes de que el servidor desconecte ───────────
+function totExpired(): void {
+  txTotTimer = null;
+  if (!pttActive || !eqsoClient?.connected) return;
+  log(`[TOT] ${TOT_MAX_MS / 1000}s de TX máximo alcanzado — pausa forzada de ${TOT_BREAK_MS / 1000}s`);
+  pttActive = false;
+  audio.setTxEnabled(false);
+  eqsoClient.endTx();
+  postTxSuppressUntil = Date.now() + POST_TX_SUPPRESS_MS;
+  postRxVoxSuppressUntil = Math.max(postRxVoxSuppressUntil, Date.now() + TOT_BREAK_MS);
+  resetIdleTimer();
+  vox.resetState();
+  const total = txRealFrames + txSilenceFrames;
+  const silencePct = total > 0 ? Math.round((txSilenceFrames / total) * 100) : 0;
+  log(`[TOT] frames: ${txRealFrames} real + ${txSilenceFrames} silencio = ${silencePct}% silencio`);
+  txRealFrames = 0;
+  txSilenceFrames = 0;
+}
+
 // Cuando el VOX o control HTTP activan PTT
 vox.on("ptt_start", () => {
   if (!eqsoClient?.connected) {
@@ -237,11 +264,16 @@ vox.on("ptt_start", () => {
   cancelIdleTimer(); // No reconectar mientras transmitimos
   audio.setTxEnabled(true);
   eqsoClient.startTx();
+  // Iniciar TOT: si TX supera TOT_MAX_MS, liberamos PTT para que el servidor
+  // eQSO no nos desconecte por TX excesivo (~70s de timeout en 193.152.83.229).
+  if (txTotTimer) clearTimeout(txTotTimer);
+  txTotTimer = setTimeout(totExpired, TOT_MAX_MS);
   log(`VOX: PTT activado — inicio transmision (suppress was ${new Date(postRxVoxSuppressUntil).toISOString()})`);
 });
 
 vox.on("ptt_end", () => {
   if (!eqsoClient?.connected || !pttActive) return;
+  if (txTotTimer) { clearTimeout(txTotTimer); txTotTimer = null; }
   pttActive = false;
   audio.setTxEnabled(false);
   eqsoClient.endTx();
@@ -386,6 +418,7 @@ function connect(): void {
 
       case "disconnected":
         cancelIdleTimer();
+        if (txTotTimer) { clearTimeout(txTotTimer); txTotTimer = null; }
         log("Desconectado del servidor eQSO");
         if (pttActive) {
           // El relay estaba transmitiendo cuando se perdió la conexión.
