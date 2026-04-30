@@ -1646,11 +1646,23 @@ vox.on("ptt_end", () => {
   postTxSuppressUntil = Date.now() + POST_TX_SUPPRESS_MS;
   postRxVoxSuppressUntil = Math.max(postRxVoxSuppressUntil, Date.now() + POST_TX_VOX_SUPPRESS_MS);
   resetIdleTimer();
-  log5(`VOX: PTT liberado \u2014 fin transmision (suppress hasta ${new Date(postRxVoxSuppressUntil).toISOString()})`);
+  const total = txRealFrames + txSilenceFrames;
+  const silencePct = total > 0 ? Math.round(txSilenceFrames / total * 100) : 0;
+  log5(`VOX: PTT liberado \u2014 fin transmision (suppress hasta ${new Date(postRxVoxSuppressUntil).toISOString()}) | frames: ${txRealFrames} real + ${txSilenceFrames} silencio = ${silencePct}% silencio`);
+  txRealFrames = 0;
+  txSilenceFrames = 0;
 });
+var txRealFrames = 0;
+var txSilenceFrames = 0;
 audio.on("gsm_tx", (gsm) => {
   if (!pttActive || !eqsoClient?.connected) return;
   if (latestPcmRms < TX_GATE_RMS) return;
+  const isSilence = gsm.length === GSM_SILENCE_FRAME.length && gsm.equals(GSM_SILENCE_FRAME);
+  if (isSilence) {
+    txSilenceFrames++;
+  } else {
+    txRealFrames++;
+  }
   eqsoClient.sendAudio(gsm);
   txPackets++;
 });
