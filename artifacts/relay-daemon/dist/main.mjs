@@ -351,6 +351,19 @@ var EqsoClient = class extends EventEmitter {
     this.startSilence();
     log("PTT liberado [0x0d]");
   }
+  /** Renueva la sesion durante TX: JOIN + PTT sin interrumpir el pipeline de audio.
+   *  El servidor 193.152.83.229 tiene un timer de sesion que expira cada ~4-9s.
+   *  Cuando expira, el servidor busca 0x1a en el stream de audio GSM y parsea
+   *  los bytes siguientes como callsign/sala → "Indicativo/Nombre invalido" → FIN.
+   *  Solución: re-enviar JOIN (0x1a) + PTT (0x09) de forma proactiva cada 2.5s.
+   *  No llama startTx() para no resetear txDbgCount ni emitir logs redundantes.
+   */
+  renewTxSession(name, room, message, password) {
+    if (!this.connected || !this.transmitting) return;
+    this.sendJoin(name, room, message, password);
+    this.write(Buffer.from([9]));
+    log("[session] Sesion TX renovada [0x1a JOIN + 0x09 PTT]");
+  }
   // ── Privado ────────────────────────────────────────────────────────────────
   // No enviamos [0x02] — ver nota en el encabezado del modulo.
   startSilence() {
@@ -1561,7 +1574,8 @@ var TX_FAIL_MAX_SUPPRESS_MS = 6e4;
 var TX_SUCCESS_MIN_MS = 1e4;
 var txDisconnectStreak = 0;
 var txStartedAt = 0;
-var renewingSession = false;
+var SESSION_RENEWAL_MS = 2500;
+var sessionRenewalTimer = null;
 var IDLE_RECONNECT_MS = 28e3;
 var idleReconnectTimer = null;
 function resetIdleTimer() {
@@ -1631,6 +1645,7 @@ audio.on("pcm_chunk", (pcm) => {
 });
 function totExpired() {
   txTotTimer = null;
+  stopSessionRenewalTimer();
   if (!pttActive || !eqsoClient?.connected) return;
   log5(`[TOT] ${TOT_MAX_MS / 1e3}s de TX m\xE1ximo alcanzado \u2014 pausa forzada de ${TOT_BREAK_MS / 1e3}s`);
   if (txDisconnectStreak > 0) {
@@ -1651,8 +1666,29 @@ function totExpired() {
   txRealFrames = 0;
   txSilenceFrames = 0;
 }
+function startSessionRenewalTimer() {
+  if (sessionRenewalTimer) {
+    clearInterval(sessionRenewalTimer);
+    sessionRenewalTimer = null;
+  }
+  sessionRenewalTimer = setInterval(() => {
+    if (!pttActive || !eqsoClient?.connected) {
+      stopSessionRenewalTimer();
+      return;
+    }
+    log5(`[session] Renovacion proactiva mid-TX (${SESSION_RENEWAL_MS}ms)`);
+    eqsoClient.renewTxSession(cfg.callsign, cfg.room, cfg.message, cfg.password);
+  }, SESSION_RENEWAL_MS);
+}
+function stopSessionRenewalTimer() {
+  if (sessionRenewalTimer) {
+    clearInterval(sessionRenewalTimer);
+    sessionRenewalTimer = null;
+  }
+}
 function yieldTx() {
   if (!pttActive) return;
+  stopSessionRenewalTimer();
   if (txTotTimer) {
     clearTimeout(txTotTimer);
     txTotTimer = null;
@@ -1660,10 +1696,9 @@ function yieldTx() {
   const txDurationMs = txStartedAt > 0 ? Date.now() - txStartedAt : 0;
   txStartedAt = 0;
   pttActive = false;
-  renewingSession = false;
   audio.setTxEnabled(false);
   eqsoClient?.endTx();
-  postTxSuppressUntil = Date.now() + POST_TX_SUPPRESS_MS;
+  postTxSuppressUntil = 0;
   resetIdleTimer();
   vox.resetState();
   log5(`[semi-duplex] TX cedida (dur\xF3 ${Math.round(txDurationMs / 1e3)}s) \u2014 esperando canal libre`);
@@ -1707,6 +1742,7 @@ vox.on("ptt_start", () => {
   eqsoClient.startTx();
   if (txTotTimer) clearTimeout(txTotTimer);
   txTotTimer = setTimeout(totExpired, TOT_MAX_MS);
+  startSessionRenewalTimer();
   log5(`VOX: PTT activado \u2014 inicio transmision (suppress was ${new Date(postRxVoxSuppressUntil).toISOString()}, streak=${txDisconnectStreak})`);
 });
 vox.on("ptt_end", () => {
@@ -1715,6 +1751,7 @@ vox.on("ptt_end", () => {
     clearTimeout(txTotTimer);
     txTotTimer = null;
   }
+  stopSessionRenewalTimer();
   pttActive = false;
   audio.setTxEnabled(false);
   eqsoClient.endTx();
@@ -1766,19 +1803,6 @@ function connect() {
         break;
       case "room_list":
         log5(`Salas: ${ev.data.join(", ")}`);
-        if (pttActive && client.connected) {
-          if (!renewingSession) {
-            renewingSession = true;
-            log5("[session] Room list recibido durante TX \u2014 re-enviando JOIN para renovar sesion");
-            client.sendJoin(cfg.callsign, cfg.room, cfg.message, cfg.password);
-          } else {
-            renewingSession = false;
-            log5("[session] Re-JOIN confirmado \u2014 re-enviando PTT [0x09]");
-            client.startTx();
-          }
-        } else {
-          renewingSession = false;
-        }
         break;
       case "user_joined": {
         const u = ev.data;
@@ -1853,7 +1877,7 @@ function connect() {
           clearTimeout(txTotTimer);
           txTotTimer = null;
         }
-        renewingSession = false;
+        stopSessionRenewalTimer();
         log5("Desconectado del servidor eQSO");
         if (pttActive) {
           const txDurationMs = txStartedAt > 0 ? Date.now() - txStartedAt : 0;
