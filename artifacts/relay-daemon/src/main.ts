@@ -248,27 +248,35 @@ function totExpired(): void {
 }
 
 // ─── Renovacion proactiva de sesion TX ────────────────────────────────────────
-// Flujo de renovacion:
-//   1. Timer (cada 2.5s): sendJoin() + renewingSession=true
-//   2. 0x08 / audio durante renewingSession: ignorar (son transitorios del handshake)
-//   3. room_list: servidor confirmo JOIN → re-anunciar PTT (0x09) → renewingSession=false
-// Si la renovacion tarda > SESSION_RENEWAL_MS, el siguiente tick la reintenta.
+// El servidor 193.152.83.229 tiene un timer de sesion ~5-8s durante TX.
+// Enviamos JOIN a los 2.5s para resetear ese timer y ganar ~5s extra de TX.
+// El servidor puede no responder con room_list (ignora JOINs subsiguientes):
+//   - Si responde con room_list: re-anunciar PTT (caso feliz, TX continua)
+//   - Si no responde en 1s: cancelar renewingSession para que 0x08 de otros
+//     usuarios funcione normalmente (semi-duplex sin bloquear canal ajeno)
+// Solo una renovacion por TX (setTimeout, no setInterval): el servidor solo
+// acepta el primer JOIN mid-TX; los siguientes son ignorados.
 function startSessionRenewalTimer(): void {
-  if (sessionRenewalTimer) { clearInterval(sessionRenewalTimer); sessionRenewalTimer = null; }
-  sessionRenewalTimer = setInterval(() => {
-    if (!pttActive || !eqsoClient?.connected) {
-      stopSessionRenewalTimer();
-      return;
-    }
+  if (sessionRenewalTimer) { clearTimeout(sessionRenewalTimer); sessionRenewalTimer = null; }
+  sessionRenewalTimer = setTimeout(() => {
+    sessionRenewalTimer = null;
+    if (!pttActive || !eqsoClient?.connected) return;
     renewingSession = true;
     log(`[session] Renovacion proactiva mid-TX (${SESSION_RENEWAL_MS}ms) — enviando JOIN`);
     eqsoClient.sendJoin(cfg.callsign, cfg.room, cfg.message, cfg.password);
-    // PTT se re-anuncia cuando el servidor confirme con room_list (ver handler abajo).
+    // Si el servidor no confirma con room_list en 1s, cancelar el estado de
+    // renovacion para que 0x08 de canal-ocupado funcione normalmente.
+    setTimeout(() => {
+      if (renewingSession) {
+        renewingSession = false;
+        log("[session] room_list no llegó en 1s — cancelando renovacion (semi-duplex normal)");
+      }
+    }, 1000);
   }, SESSION_RENEWAL_MS);
 }
 
 function stopSessionRenewalTimer(): void {
-  if (sessionRenewalTimer) { clearInterval(sessionRenewalTimer); sessionRenewalTimer = null; }
+  if (sessionRenewalTimer) { clearTimeout(sessionRenewalTimer); sessionRenewalTimer = null; }
   renewingSession = false;
 }
 
