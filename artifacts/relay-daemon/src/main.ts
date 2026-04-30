@@ -40,6 +40,16 @@ const TOT_MAX_MS   = 55_000;  // 55s de TX máximo (margen ante ~70s del servido
 const TOT_BREAK_MS =  4_000;  // Pausa mínima entre TXs (servidor exige descanso)
 let txTotTimer: ReturnType<typeof setTimeout> | null = null;
 
+// ─── Backoff exponencial por fallos TX consecutivos ────────────────────────
+// Si el servidor desconecta repetidamente durante TX (en <10s), aplicar
+// suppress creciente para darle tiempo de "limpiar" la sesión anterior.
+// Base: TOT_BREAK_MS, duplicando con cada fallo hasta TX_FAIL_MAX_SUPPRESS_MS.
+// Se resetea cuando una TX dura >TX_SUCCESS_MIN_MS sin desconexion del servidor.
+const TX_FAIL_MAX_SUPPRESS_MS = 60_000;  // máximo 60s de pausa tras fallos
+const TX_SUCCESS_MIN_MS       = 10_000;  // TX >10s = "exitosa", resetear contador
+let txDisconnectStreak = 0;   // fallos TX consecutivos (servidor corta en <10s)
+let txStartedAt       = 0;   // timestamp de inicio de TX actual
+
 // ─── Reconexion por idle (prevenir timeout de sesion del servidor) ────────────
 // Sin [0x02] heartbeat, el servidor externo cierra la conexion tras ~30-35s
 // de inactividad post-TX. Reconectamos proactivamente antes de ese umbral.
@@ -199,6 +209,12 @@ function totExpired(): void {
   txTotTimer = null;
   if (!pttActive || !eqsoClient?.connected) return;
   log(`[TOT] ${TOT_MAX_MS / 1000}s de TX máximo alcanzado — pausa forzada de ${TOT_BREAK_MS / 1000}s`);
+  // 55s de TX = éxito: resetear el streak de fallos consecutivos
+  if (txDisconnectStreak > 0) {
+    log(`[TOT] TX exitosa (55s) — resetear streak (era ${txDisconnectStreak})`);
+    txDisconnectStreak = 0;
+  }
+  txStartedAt = 0;
   pttActive = false;
   audio.setTxEnabled(false);
   eqsoClient.endTx();
@@ -261,6 +277,7 @@ vox.on("ptt_start", () => {
   }
 
   pttActive = true;
+  txStartedAt = Date.now();
   cancelIdleTimer(); // No reconectar mientras transmitimos
   audio.setTxEnabled(true);
   eqsoClient.startTx();
@@ -268,7 +285,7 @@ vox.on("ptt_start", () => {
   // eQSO no nos desconecte por TX excesivo (~70s de timeout en 193.152.83.229).
   if (txTotTimer) clearTimeout(txTotTimer);
   txTotTimer = setTimeout(totExpired, TOT_MAX_MS);
-  log(`VOX: PTT activado — inicio transmision (suppress was ${new Date(postRxVoxSuppressUntil).toISOString()})`);
+  log(`VOX: PTT activado — inicio transmision (suppress was ${new Date(postRxVoxSuppressUntil).toISOString()}, streak=${txDisconnectStreak})`);
 });
 
 vox.on("ptt_end", () => {
@@ -277,6 +294,13 @@ vox.on("ptt_end", () => {
   pttActive = false;
   audio.setTxEnabled(false);
   eqsoClient.endTx();
+  // TX terminada por VOX hang-time (usuario soltó): si duró >10s sin que el
+  // servidor desconectara, la TX fue exitosa → resetear streak de fallos.
+  if (txStartedAt > 0 && Date.now() - txStartedAt >= TX_SUCCESS_MIN_MS) {
+    if (txDisconnectStreak > 0) log(`[TOT] TX exitosa (${Math.round((Date.now()-txStartedAt)/1000)}s) — resetear streak (era ${txDisconnectStreak})`);
+    txDisconnectStreak = 0;
+  }
+  txStartedAt = 0;
   // Descartar eco buffereado del servidor (800ms, sin afectar semi-duplex)
   postTxSuppressUntil = Date.now() + POST_TX_SUPPRESS_MS;
   // Suprimir VOX 5s tras TX propio (squelch + eco CB + eco sala).
@@ -422,21 +446,32 @@ function connect(): void {
         log("Desconectado del servidor eQSO");
         if (pttActive) {
           // El relay estaba transmitiendo cuando se perdió la conexión.
-          // Aplicar suppress para que al reconectar no se dispare PTT inmediato:
-          // sin esto el servidor desconecta en <1s (anti-flood reconexión+TX rápido)
-          // creando un ciclo infinito de desconexiones.
+          // Aplicar suppress con backoff exponencial para romper el ciclo:
+          //   1ª vez: 4s, 2ª: 8s, 3ª: 16s, 4ª: 32s, 5ª+: 60s
+          // Esto da tiempo al servidor de liberar la sesión anterior antes
+          // de que el relay vuelva a intentar TX tras reconectar.
+          const txDurationMs = txStartedAt > 0 ? Date.now() - txStartedAt : 0;
+          const isFastDisconnect = txDurationMs < TX_SUCCESS_MIN_MS;
+          if (isFastDisconnect) {
+            txDisconnectStreak++;
+          } else {
+            txDisconnectStreak = 0; // TX larga = exitosa, resetear streak
+          }
+          txStartedAt = 0;
           pttActive = false;
           audio.setTxEnabled(false);
           vox.resetState();
-          // Usar TOT_BREAK_MS (4s) en lugar de POST_TX_VOX_SUPPRESS_MS (2.5s):
-          // el reconnect ocurre en ~1-2s, así queda ~2-3s de pausa real,
-          // suficiente para que el servidor acepte el nuevo JOIN sin anti-flood.
+          // Backoff: TOT_BREAK_MS * 2^(streak-1), máximo TX_FAIL_MAX_SUPPRESS_MS
+          const suppressMs = Math.min(
+            TOT_BREAK_MS * Math.pow(2, Math.max(0, txDisconnectStreak - 1)),
+            TX_FAIL_MAX_SUPPRESS_MS,
+          );
           postRxVoxSuppressUntil = Math.max(
             postRxVoxSuppressUntil,
-            Date.now() + TOT_BREAK_MS,
+            Date.now() + suppressMs,
           );
           log(
-            `[vox] PTT reseteado por desconexion — suppress VOX ${TOT_BREAK_MS / 1000}s hasta ${new Date(postRxVoxSuppressUntil).toISOString()}`,
+            `[vox] PTT reseteado por desconexion (TX duró ${Math.round(txDurationMs/1000)}s, streak=${txDisconnectStreak}) — suppress ${Math.round(suppressMs/1000)}s hasta ${new Date(postRxVoxSuppressUntil).toISOString()}`,
           );
         }
         scheduleReconnect();
