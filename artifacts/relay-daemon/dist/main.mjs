@@ -351,19 +351,6 @@ var EqsoClient = class extends EventEmitter {
     this.startSilence();
     log("PTT liberado [0x0d]");
   }
-  /** Renueva la sesion durante TX: JOIN + PTT sin interrumpir el pipeline de audio.
-   *  El servidor 193.152.83.229 tiene un timer de sesion que expira cada ~4-9s.
-   *  Cuando expira, el servidor busca 0x1a en el stream de audio GSM y parsea
-   *  los bytes siguientes como callsign/sala → "Indicativo/Nombre invalido" → FIN.
-   *  Solución: re-enviar JOIN (0x1a) + PTT (0x09) de forma proactiva cada 2.5s.
-   *  No llama startTx() para no resetear txDbgCount ni emitir logs redundantes.
-   */
-  renewTxSession(name, room, message, password) {
-    if (!this.connected || !this.transmitting) return;
-    this.sendJoin(name, room, message, password);
-    this.write(Buffer.from([9]));
-    log("[session] Sesion TX renovada [0x1a JOIN + 0x09 PTT]");
-  }
   // ── Privado ────────────────────────────────────────────────────────────────
   // No enviamos [0x02] — ver nota en el encabezado del modulo.
   startSilence() {
@@ -1571,11 +1558,12 @@ var TOT_MAX_MS = 55e3;
 var TOT_BREAK_MS = 4e3;
 var txTotTimer = null;
 var TX_FAIL_MAX_SUPPRESS_MS = 6e4;
-var TX_SUCCESS_MIN_MS = 1e4;
+var TX_SUCCESS_MIN_MS = 3500;
 var txDisconnectStreak = 0;
 var txStartedAt = 0;
 var SESSION_RENEWAL_MS = 2500;
 var sessionRenewalTimer = null;
+var renewingSession = false;
 var IDLE_RECONNECT_MS = 28e3;
 var idleReconnectTimer = null;
 function resetIdleTimer() {
@@ -1676,8 +1664,9 @@ function startSessionRenewalTimer() {
       stopSessionRenewalTimer();
       return;
     }
-    log5(`[session] Renovacion proactiva mid-TX (${SESSION_RENEWAL_MS}ms)`);
-    eqsoClient.renewTxSession(cfg.callsign, cfg.room, cfg.message, cfg.password);
+    renewingSession = true;
+    log5(`[session] Renovacion proactiva mid-TX (${SESSION_RENEWAL_MS}ms) \u2014 enviando JOIN`);
+    eqsoClient.sendJoin(cfg.callsign, cfg.room, cfg.message, cfg.password);
   }, SESSION_RENEWAL_MS);
 }
 function stopSessionRenewalTimer() {
@@ -1685,6 +1674,7 @@ function stopSessionRenewalTimer() {
     clearInterval(sessionRenewalTimer);
     sessionRenewalTimer = null;
   }
+  renewingSession = false;
 }
 function yieldTx() {
   if (!pttActive) return;
@@ -1803,6 +1793,11 @@ function connect() {
         break;
       case "room_list":
         log5(`Salas: ${ev.data.join(", ")}`);
+        if (renewingSession && pttActive && client.connected) {
+          renewingSession = false;
+          log5("[session] Room list confirm\xF3 renovacion \u2014 re-anunciando PTT [0x09]");
+          client.startTx();
+        }
         break;
       case "user_joined": {
         const u = ev.data;
@@ -1831,6 +1826,10 @@ function connect() {
         break;
       }
       case "channel_busy": {
+        if (renewingSession) {
+          log5("[session] 0x08 durante renovacion de sesion \u2014 ignorado (esperando room_list)");
+          break;
+        }
         if (pttActive) {
           log5("[semi-duplex] Canal ocupado [0x08] \u2014 cediendo TX al otro usuario");
           yieldTx();
@@ -1845,7 +1844,7 @@ function connect() {
           break;
         }
         rxPackets++;
-        if (pttActive) {
+        if (pttActive && !renewingSession) {
           if (rxPackets === 1)
             log5(`[semi-duplex] Audio entrante durante TX \u2014 colision de canal, cediendo`);
           yieldTx();
