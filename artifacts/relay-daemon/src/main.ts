@@ -553,17 +553,22 @@ function connect(): void {
           pttActive = false;
           audio.setTxEnabled(false);
           vox.resetState();
-          // Backoff: TOT_BREAK_MS * 2^(streak-1), máximo TX_FAIL_MAX_SUPPRESS_MS
-          const suppressMs = Math.min(
-            TOT_BREAK_MS * Math.pow(2, Math.max(0, txDisconnectStreak - 1)),
-            TX_FAIL_MAX_SUPPRESS_MS,
-          );
-          postRxVoxSuppressUntil = Math.max(
-            postRxVoxSuppressUntil,
-            Date.now() + suppressMs,
-          );
+          // Backoff SOLO en fast-disconnect: TOT_BREAK_MS * 2^(streak-1)
+          // Si la TX fue exitosa (>3.5s), NO aplicar suppress: el VOX puede
+          // retrigger inmediatamente tras la reconexion (reconnectMinMs).
+          let suppressMs = 0;
+          if (isFastDisconnect) {
+            suppressMs = Math.min(
+              TOT_BREAK_MS * Math.pow(2, txDisconnectStreak - 1),
+              TX_FAIL_MAX_SUPPRESS_MS,
+            );
+            postRxVoxSuppressUntil = Math.max(
+              postRxVoxSuppressUntil,
+              Date.now() + suppressMs,
+            );
+          }
           log(
-            `[vox] PTT reseteado por desconexion (TX duró ${Math.round(txDurationMs/1000)}s, streak=${txDisconnectStreak}) — suppress ${Math.round(suppressMs/1000)}s hasta ${new Date(postRxVoxSuppressUntil).toISOString()}`,
+            `[vox] PTT reseteado por desconexion (TX duró ${Math.round(txDurationMs/1000)}s, streak=${txDisconnectStreak}) — suppress ${Math.round(suppressMs/1000)}s`,
           );
         }
         scheduleReconnect();
