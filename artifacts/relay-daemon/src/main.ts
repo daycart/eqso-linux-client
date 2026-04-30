@@ -422,12 +422,22 @@ function connect(): void {
         log("Desconectado del servidor eQSO");
         if (pttActive) {
           // El relay estaba transmitiendo cuando se perdió la conexión.
-          // Resetear el estado del VOX para que no quede en TX indefinidamente
-          // mientras el daemon espera el reconnect.
+          // Aplicar suppress para que al reconectar no se dispare PTT inmediato:
+          // sin esto el servidor desconecta en <1s (anti-flood reconexión+TX rápido)
+          // creando un ciclo infinito de desconexiones.
           pttActive = false;
           audio.setTxEnabled(false);
           vox.resetState();
-          log("[vox] Estado PTT reseteado por desconexion durante TX");
+          // Usar TOT_BREAK_MS (4s) en lugar de POST_TX_VOX_SUPPRESS_MS (2.5s):
+          // el reconnect ocurre en ~1-2s, así queda ~2-3s de pausa real,
+          // suficiente para que el servidor acepte el nuevo JOIN sin anti-flood.
+          postRxVoxSuppressUntil = Math.max(
+            postRxVoxSuppressUntil,
+            Date.now() + TOT_BREAK_MS,
+          );
+          log(
+            `[vox] PTT reseteado por desconexion — suppress VOX ${TOT_BREAK_MS / 1000}s hasta ${new Date(postRxVoxSuppressUntil).toISOString()}`,
+          );
         }
         scheduleReconnect();
         break;
