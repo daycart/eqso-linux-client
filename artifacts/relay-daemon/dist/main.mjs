@@ -1890,16 +1890,19 @@ function connect() {
           pttActive = false;
           audio.setTxEnabled(false);
           vox.resetState();
-          const suppressMs = Math.min(
-            TOT_BREAK_MS * Math.pow(2, Math.max(0, txDisconnectStreak - 1)),
-            TX_FAIL_MAX_SUPPRESS_MS
-          );
-          postRxVoxSuppressUntil = Math.max(
-            postRxVoxSuppressUntil,
-            Date.now() + suppressMs
-          );
+          let suppressMs = 0;
+          if (isFastDisconnect) {
+            suppressMs = Math.min(
+              TOT_BREAK_MS * Math.pow(2, txDisconnectStreak - 1),
+              TX_FAIL_MAX_SUPPRESS_MS
+            );
+            postRxVoxSuppressUntil = Math.max(
+              postRxVoxSuppressUntil,
+              Date.now() + suppressMs
+            );
+          }
           log5(
-            `[vox] PTT reseteado por desconexion (TX dur\xF3 ${Math.round(txDurationMs / 1e3)}s, streak=${txDisconnectStreak}) \u2014 suppress ${Math.round(suppressMs / 1e3)}s hasta ${new Date(postRxVoxSuppressUntil).toISOString()}`
+            `[vox] PTT reseteado por desconexion (TX dur\xF3 ${Math.round(txDurationMs / 1e3)}s, streak=${txDisconnectStreak}) \u2014 suppress ${Math.round(suppressMs / 1e3)}s`
           );
         }
         scheduleReconnect();
