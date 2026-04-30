@@ -1368,6 +1368,10 @@ var SerialPtt = class extends EventEmitter5 {
       this.cfg.method,
       String(this.cfg.inverted)
     ], { stdio: ["pipe", "pipe", "pipe"] });
+    this.proc.stdin.on("error", (err) => {
+      if (err.code === "EPIPE" || err.code === "ERR_STREAM_DESTROYED") return;
+      log3(`PTT stdin error: ${err.message}`);
+    });
     this.proc.stdout.on("data", (data) => {
       const msg = data.toString().trim();
       if (msg === "ready") {
