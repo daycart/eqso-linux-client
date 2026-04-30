@@ -239,6 +239,9 @@ var EqsoClient = class extends EventEmitter {
   // with "Indicativo invalido" and close the connection.
   joinAccepted = false;
   txingStations = /* @__PURE__ */ new Set();
+  // Debug raw TX/RX bytes — log first N events after PTT to trace server behavior
+  txDbgCount = 0;
+  TX_DBG_MAX = 8;
   /** Returns true only when the connection is fully ready for TX (handshake done + JOIN accepted). */
   isReady() {
     return this.connected && this.handshakeDone && this.joinAccepted;
@@ -257,6 +260,10 @@ var EqsoClient = class extends EventEmitter {
       sock.write(HANDSHAKE_CLIENT);
     });
     sock.on("data", (data) => {
+      if (this.transmitting && this.txDbgCount < this.TX_DBG_MAX) {
+        this.txDbgCount++;
+        log(`[raw-rx #${this.txDbgCount}] ${data.length}b: ${data.slice(0, 48).toString("hex")}`);
+      }
       this.parser.feed(data);
       this.drainPackets();
     });
@@ -318,6 +325,7 @@ var EqsoClient = class extends EventEmitter {
     }
     this.stopSilence();
     this.transmitting = true;
+    this.txDbgCount = 0;
     this.write(Buffer.from([9]));
     log("PTT anunciado [0x09]");
   }
@@ -346,6 +354,9 @@ var EqsoClient = class extends EventEmitter {
   }
   write(data) {
     if (this.socket && !this.socket.destroyed && this.connected) {
+      if (this.transmitting && this.txDbgCount === 0) {
+        log(`[raw-tx ptt] ${data.length}b: ${data.toString("hex")}`);
+      }
       try {
         this.socket.write(data);
       } catch {
