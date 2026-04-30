@@ -29,6 +29,7 @@ let rxPackets = 0;
 let txPackets = 0;
 let usersInRoom: string[] = [];
 let forceReconnectRequested = false;
+let shutdownStarted = false;
 let lastPttIgnoredLogMs = 0;   // Throttle del log "ptt_start ignorado" (max 1/s)
 
 // ─── Reconexion por idle (prevenir timeout de sesion del servidor) ────────────
@@ -409,6 +410,7 @@ function connect(): void {
 }
 
 function scheduleReconnect(): void {
+  if (shutdownStarted) return; // no reconectar durante apagado graceful
   if (reconnectTimer) return; // ya programado
   eqsoClient = null;
   pttActive  = false;
@@ -478,7 +480,10 @@ connect();
 // ─── Señales del sistema ──────────────────────────────────────────────────────
 
 async function shutdown(sig: string): Promise<void> {
+  if (shutdownStarted) return; // evitar re-entrada si llegan dos señales
+  shutdownStarted = true;
   log(`Señal ${sig} recibida — apagando (graceful)…`);
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   if (pttActive) { eqsoClient?.endTx(); }
   eqsoClient?.disconnect();
   serialPtt.stop();
