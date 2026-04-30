@@ -477,6 +477,10 @@ export class AlsaAudio extends EventEmitter {
       const msg = d.toString().trim();
       if (msg) log(`[arecord] ${msg}`);
     });
+    // Suppress pipe errors on stdout/stderr — child process stdio streams are
+    // internally net.Socket instances; unhandled errors crash the process.
+    this.recorder.stdout.on("error", () => {});
+    this.recorder.stderr.on("error", () => {});
 
     this.recorder.on("error", (err) => {
       log(`[arecord] Error: ${err.message}`);
@@ -655,6 +659,8 @@ export class AlsaAudio extends EventEmitter {
       const msg = d.toString().trim();
       if (msg) log(`[aplay] ${msg}`);
     });
+    // Suppress pipe errors — same rationale as arecord above.
+    p.stderr.on("error", () => {});
 
     p.on("error", (err) => {
       log(`[aplay] Error: ${err.message}`);
