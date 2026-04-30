@@ -1589,6 +1589,7 @@ var POST_TX_SUPPRESS_MS = 1500;
 var postRxVoxSuppressUntil = 0;
 var POST_APLAY_VOX_SUPPRESS_MS = 2500;
 var POST_TX_VOX_SUPPRESS_MS = 2500;
+var CHANNEL_YIELD_SUPPRESS_MS = 2e3;
 var startupSuppressUntil = Date.now() + cfg.audio.startupVoxSuppressMs;
 function setRxActive() {
   const wasActive = rxActive;
@@ -1689,6 +1690,7 @@ function yieldTx() {
   audio.setTxEnabled(false);
   eqsoClient?.endTx();
   postTxSuppressUntil = 0;
+  postRxVoxSuppressUntil = Math.max(postRxVoxSuppressUntil, Date.now() + CHANNEL_YIELD_SUPPRESS_MS);
   resetIdleTimer();
   vox.resetState();
   log5(`[semi-duplex] TX cedida (dur\xF3 ${Math.round(txDurationMs / 1e3)}s) \u2014 esperando canal libre`);
