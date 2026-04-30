@@ -301,7 +301,12 @@ function yieldTx(): void {
   postRxVoxSuppressUntil = Math.max(postRxVoxSuppressUntil, Date.now() + CHANNEL_YIELD_SUPPRESS_MS);
   resetIdleTimer();
   vox.resetState();
-  log(`[semi-duplex] TX cedida (duró ${Math.round(txDurationMs / 1000)}s) — esperando canal libre`);
+  // Resetear streak al ceder canal voluntariamente. Los desconectos rápidos
+  // tras un yield son por canal-ocupado (normal), no por errores de protocolo.
+  // Sin este reset, TX2/TX3 post-yield se penalizan con streak=1/2 y suppress
+  // de 4s/8s aunque el canal simplemente estaba ocupado por otro usuario.
+  txDisconnectStreak = 0;
+  log(`[semi-duplex] TX cedida (duró ${Math.round(txDurationMs / 1000)}s) — streak reset, esperando canal libre`);
   const total = txRealFrames + txSilenceFrames;
   const silencePct = total > 0 ? Math.round((txSilenceFrames / total) * 100) : 0;
   if (total > 0)
