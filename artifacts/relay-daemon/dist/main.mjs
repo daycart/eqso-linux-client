@@ -1544,6 +1544,9 @@ var txPackets = 0;
 var usersInRoom = [];
 var shutdownStarted = false;
 var lastPttIgnoredLogMs = 0;
+var TOT_MAX_MS = 55e3;
+var TOT_BREAK_MS = 4e3;
+var txTotTimer = null;
 var IDLE_RECONNECT_MS = 28e3;
 var idleReconnectTimer = null;
 function resetIdleTimer() {
@@ -1611,6 +1614,23 @@ audio.on("pcm_chunk", (pcm) => {
     vox.processPcm(pcm);
   }
 });
+function totExpired() {
+  txTotTimer = null;
+  if (!pttActive || !eqsoClient?.connected) return;
+  log5(`[TOT] ${TOT_MAX_MS / 1e3}s de TX m\xE1ximo alcanzado \u2014 pausa forzada de ${TOT_BREAK_MS / 1e3}s`);
+  pttActive = false;
+  audio.setTxEnabled(false);
+  eqsoClient.endTx();
+  postTxSuppressUntil = Date.now() + POST_TX_SUPPRESS_MS;
+  postRxVoxSuppressUntil = Math.max(postRxVoxSuppressUntil, Date.now() + TOT_BREAK_MS);
+  resetIdleTimer();
+  vox.resetState();
+  const total = txRealFrames + txSilenceFrames;
+  const silencePct = total > 0 ? Math.round(txSilenceFrames / total * 100) : 0;
+  log5(`[TOT] frames: ${txRealFrames} real + ${txSilenceFrames} silencio = ${silencePct}% silencio`);
+  txRealFrames = 0;
+  txSilenceFrames = 0;
+}
 vox.on("ptt_start", () => {
   if (!eqsoClient?.connected) {
     vox.resetState();
@@ -1641,10 +1661,16 @@ vox.on("ptt_start", () => {
   cancelIdleTimer();
   audio.setTxEnabled(true);
   eqsoClient.startTx();
+  if (txTotTimer) clearTimeout(txTotTimer);
+  txTotTimer = setTimeout(totExpired, TOT_MAX_MS);
   log5(`VOX: PTT activado \u2014 inicio transmision (suppress was ${new Date(postRxVoxSuppressUntil).toISOString()})`);
 });
 vox.on("ptt_end", () => {
   if (!eqsoClient?.connected || !pttActive) return;
+  if (txTotTimer) {
+    clearTimeout(txTotTimer);
+    txTotTimer = null;
+  }
   pttActive = false;
   audio.setTxEnabled(false);
   eqsoClient.endTx();
@@ -1754,6 +1780,10 @@ function connect() {
         break;
       case "disconnected":
         cancelIdleTimer();
+        if (txTotTimer) {
+          clearTimeout(txTotTimer);
+          txTotTimer = null;
+        }
         log5("Desconectado del servidor eQSO");
         if (pttActive) {
           pttActive = false;
