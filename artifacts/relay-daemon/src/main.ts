@@ -130,6 +130,12 @@ const POST_APLAY_VOX_SUPPRESS_MS = 2500;  // usado en ambos momentos
 // Medido en logs: RMS=11130 a los 3s de soltar PTT → trigger falso con 3000ms.
 // Con squelch HW bien ajustado (RMS=2 en silencio), 2500ms es suficiente.
 const POST_TX_VOX_SUPPRESS_MS = 2500;  // antes 5000ms (squelch HW ajustado)
+// Suppress mínimo tras ceder el canal por 0x08 / colision de audio.
+// Da tiempo para que el audio del otro usuario llegue y setRxActive() tome el
+// control antes de que el VOX pueda retriggerear. Sin esto, el VOX dispara en
+// <50ms → ciclo rápido 0x09→0x08→0x0d→0x09 que el servidor ve como spam.
+// 2000ms es suficiente: el primer paquete de audio llega en <500ms normalmente.
+const CHANNEL_YIELD_SUPPRESS_MS = 2_000;
 
 // ─── Supresion VOX al arranque (burst de ruido de inicio ALSA) ───────────────
 // Al inicializar arecord, ALSA emite un burst de ruido de fondo (~1-2s con
@@ -281,6 +287,10 @@ function yieldTx(): void {
   // No bloquear postTxSuppressUntil: el audio del otro usuario debe reproducirse
   // inmediatamente. setRxActive() se encargará de inhibir el VOX mientras hablan.
   postTxSuppressUntil = 0;
+  // Suppress mínimo de VOX para dar tiempo al audio del otro usuario a llegar:
+  // sin esto el VOX retriggeraba en <50ms causando ciclo 0x09→0x08→0x0d→0x09.
+  // setRxActive() extenderá el suppress cuando llegue el primer paquete de audio.
+  postRxVoxSuppressUntil = Math.max(postRxVoxSuppressUntil, Date.now() + CHANNEL_YIELD_SUPPRESS_MS);
   resetIdleTimer();
   vox.resetState();
   log(`[semi-duplex] TX cedida (duró ${Math.round(txDurationMs / 1000)}s) — esperando canal libre`);
