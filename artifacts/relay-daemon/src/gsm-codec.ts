@@ -39,10 +39,13 @@ export class GsmDecoder extends EventEmitter {
     ], { stdio: ["pipe", "pipe", "pipe"] });
 
     this.proc.stderr.on("data", () => {});
-    // Suppress async EPIPE/ERR_STREAM_DESTROYED when Node writes to the
-    // ffmpeg stdin pipe after ffmpeg exits (e.g. during graceful shutdown).
-    // Without this handler Node throws an unhandled 'error' event and crashes.
+    // Suppress async EPIPE/ERR_STREAM_DESTROYED on ffmpeg stdin during shutdown.
+    // Also suppress errors on stdout/stderr pipes — child process stdio streams
+    // are internally net.Socket instances; without these handlers Node.js throws
+    // "Unhandled 'error' event on Socket instance" and crashes the process.
     this.proc.stdin.on("error", () => {});
+    this.proc.stdout.on("error", () => {});
+    this.proc.stderr.on("error", () => {});
     this.proc.on("error", (err) => {
       console.error(`[gsm-dec] ffmpeg error: ${err.message}`);
     });
@@ -112,8 +115,10 @@ export class GsmEncoder extends EventEmitter {
     ], { stdio: ["pipe", "pipe", "pipe"] });
 
     this.proc.stderr.on("data", () => {});
-    // Suppress async EPIPE/ERR_STREAM_DESTROYED on ffmpeg stdin during shutdown.
+    // Suppress pipe errors on all stdio streams (same rationale as decoder above).
     this.proc.stdin.on("error", () => {});
+    this.proc.stdout.on("error", () => {});
+    this.proc.stderr.on("error", () => {});
     this.proc.on("error", (err) => {
       console.error(`[gsm-enc] ffmpeg error: ${err.message}`);
     });
