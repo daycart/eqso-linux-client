@@ -556,6 +556,8 @@ var GsmDecoder = class extends EventEmitter2 {
     ], { stdio: ["pipe", "pipe", "pipe"] });
     this.proc.stderr.on("data", () => {
     });
+    this.proc.stdin.on("error", () => {
+    });
     this.proc.on("error", (err) => {
       console.error(`[gsm-dec] ffmpeg error: ${err.message}`);
     });
@@ -631,6 +633,8 @@ var GsmEncoder = class extends EventEmitter2 {
       "pipe:1"
     ], { stdio: ["pipe", "pipe", "pipe"] });
     this.proc.stderr.on("data", () => {
+    });
+    this.proc.stdin.on("error", () => {
     });
     this.proc.on("error", (err) => {
       console.error(`[gsm-enc] ffmpeg error: ${err.message}`);
@@ -1538,6 +1542,7 @@ var reconnectTimer = null;
 var rxPackets = 0;
 var txPackets = 0;
 var usersInRoom = [];
+var shutdownStarted = false;
 var lastPttIgnoredLogMs = 0;
 var IDLE_RECONNECT_MS = 28e3;
 var idleReconnectTimer = null;
@@ -1767,6 +1772,7 @@ function connect() {
   client.connect();
 }
 function scheduleReconnect() {
+  if (shutdownStarted) return;
   if (reconnectTimer) return;
   eqsoClient = null;
   pttActive = false;
@@ -1825,7 +1831,13 @@ if (cfg.ptt.device) serialPtt.start();
 audio.start();
 connect();
 async function shutdown(sig) {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
   log5(`Se\xF1al ${sig} recibida \u2014 apagando (graceful)\u2026`);
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
   if (pttActive) {
     eqsoClient?.endTx();
   }
