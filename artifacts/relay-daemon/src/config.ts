@@ -17,6 +17,12 @@ export interface AudioConfig {
    *  IMPORTANTE: si la voz fluctua alrededor del umbral, aumentar debounce
    *  impide la activacion (necesitas N chunks consecutivos, no N de M). */
   voxDebounceChunks: number;
+  /** Milisegundos de supresion de VOX al inicio del relay.
+   *  ALSA genera un burst de ruido al inicializar arecord (chunks enormes de
+   *  inicio que disparan falsos VOX incluso con umbral alto). Durante este
+   *  periodo el relay ya puede estar unido al servidor, pero no transmite.
+   *  Defecto: 4000ms (4 segundos, cubre ~3 reintentos de arecord). */
+  startupVoxSuppressMs: number;
   inputGain: number;
   outputGain: number;
 }
@@ -52,9 +58,9 @@ const DEFAULTS: RelayConfig = {
   room: "CB",
   password: "",
   message: "Radio Enlace",
-  server: "127.0.0.1",
-  port: 2171,
-  reconnectMinMs: 2000,
+  server: "193.152.83.229",
+  port: 2172,
+  reconnectMinMs: 500,
   reconnectMaxMs: 60000,
   audio: {
     captureDevice: "plughw:1,0",
@@ -64,6 +70,7 @@ const DEFAULTS: RelayConfig = {
     voxHangMs: 2500,
     txGateRms: 50,
     voxDebounceChunks: 1,
+    startupVoxSuppressMs: 4000,
     inputGain: 1.0,
     outputGain: 3.0,
   },
