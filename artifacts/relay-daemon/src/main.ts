@@ -272,23 +272,9 @@ function totExpired(): void {
 // Solo una renovacion por TX (setTimeout, no setInterval): el servidor solo
 // acepta el primer JOIN mid-TX; los siguientes son ignorados.
 function startSessionRenewalTimer(): void {
-  if (sessionRenewalTimer) { clearTimeout(sessionRenewalTimer); sessionRenewalTimer = null; }
-  sessionRenewalTimer = setTimeout(() => {
-    sessionRenewalTimer = null;
-    if (!pttActive || !eqsoClient?.connected) return;
-    renewingSession = true;
-    log(`[session] Renovacion proactiva mid-TX (${SESSION_RENEWAL_MS}ms) — enviando JOIN`);
-    eqsoClient.sendJoin(cfg.callsign, cfg.room, cfg.message, cfg.password);
-    // Si el servidor no confirma con room_list en 1s, cancelar el estado de
-    // renovacion para que 0x08 de canal-ocupado funcione normalmente.
-    setTimeout(() => {
-      if (renewingSession) {
-        renewingSession = false;
-        log("[session] room_list no llegó en 1s — cancelando renovacion (semi-duplex normal)");
-      }
-    }, 1000);
-  }, SESSION_RENEWAL_MS);
+  return; // no-op permanente
 }
+
 
 function stopSessionRenewalTimer(): void {
   if (sessionRenewalTimer) { clearTimeout(sessionRenewalTimer); sessionRenewalTimer = null; }
