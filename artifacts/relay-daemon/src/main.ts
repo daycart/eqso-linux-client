@@ -266,8 +266,12 @@ function connect(): void {
 
       case "audio": {
         const pkt = ev.data as Buffer;
-        if (pkt.length < 1 + GSM_PACKET_BYTES) {
-          log(`[audio] pkt demasiado corto: ${pkt.length} bytes (esperado ${1 + GSM_PACKET_BYTES})`);
+        // El servidor puede mandar frames individuales de 33 bytes o bloques de
+        // 198 bytes (6 frames). Aceptar cualquier multiplo de GSM_FRAME_BYTES (33)
+        // con al menos 1 frame util.
+        const gsmPayloadLen = pkt.length - 1;
+        if (pkt.length < 2 || gsmPayloadLen % 33 !== 0) {
+          log(`[audio] pkt descartado: ${pkt.length} bytes (no es 1 + N*33)`);
           break;
         }
         rxPackets++;
@@ -293,11 +297,11 @@ function connect(): void {
         if (cfg.audio.outputGain === 0) break;
         // Inhibir VOX mientras reproducimos para evitar feedback acustico
         setRxActive();
-        // Extraer 198 bytes GSM (sin el byte 0x01 del opcode)
-        const gsm = Buffer.from(pkt.buffer, pkt.byteOffset + 1, GSM_PACKET_BYTES);
+        // Extraer payload GSM real (sin el byte 0x01 del opcode)
+        const gsm = Buffer.from(pkt.buffer, pkt.byteOffset + 1, gsmPayloadLen);
         audio.playGsm(gsm);
         if (rxPackets <= 3 || rxPackets % 50 === 0)
-          log(`[audio] pkt#${rxPackets} → playGsm OK (pttActive=${pttActive} rxActive=${rxActive})`);
+          log(`[audio] pkt#${rxPackets} len=${gsmPayloadLen}b → playGsm OK (pttActive=${pttActive} rxActive=${rxActive})`);
         break;
       }
 
