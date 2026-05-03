@@ -40,7 +40,8 @@ export const GSM_SILENCE_FRAME = Buffer.from([
 const PCM_CHUNK_SAMPLES = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET; // 960 muestras = 1920 bytes
 
 // Jitter buffer para RX: acumula muestras antes de abrir aplay.
-const JITTER_PRE_BUFFER_SAMPLES = 960;
+// 4800 muestras = 600ms de pre-roll → absorbe jitter de red en VirtualBox.
+const JITTER_PRE_BUFFER_SAMPLES = 4800;
 
 export class AlsaAudio extends EventEmitter {
   private recorder: ChildProcessWithoutNullStreams | null = null;
@@ -354,8 +355,8 @@ export class AlsaAudio extends EventEmitter {
       "-r", "8000",
       "-c", "1",
       "-q",
-      "--buffer-size=2048",
-      "--period-size=256",
+      "--buffer-size=16384",
+      "--period-size=512",
     ];
     log(`aplay ${args.join(" ")}`);
     this.player = spawn("aplay", args, { stdio: ["pipe", "ignore", "pipe"] });
