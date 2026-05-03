@@ -7,24 +7,9 @@ export interface AudioConfig {
   vox: boolean;
   voxThresholdRms: number;
   voxHangMs: number;
-  /** Gate de TX: RMS mínimo para enviar un paquete durante el VOX hang.
-   *  0 = sin gate (envía todo durante VOX active). Por defecto 50 (elimina
-   *  silencio absoluto sin cortar voz suave). */
-  txGateRms: number;
-  /** Chunks consecutivos sobre umbral antes de emitir ptt_start (anti-click).
-   *  1 chunk = 60ms (period=480 a 8kHz). Defecto 1 = sin debounce.
-   *  Aumentar a 2-3 solo si hay clics de squelch muy breves que no filtra el umbral.
-   *  IMPORTANTE: si la voz fluctua alrededor del umbral, aumentar debounce
-   *  impide la activacion (necesitas N chunks consecutivos, no N de M). */
-  voxDebounceChunks: number;
-  /** Milisegundos de supresion de VOX al inicio del relay.
-   *  ALSA genera un burst de ruido al inicializar arecord (chunks enormes de
-   *  inicio que disparan falsos VOX incluso con umbral alto). Durante este
-   *  periodo el relay ya puede estar unido al servidor, pero no transmite.
-   *  Defecto: 4000ms (4 segundos, cubre ~3 reintentos de arecord). */
-  startupVoxSuppressMs: number;
   inputGain: number;
   outputGain: number;
+  postRxSuppressMs: number;
 }
 
 export interface ControlConfig {
@@ -67,12 +52,10 @@ const DEFAULTS: RelayConfig = {
     playbackDevice: "plughw:1,0",
     vox: true,
     voxThresholdRms: 600,
-    voxHangMs: 2500,
-    txGateRms: 50,
-    voxDebounceChunks: 1,
-    startupVoxSuppressMs: 4000,
+    voxHangMs: 1000,
     inputGain: 1.0,
-    outputGain: 3.0,
+    outputGain: 1.0,
+    postRxSuppressMs: 2500,
   },
   control: {
     enabled: true,
@@ -102,10 +85,9 @@ function deepMerge<T>(base: T, override: Partial<T>): T {
 }
 
 export function loadConfig(): RelayConfig {
-  const instance = process.env["RELAY_INSTANCE"] || "CB";
   const configFile =
     process.env["CONFIG_FILE"] ??
-    `/etc/eqso-relay/${instance}.json`;
+    `/etc/eqso-relay/${process.env["RELAY_INSTANCE"] ?? "default"}.json`;
 
   let fromFile: Partial<RelayConfig> = {};
   if (fs.existsSync(configFile)) {
