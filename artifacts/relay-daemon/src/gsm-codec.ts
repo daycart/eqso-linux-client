@@ -12,9 +12,9 @@ import { EventEmitter } from "events";
 
 export const GSM_FRAME_BYTES   = 33;
 export const GSM_FRAME_SAMPLES = 160;
-export const FRAMES_PER_PACKET = 1;
-export const GSM_PACKET_BYTES  = GSM_FRAME_BYTES * FRAMES_PER_PACKET;   // 33
-export const PCM_PACKET_BYTES  = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET * 2; // 320
+export const FRAMES_PER_PACKET = 6;
+export const GSM_PACKET_BYTES  = GSM_FRAME_BYTES * FRAMES_PER_PACKET;   // 198
+export const PCM_PACKET_BYTES  = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET * 2; // 1920
 
 // ─── Decoder: GSM bytes → Int16 PCM ─────────────────────────────────────────
 
@@ -25,27 +25,17 @@ export class GsmDecoder extends EventEmitter {
 
   start(): void {
     if (this.proc) return;
-    // -fflags +flush_packets: fuerza avio_flush() tras cada paquete muxado.
-    // stdbuf -o0 NO sirve: ffmpeg usa write() (no fwrite/stdio), sin efecto.
-    // El AVIOContext buffer (32KB) se vacía al pipe después de cada frame.
     this.proc = spawn("ffmpeg", [
       "-hide_banner", "-loglevel", "quiet",
       "-probesize", "32", "-analyzeduration", "0",
       "-f", "gsm", "-ar", "8000",
       "-i", "pipe:0",
       "-f", "s16le", "-ar", "8000",
-      "-fflags", "+flush_packets",
+      "-avioflags", "direct",   // sin buffer AVIOContext — flush inmediato tras cada paquete
       "pipe:1",
     ], { stdio: ["pipe", "pipe", "pipe"] });
 
     this.proc.stderr.on("data", () => {});
-    // Suppress async EPIPE/ERR_STREAM_DESTROYED on ffmpeg stdin during shutdown.
-    // Also suppress errors on stdout/stderr pipes — child process stdio streams
-    // are internally net.Socket instances; without these handlers Node.js throws
-    // "Unhandled 'error' event on Socket instance" and crashes the process.
-    this.proc.stdin.on("error", () => {});
-    this.proc.stdout.on("error", () => {});
-    this.proc.stderr.on("error", () => {});
     this.proc.on("error", (err) => {
       console.error(`[gsm-dec] ffmpeg error: ${err.message}`);
     });
@@ -70,9 +60,10 @@ export class GsmDecoder extends EventEmitter {
 
   decode(gsm: Buffer): void {
     if (!this.proc || !this.ready) return;
-    if (gsm.length < GSM_PACKET_BYTES) return;
+    if (gsm.length < GSM_FRAME_BYTES) return;
+    const usable = gsm.length - (gsm.length % GSM_FRAME_BYTES);
     try {
-      this.proc.stdin.write(gsm.slice(0, GSM_PACKET_BYTES));
+      this.proc.stdin.write(gsm.slice(0, usable));
     } catch { /* ignore */ }
   }
 
@@ -91,34 +82,19 @@ export class GsmEncoder extends EventEmitter {
   private accum = Buffer.alloc(0);
   private ready = false;
 
-  private lastGsmMs = 0;
-
   start(): void {
     if (this.proc) return;
-    // -avioflags direct en el INPUT (antes de -i pipe:0): desactiva el buffer de
-    // lectura AVIOContext del input (32KB por defecto). Sin esto ffmpeg intenta
-    // rellenar su buffer interno leyendo muchos frames de PCM antes de codificar,
-    // produciendo rafagas de audio en lugar de codificacion frame a frame.
-    // Colocarlo en el INPUT (igual que el decoder) es la posicion correcta.
-    //
-    // -fflags +flush_packets en el OUTPUT: fuerza avio_flush() tras cada frame
-    // GSM codificado, vaciando el pipe de salida inmediatamente (33 bytes/frame).
     this.proc = spawn("ffmpeg", [
       "-hide_banner", "-loglevel", "quiet",
       "-probesize", "32", "-analyzeduration", "0",
-      "-avioflags", "direct",
       "-f", "s16le", "-ar", "8000", "-ac", "1",
       "-i", "pipe:0",
       "-f", "gsm", "-ar", "8000",
-      "-fflags", "+flush_packets",
+      "-avioflags", "direct",   // sin buffer AVIOContext — flush inmediato tras cada paquete
       "pipe:1",
     ], { stdio: ["pipe", "pipe", "pipe"] });
 
     this.proc.stderr.on("data", () => {});
-    // Suppress pipe errors on all stdio streams (same rationale as decoder above).
-    this.proc.stdin.on("error", () => {});
-    this.proc.stdout.on("error", () => {});
-    this.proc.stderr.on("error", () => {});
     this.proc.on("error", (err) => {
       console.error(`[gsm-enc] ffmpeg error: ${err.message}`);
     });
@@ -131,11 +107,6 @@ export class GsmEncoder extends EventEmitter {
       while (this.accum.length >= GSM_PACKET_BYTES) {
         const gsmBuf = Buffer.from(this.accum.slice(0, GSM_PACKET_BYTES));
         this.accum   = this.accum.slice(GSM_PACKET_BYTES);
-        const now = Date.now();
-        if (this.lastGsmMs > 0 && now - this.lastGsmMs > 150) {
-          console.log(`[gsm-enc] ${new Date().toISOString()} GAP ${now - this.lastGsmMs}ms entre frames GSM de salida`);
-        }
-        this.lastGsmMs = now;
         this.emit("gsm", gsmBuf);
       }
     });
