@@ -27,6 +27,16 @@ import {
   GSM_FRAME_SAMPLES, FRAMES_PER_PACKET, GSM_PACKET_BYTES,
 } from "./gsm-codec.js";
 
+// Frame GSM de silencio precomputado (33 bytes) — usado para detectar frames
+// vacios en el flujo TX y evitar enviar silencio innecesario al servidor.
+export const GSM_SILENCE_FRAME = Buffer.from([
+  0xd8, 0x20, 0xa2, 0xe1, 0x5a, 0x50, 0x00, 0x49,
+  0x24, 0x92, 0x49, 0x24, 0x50, 0x00, 0x49, 0x24,
+  0x92, 0x49, 0x24, 0x50, 0x00, 0x49, 0x24, 0x92,
+  0x49, 0x24, 0x50, 0x00, 0x49, 0x24, 0x92, 0x49,
+  0x24,
+]);
+
 const PCM_CHUNK_SAMPLES = GSM_FRAME_SAMPLES * FRAMES_PER_PACKET; // 960 muestras = 1920 bytes
 
 // Jitter buffer para RX: acumula muestras antes de abrir aplay.
